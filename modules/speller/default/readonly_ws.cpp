@@ -76,17 +76,18 @@ using std::pair;
 
 #include "settings.h"
 
+#include "block_vector.hpp"
+#include "config.hpp"
+#include "data.hpp"
+#include "data_util.hpp"
+#include "errors.hpp"
+#include "file_util.hpp"
 #include "fstream.hpp"
+#include "language.hpp"
+#include "stack_ptr.hpp"
+#include "string_buffer.hpp"
 #include "vector.hpp"
 #include "vector_hash-t.hpp"
-#include "block_vector.hpp"
-#include "data.hpp"
-#include "file_util.hpp"
-#include "data_util.hpp"
-#include "language.hpp"
-#include "config.hpp"
-#include "string_buffer.hpp"
-#include "errors.hpp"
 
 #include "iostream.hpp"
 
@@ -203,7 +204,7 @@ namespace aspeller_default_readonly_ws {
 
     struct ElementsParms;
     struct SoundslikeElements;
-    struct SoundslikeWordsParms;
+    struct SoundslikeWords;
 
     struct SoundslikeElementsParmsNoSL;
     struct SoundslikeWordsParmsNoSL;
@@ -269,16 +270,18 @@ namespace aspeller_default_readonly_ws {
     // page_size()
     char check_word[64];
     u32int head_size;
+    u32int data_block_size;
+    u32int hash_block_size;
     u32int total_block_size;
-    u32int word_block_size;
+
     u32int word_count;
     u32int word_buckets;
-    u32int word_size;
-    u32int max_word_length;
-    u32int soundslike_block_size;
-    u32int soundslike_words_offset;
     u32int soundslike_count;
-    u32int soundslike_buckets;
+    
+    u32int words_offset;
+
+    u32int max_word_length;
+
     u32int lang_name_size;
     u32int soundslike_name_size;
     u32int soundslike_version_size;
@@ -366,18 +369,14 @@ namespace aspeller_default_readonly_ws {
     word_lookup.parms().hash .lang   = lang();
     word_lookup.parms().equal.lang   = lang();
     const u32int * begin = reinterpret_cast<const u32int *>
-      (word_block + data_head.word_block_size);
+      (word_block + data_head.data_block_size);
     word_lookup.vector().set(begin, begin + data_head.word_buckets);
     word_lookup.set_size(data_head.word_count);
     
     max_word_length = data_head.max_word_length;
     
     if (use_soundslike)
-      soundslike_words_begin 
-	= block 
-	+ data_head.word_block_size 
-	+ data_head.word_size 
-	+ data_head.soundslike_words_offset;
+      soundslike_words_begin = block + data_head.words_offset;
 
     return no_err;
   }
@@ -394,18 +393,21 @@ namespace aspeller_default_readonly_ws {
     return 0;
   }
 
-  struct ReadOnlyWS::SoundslikeWordsParms {
-    typedef BasicWordInfo                   Value;
-    typedef const u32int *             Iterator;
-    const char * word_block_begin;
-    Iterator     end;
-    SoundslikeWordsParms(const char * b, Iterator e) 
-      : word_block_begin(b), end(e) {}
-    bool endf(Iterator i) const {return i == end;}
-    Value end_state() const {return 0;}
-    Value deref(Iterator i) const {
-      return Value(word_block_begin + *i, *(word_block_begin + *i - 1));
+  struct ReadOnlyWS::SoundslikeWords : public VirEnumeration<BasicWordInfo> {
+    const char * cur;
+    SoundslikeWords(const char * c) : cur(c) {}
+    Value next() {
+      if (*cur == 0)
+	return 0;
+      Value tmp(cur, *(cur - 1)); 
+      unsigned int len = strlen(cur);
+      cur += len + 1;
+      return tmp;
     }
+    bool at_end() const {return *cur == 0;}
+    Base * clone() const {return new SoundslikeWords(*this);}
+    void assign(const Base * other) 
+      {*this = *static_cast<const SoundslikeWords *>(other);}
   };
 
   struct ReadOnlyWS::SoundslikeElements : public VirSoundslikeEmul
@@ -541,11 +543,9 @@ namespace aspeller_default_readonly_ws {
 
     if (use_soundslike) {
     
-      const u32int * end = reinterpret_cast<const u32int *>(w.soundslike - 4);
-      u16int size = *reinterpret_cast<const u16int *>(end);
+      u16int sl_size = *reinterpret_cast<const u16int *>(w.soundslike-4);
       
-      return new MakeVirEnumeration<SoundslikeWordsParms>
-	(end - size, SoundslikeWordsParms(word_block, end));
+      return new SoundslikeWords(w.soundslike + sl_size + 1);
 
     } else {
       
@@ -590,7 +590,7 @@ namespace aspeller_default_readonly_ws {
 
   struct SoundslikeList {
     struct Word {
-      u32int loc;
+      const char * str;
       u32int hash_idx;
     };
     union {
@@ -635,10 +635,6 @@ namespace aspeller_default_readonly_ws {
 
     const char * mid_chars = lang.mid_chars();
 
-    FStream OUT;
-   
-    OUT.open(base, "wb");
-
     DataHead data_head;
     memset(&data_head, 0, sizeof(data_head));
     strcpy(data_head.check_word, "aspell default speller rowl 1.5");
@@ -657,22 +653,28 @@ namespace aspeller_default_readonly_ws {
 
     String temp;
 
+    // these are the final two data structures
+    CharVector     data;
+    Vector<u32int> final_hash;
+
+
+    StringBuffer   buf;
     SoundMap       sound_map;
-    StringBuffer   sound_map_char_buf;
-    Vector<SoundslikeList::Word> sound_map_list_buf;
-    int                          sound_map_list_buf_size = 0;
+    Vector<SoundslikeList::Word> sl_list_buf;
+    int                          sl_list_buf_size = 0;
+
+    StackPtr<WordHash> word_hash(new WordHash);
+
+    //
+    // Read in Wordlist from stdin and create initial Word Hash
+    //
     {
-      WordHash word_hash;
-      StringBuffer buf;
-      word_hash.parms().hash_ .lang = &lang;
-      word_hash.parms().equal_.lang = &lang;
+      word_hash->parms().hash_ .lang = &lang;
+      word_hash->parms().equal_.lang = &lang;
       const char * w0;
       WordHash::MutableFindIterator j;
 
       int z = 0;
-      //
-      // Reading in Wordlist from stdin and creating Word Hash
-      //
       while ( (w0 = els->next()) != 0) {
 
 	unsigned int s = strlen(w0);
@@ -699,7 +701,7 @@ namespace aspeller_default_readonly_ws {
 	
 	// Check if it already has been inserted
 
-	for (j =word_hash.multi_find(w); !j.at_end(); j.adv())
+	for (j =word_hash->multi_find(w); !j.at_end(); j.adv())
 	  if (strcmp(w, j.deref())==0) break;
 
 	// If already insert deal with compound info
@@ -733,171 +735,150 @@ namespace aspeller_default_readonly_ws {
 	    b = buf.alloc(s + 1);
 	  }
 	  strncpy(b, w, s+1);
-	  word_hash.insert(b);
+	  word_hash->insert(b);
 	}
 	++z;
       }
       delete els;
-      
-      word_hash.resize(word_hash.size()*4/5);
-      
-      //
-      // Witting word data, creating Final Hash, creating sounds Pre Hash
-      //
-      
-      advance_file(OUT, data_head.head_size);
-      std::streampos start = data_head.head_size;
-
-      Vector<u32int> final_hash(word_hash.bucket_count(), u32int_max);
-      
-      OUT << '\0';
-      for (unsigned int i = 0; i != word_hash.vector().size(); ++i) {
-	
-	const char * value = word_hash.vector()[i];
-	
-	if (word_hash.parms().is_nonexistent(value)) continue;
-
-	// write compound info
-	if (*(value - 1) != '\0')
-	  OUT << *(value-1);
-
-	final_hash[i] = OUT.tell() - start;
-
-	OUT << value << '\0';
-	if (use_soundslike) {
-
-	  temp = lang.to_soundslike(value);
-	  SoundMap::iterator j = sound_map.find(temp.c_str());
-	  if (j == sound_map.end()) {
-
-	    SoundMap::value_type 
-	      to_insert(sound_map_char_buf.alloc(temp.size()+1), 
-			SoundslikeList());
-	    strncpy(const_cast<char *>(to_insert.first), 
-		    temp.c_str(), 
-		    temp.size() + 1);
-	    sound_map.insert(to_insert).first->second.size = 1;
-
-	  } else {
-
-	    if (j->second.size == 1)
-	      sound_map_list_buf_size++;
-	    
-	    j->second.size++;
-	    sound_map_list_buf_size++;
-
-	  }
-	}
-      }
-
-      if (use_soundslike) {
-
-	sound_map_list_buf.resize(sound_map_list_buf_size);
-	int p = 0;
-
-	for (unsigned int i = 0; i != word_hash.vector().size(); ++i) {
-	  
-	  const char * value = word_hash.vector()[i];
-	  
-	  if (word_hash.parms().is_nonexistent(value)) continue;
-	  
-	  temp = lang.to_soundslike(value);
-	  SoundMap::iterator j = sound_map.find(temp.c_str());
-	  //assert(j != sound_map.end());
-	  if (j->second.num_inserted == 0 && j->second.size != 1) {
-	    j->second.d.list = &*sound_map_list_buf.begin() + p;
-	    p += j->second.size;
-	  } 
-	  if (j->second.size == 1) {
-	    j->second.d.single.loc      = final_hash[i];
-	    j->second.d.single.hash_idx = i;
-	  } else {
-	    j->second.d.list[j->second.num_inserted].loc      = final_hash[i];
-	    j->second.d.list[j->second.num_inserted].hash_idx = i;
-	  }
-	  ++j->second.num_inserted;
-	}
-      }
-      
-      data_head.word_block_size = round_up(OUT.tell() - start + 1l, 
-					   page_size);
-      data_head.total_block_size = data_head.word_block_size;
-
-      advance_file(OUT, data_head.head_size + data_head.total_block_size);
-
-      // Writting final hash
-      OUT.write(&final_hash.front(), final_hash.size() * 4);
-
-      data_head.word_count   = word_hash.size();
-      data_head.word_buckets = word_hash.bucket_count();
-      data_head.word_size    
-	= round_up(word_hash.bucket_count() * 4, page_size);
-      data_head.total_block_size += data_head.word_size;
-      advance_file(OUT, data_head.head_size + data_head.total_block_size);
     }
+
+    word_hash->resize(word_hash->size()*4/5);
+
+    //
+    // 
+    //
+    {
+      for (unsigned int i = 0; i != word_hash->vector().size(); ++i) {
+	
+	const char * value = word_hash->vector()[i];
+	
+	if (word_hash->parms().is_nonexistent(value)) continue;
+
+	temp = lang.to_soundslike(value);
+	SoundMap::iterator j = sound_map.find(temp.c_str());
+	if (j == sound_map.end()) {
+	  
+	  SoundMap::value_type 
+	    to_insert(buf.alloc(temp.size()+1), SoundslikeList());
+	  strncpy(const_cast<char *>(to_insert.first), 
+		  temp.c_str(), 
+		  temp.size() + 1);
+	  sound_map.insert(to_insert).first->second.size = 1;
+	  
+	} else {
+	  
+	  if (j->second.size == 1)
+	    sl_list_buf_size++;
+	  
+	  j->second.size++;
+	  sl_list_buf_size++;
+	  
+	}
+      }
+
+      sl_list_buf.resize(sl_list_buf_size);
+      int p = 0;
+      
+      for (unsigned int i = 0; i != word_hash->vector().size(); ++i) {
+	
+	const char * value = word_hash->vector()[i];
+	
+	if (word_hash->parms().is_nonexistent(value)) continue;
+	
+	temp = lang.to_soundslike(value);
+	SoundMap::iterator j = sound_map.find(temp.c_str());
+	//assert(j != sound_map.end());
+	if (j->second.num_inserted == 0 && j->second.size != 1) {
+	  j->second.d.list = &*sl_list_buf.begin() + p;
+	  p += j->second.size;
+	} 
+	if (j->second.size == 1) {
+	  j->second.d.single.str      = value;
+	  j->second.d.single.hash_idx = i;
+	} else {
+	  j->second.d.list[j->second.num_inserted].str      = value;
+	  j->second.d.list[j->second.num_inserted].hash_idx = i;
+	}
+	++j->second.num_inserted;
+      }
+    }
+
+    data_head.word_count   = word_hash->size();
+    data_head.word_buckets = word_hash->bucket_count();
+    data_head.hash_block_size
+      = round_up(word_hash->bucket_count() * 4, page_size);
+
+    final_hash.insert(final_hash.begin(), 
+		      word_hash->bucket_count(), u32int_max);
     
-    if (use_soundslike) {
-      CharVector     soundslike_data;
+    word_hash.del(); // the word_hash is no longer needed so free the space
+    
+    //
+    // Create the data block which includes both the word and soundlike
+    //  data
+    //
 
-      //
-      // Writting soundslike words, creating soundslike Final Hash
-      //
-
+    {
       SoundMap::iterator i   = sound_map.begin();
       SoundMap::iterator end = sound_map.end();
       unsigned int j;
-
+      
       // these must be a power of 2
       static const unsigned int RANGE_START = 1;
       static const unsigned int RANGE_STOP  = 2;
       unsigned int jump[RANGE_STOP+1];
 
-      soundslike_data.write16(0); // to avoid nasty special cases
-      soundslike_data.write16(0);
-      unsigned int prev_pos = soundslike_data.size();
+      data.write16(0); // to avoid nasty special cases
+      data.write16(0);
+      unsigned int prev_pos = data.size();
       for (j = 0; j <= RANGE_STOP; ++j)
-	jump[j] = soundslike_data.size();
-      soundslike_data.write32(0);
+	jump[j] = data.size();
+      data.write32(0);
       const char * prev_sl = "";
 
-//#define PH(n) printf("0x%6.6X\n", n)
-
       for (; i != end; ++i) {
-
-	CharVector & o = soundslike_data;
 
 	const char * sl = i->first;
 	unsigned int sl_size = strlen(sl);
 
-	u16int count = i->second.size;
+	while (data.size() % 2 != 0)
+	  data.write('\0');
+
+	data.write16(sl_size);
+	data.write16(0); // place holder for offset to next item
 	
-	if (count == 1) {
-	  o.write32(i->second.d.single.loc);
-	} else {
-	  for (j = 0; j != count; ++j)
-	    o.write32(i->second.d.list[j].loc);
-	}
-	
-	o.write16(count);
-	o.write16(0); // place holder for offset to next item
-	
-	o.at16(prev_pos - 2) |= o.size() - prev_pos;
-	prev_pos = o.size();
+	data.at16(prev_pos - 2) |= data.size() - prev_pos;
+	prev_pos = data.size();
 
 	for (j = RANGE_STOP; 
 	     j >= RANGE_START 
 	       && strncmp(prev_sl, sl, j+1) != 0;
 	     j >>= 1) 
 	{
-	  o.at32(jump[j]) = o.size() - jump[j];
+	  data.at32(jump[j]) = data.size() - jump[j];
 	  jump[j] = 4;
 	}
 
-	o << sl << '\0';
-	
-	while (o.size() % 4 != 0)
-	  o.write('\0');
+	// Write soundslike
+	data << sl << '\0';
 
+	// Write words
+	{
+	  SoundslikeList::Word * k 
+	    = i->second.size == 1 ? &(i->second.d.single) : i->second.d.list;
+	  SoundslikeList::Word * end = k + i->second.size;
+	  for (;k != end; ++k) {
+	    // write compound info (if any)
+	    if (*(k->str - 1))
+	      data << *(k->str - 1);
+
+	    final_hash[k->hash_idx] = data.size();
+
+	    data << k->str << '\0';
+	  }
+	  data << '\0';
+	}
+	
 	SoundMap::iterator i1 = i;
 	++i1;
 	for (j = (j == 0) ? (1) : (j << 1);
@@ -908,15 +889,18 @@ namespace aspeller_default_readonly_ws {
 	       && strncmp(sl, i1->first, j+1) == 0;
 	     j <<= 1) 
 	{
-	  o.write16(j);
-	  o.write16(0x8000);  // place holder for offset to next item
+	  while (data.size() % 4 != 0)
+	    data.write('\0');
+
+	  data.write16(j);
+	  data.write16(0x8000);  // place holder for offset to next item
 	  
-	  o.at16(prev_pos - 2) |= o.size() - prev_pos;
-	  prev_pos = o.size();
+	  data.at16(prev_pos - 2) |= data.size() - prev_pos;
+	  prev_pos = data.size();
 	  
-	  jump[j] = o.size();
+	  jump[j] = data.size();
 	  
-	  o.write32(0); // place holder for jump to next spot;
+	  data.write32(0); // place holder for jump to next spot;
 	}
 
 	prev_sl = sl;
@@ -924,33 +908,43 @@ namespace aspeller_default_readonly_ws {
       }
 
       // add special end case
-      soundslike_data.write16(0);
-      soundslike_data.write16(0);
-      soundslike_data.at16(prev_pos - 2) |= soundslike_data.size() - prev_pos;
+      data.write16(0);
+      data.write16(0);
+      data.at16(prev_pos - 2) |= data.size() - prev_pos;
       for (j = RANGE_START; j <= RANGE_STOP; j <<= 1) 
-	soundslike_data.at32(jump[j]) = soundslike_data.size() - jump[j];
+	data.at32(jump[j]) = data.size() - jump[j];
       
-      soundslike_data.at32(4) = 0;
+      data.at32(4) = 0;
       
-      data_head.soundslike_block_size   = round_up(soundslike_data.size(), page_size);
-      data_head.soundslike_words_offset = (soundslike_data.at16(2) & ~0x8000) + 4;
-      data_head.total_block_size += data_head.soundslike_block_size;
-
-      // Write final soundslike data
-      OUT.write(soundslike_data.data(), data_head.soundslike_block_size);
-
-      data_head.soundslike_count   = sound_map.size();
     }
 
-    advance_file(OUT, data_head.head_size + data_head.total_block_size);
+    data_head.soundslike_count   = sound_map.size();
+
+    data_head.data_block_size   = round_up(data.size(), page_size);
+    data_head.words_offset = (data.at16(2) & ~0x8000) + 4;
+
+    data_head.total_block_size 
+      = data_head.head_size 
+      + data_head.data_block_size 
+      + data_head.hash_block_size;
+
+    FStream OUT;
+    OUT.open(base, "wb");
 
     // write data head to file
-    OUT.restart();
     OUT.write(&data_head, sizeof(DataHead));
     OUT.write(lang.name(), data_head.lang_name_size);
     OUT.write(lang.soundslike_name(), data_head.soundslike_name_size);
     OUT.write(lang.soundslike_version(), data_head.soundslike_version_size);
     OUT.write(mid_chars, data_head.middle_chars_size); 
+
+    // Write data block
+    advance_file(OUT, data_head.head_size);
+    OUT.write(data.data(), data.size());
+
+    // Write hash
+    advance_file(OUT, data_head.head_size + data_head.data_block_size);
+    OUT.write(&final_hash.front(), final_hash.size() * 4);
 
     return no_err;
   }
