@@ -1,4 +1,4 @@
-export SED=@SED@
+#export SED=@SED@
 
 pkgdatadir = @pkgdatadir@
 

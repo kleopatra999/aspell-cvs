@@ -1,4 +1,4 @@
-export SED=@SED@
+#export SED=@SED@
 export PERLPROG=@PERLPROG@
 
 INCLUDES = -I${top_srcdir}/interfaces/cc/ -I${top_srcdir}/common

@@ -1,4 +1,4 @@
-export SED=@SED@
+#export SED=@SED@
 localedir = $(datadir)/locale
 AM_CPPFLAGS=-DLOCALEDIR=\"$(localedir)\"
 

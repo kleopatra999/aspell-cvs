@@ -1,4 +1,4 @@
-export SED=@SED@
+#export SED=@SED@
 
 AUTOMAKE_OPTIONS = foreign
 if FORCE_STATIC

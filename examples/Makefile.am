@@ -1,4 +1,4 @@
-export SED=@SED@
+#export SED=@SED@
 SUBDIRS = loadable
 CCLD=$(CXX)
 noinst_PROGRAMS = example-c list-dicts

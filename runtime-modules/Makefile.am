@@ -1,2 +1,2 @@
-SED = @SED@
+#SED = @SED@
 SUBDIRS = filter
