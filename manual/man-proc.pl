@@ -27,8 +27,15 @@ close IN;
 
 #$doc =~ s/(http\:\/\/\S+?)([\.\)]\W|\s)/\\htmladdnormallink{$1}{$1}$2/g;
 
+# latex2html does not recognize IfFileExists
 $doc =~ s/\\IfFileExists\{url\.sty\}.+\n.+/\\usepackage{url}/;
 $doc =~ s/\\url\|(.+?)\|/\\url\{$1\}/g;
+
+# latex2html does not like tabularnewline and providecommand
+#   does not fix the problem
+$doc =~ s/\\providecommand{\\tabularnewline}{\\\\}//;
+$doc =~ s/\\tabularnewline/\\\\/g;
+
 $doc =~ s/(?<!-)--(?!-)/\\doubledash{}/g;
 $doc =~ s/-{}-/\\doubledashb{}/g;
 $doc =~ s/-{}-{}-/\\doubledash{}/g;
@@ -40,6 +47,8 @@ $doc =~ s/<</\\dlt{}/g;
 $doc =~ s/>>/\\dgt{}/g;
 $doc =~ s/\\textasciitilde{}/\\\~{}/g;
 $doc =~ s/\\textasciicircum{}/\\\^{}/g;
+
+
 
 $doc =~ s/\(\(FDL\)\)/$fdl/g;
 $doc =~ s/\(\(LGPL\)\)/$lgpl/g;

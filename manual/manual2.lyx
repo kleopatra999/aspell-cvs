@@ -75,6 +75,9 @@
 \layout Title
 
 GNU Aspell 0.50.4
+\layout Date
+
+September 26, 2003
 \layout Author
 
 Copyright (c) 2000-2003
@@ -5832,6 +5835,34 @@ appendix
 \layout Chapter
 
 Changelog
+\layout Section*
+
+Changes from 0.50.3 to 0.50.4 (Sep 26, 2003)
+\layout Itemize
+
+Minor changes in URL filter to avoid treating the double quote character
+ as part of the URL, and to avoid treating words ending in more than one
+ period as a URL.
+\layout Itemize
+
+Document fixes in Aspell API
+\layout Itemize
+
+Small compile fixes, including one for GCC 3.3
+\layout Itemize
+
+Updated Win32 section since a port now exists thanks to Thorsten Maerz.
+\layout Itemize
+
+Complain instead of doing nothing or aborting for unimplemented functions
+ in Aspell utility.
+\layout Itemize
+
+Portability bug fixes.
+\layout Itemize
+
+Upgraded to Autoconf 2.57, Automake 1.7.7, Libtool 1.5 (no longer use CVS version
+ of libtool).
 \layout Section*
 
 Changes from 0.50.2 to 0.50.3 (Nov 23, 2002)
