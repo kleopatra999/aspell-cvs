@@ -20,7 +20,7 @@ namespace acommon {
   PosibErr<bool> UrlFilter::setup(Config *) 
   {
     name_ = "url";
-    order_num_ = 0.95;
+    order_num_ = 0.0;
     return true;
   }
 
@@ -32,6 +32,7 @@ namespace acommon {
     int point_chars;
     FilterChar * str = str0;
     FilterChar * cur = str;
+
     while (cur < end) {
       prev_char = who_cares;
       word_pos = wbegin;

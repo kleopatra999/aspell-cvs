@@ -190,6 +190,7 @@ namespace acommon
     int addcount=0;
     ConfigModule * currentfilter=NULL;
 
+    filter.clear();
     while ((filter_name = els.next()) != 0) {
 //FIXME Hm seems as would url filter be allways loaded first 
 //      although beeing removed and added agaon at end of filter list 
