@@ -24,6 +24,8 @@
 #endif
 
 #include "aspell.h"
+//FIXME if Win(dos) is different
+#include <regex.h>
 
 #include "check_funs.hpp"
 #include "config.hpp"
@@ -43,6 +45,7 @@
 
 #include "speller_impl.hpp"
 #include "data.hpp"
+#include "directory.hpp"
 
 using namespace acommon;
 
@@ -1265,6 +1268,70 @@ void print_help () {
   char * expandedoptionname=NULL;
   char * tempstring=NULL;
   size_t expandedsize=0;
+  StringList filtpath;
+  StringList optpath;
+  PathBrowser optionpath;
+  PathBrowser filterpath;
+  String candidate;
+  String toload;
+  size_t locate_ending=0;
+  size_t eliminate_path=0;
+  size_t hold_eliminator=0;
+//FIXME if Win(dos) is different
+  regex_t seekfor;
+  
+  if ( args.size() != 0 ){
+    if( args[0] == "all" ){
+      args[0]=".*";
+    }
+    options->retrieve_list("filter-path",&filtpath);
+    options->retrieve_list("option-path",&optpath);
+    filterpath=filtpath;
+    optionpath=optpath;
+    if( regcomp(&seekfor,args[0].c_str(),REG_NEWLINE|REG_NOSUB) ){
+      make_err(invalid_expression,"help",args[0]);
+      return;
+    }
+    while( filterpath.expand_file_part(&seekfor,candidate) ){
+      if( ( (locate_ending=candidate.rfind("-filter.so")) !=
+            candidate.length() - 10 ) ) {
+        if( (locate_ending=candidate.rfind("-filter.flt")) !=
+             candidate.length() - 11 ){
+          continue;
+        }
+        else {
+          candidate.erase(locate_ending,11);
+          eliminate_path=0;
+          while ( (hold_eliminator=candidate.find('/',eliminate_path) ) < 
+                candidate.length() ) {
+            eliminate_path=hold_eliminator+1;
+          }
+          toload=candidate.erase(0,eliminate_path);
+        }
+      }
+      else {
+        candidate.erase(locate_ending,10);
+        eliminate_path=0;
+        while ( (hold_eliminator=candidate.find('/',eliminate_path) ) < 
+                candidate.length() ) {
+          eliminate_path=hold_eliminator+1;
+        }
+        if ( candidate.find("lib",eliminate_path) != eliminate_path ) {
+          continue;
+        }
+        candidate.erase(0,eliminate_path);
+        candidate.erase(0,3);
+        locate_ending=candidate.length();
+        toload=candidate;
+        candidate+="-filter.opt";
+        if( !optionpath.expand_filename(candidate) ){
+          continue;
+        }
+      }
+      options->replace("add-filter",toload.c_str());
+    }
+    regfree(&seekfor);
+  }
   printf(_(
     "\n"
     "Aspell %s alpha.  Copyright 2000 by Kevin Atkinson.\n"
@@ -1276,6 +1343,9 @@ void print_help () {
     "  -c|check <file>  to check a file\n"
     "  -a|pipe          \"ispell -a\" compatibility mode\n"
     "  -l|list          produce a list of misspelled words from standard input\n"
+    "  help <filter>    displays help for filter <filter> if installed\n"
+    "  help <regex>     displays help for all filters matching <regex>\n"
+    "  help <all>       displays help for all filters installed\n"
     "  [dump] config    dumps the current configuration to stdout\n"
     "  config <key>     prints the current value of an option\n"
     "  soundslike       returns the soundslike equivalent for each word entered\n"
