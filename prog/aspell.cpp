@@ -443,13 +443,8 @@ void status_fun(void * d, Token, int correct)
 DocumentChecker * new_checker(AspellSpeller * speller, 
 			      bool & print_star) 
 {
-  EXIT_ON_ERR_SET(
-		  new_document_checker(
-				       reinterpret_cast<Speller *>(speller)
-				       ),
-		  StackPtr<DocumentChecker>,
-		  checker
-		  );
+  EXIT_ON_ERR_SET(new_document_checker(reinterpret_cast<Speller *>(speller)),
+		  StackPtr<DocumentChecker>, checker);
   checker->set_status_fun(status_fun, &print_star);
   return checker.release();
 }

@@ -1422,8 +1422,7 @@ order to insure that all the necessary libraries are linked in libtool
 should be used to perform the linking. When using libtool simply linking
 with {}``-laspell'' should be all that is necessary. When using
 shared libraries you might be able to simply link {}``-laspell'',
-but this is not recommended. This version of Aspell uses the CVS version
-of libtool however released versions of libtool should also work.
+but this is not recommended. 
 
 When your application first starts you should get a new configuration
 class with the command:
@@ -1496,13 +1495,14 @@ int~correct~=~aspell\_speller\_check(spell\_checker,~<word>,~<size>);
 <word> can is expected to a const char {*} character string. If the
 encoding is set to be {}``machine unsigned 16'' or {}``machine
 unsigned 32''. <word> is expected to be a cast from either const
-u16int {*} or const u32int{*} respectfully. U16int and u32int are
-generally unsigned short and unsigned int respectfully. <size> is
-the length of the string or -1 if the sting is null terminated. If
-the string is a cast from const u16int {*} or const u32int {*} then
-size is the amount of space in bytes the string takes up after being
-casted to const char {*} and not the true size of the string. Aspell\_speller\_check
-will return 0 is it is not found and non-zero otherwise.
+uint16\_t {*} or const uint32\_t{*} respectfully. uint16\_t and uint32\_t
+are generally unsigned short and unsigned int respectfully. <size>
+is the length of the string or -1 if the sting is null terminated.
+If the string is a cast from const uint16\_t {*} or const uint32\_t
+{*} then size is the amount of space in bytes the string takes up
+after being casted to const char {*} and not the true size of the
+string. Aspell\_speller\_check will return 0 is it is not found and
+non-zero otherwise.
 
 If the word is not correct than the suggest method can be used to
 come up with likely replacements.
@@ -2319,6 +2319,9 @@ algorithm please see the data file \textbf{english\_phonet.dat}.
 
 
 \chapter{Changelog}
+
+
+\section*{Changes from 0.50.4.1 to 0.50.5}
 
 
 \section*{Changes from 0.50.4 to 0.50.4.1 (Oct 11, 2003)}

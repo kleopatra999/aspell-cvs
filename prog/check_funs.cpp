@@ -547,7 +547,7 @@ static void print_truncate(O *out, const char * word, int width) {
 }
 
 template <class O>
-static void display_menu(O * out, const Choices *choices, int width) {
+static void display_menu(O * out, const Choices * choices, int width) {
   if (width <= 11) return;
   Choices::const_iterator i = choices->begin();
   while (i != choices->end()) {
@@ -598,9 +598,9 @@ void display_menu() {
       getmaxyx(menu_w,height,width);
       werase(menu_w);
       wmove(menu_w,0,0);
-      display_menu(menu_w, word_choices, width);
+      display_menu(menu_w, word_choices.get(), width);
       wmove(menu_w,5,0);
-      display_menu(menu_w, menu_choices, width);
+      display_menu(menu_w, menu_choices.get(), width);
       wnoutrefresh(menu_w);
     } else {
       //ostream str;

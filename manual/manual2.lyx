@@ -77,10 +77,10 @@
 GNU Aspell 0.50.4.1
 \layout Date
 
-October 11, 2003
+February 10, 2004
 \layout Author
 
-Copyright (c) 2000-2003
+Copyright (c) 2000-2004
 \newline 
 Kevin Atkinson
 \newline 
@@ -464,8 +464,7 @@ A better, more complete word list for the English language.
 Things that, currently, only Ispell have
 \layout Itemize
 
-Support for affix compression (However this should change soon once Kevin
- Hendricks is integrated)
+Support for affix compression (However this will change with Aspell 0.51)
 \layout Itemize
 
 Lower memory footprint
@@ -616,14 +615,6 @@ spell
  located in the scripts/ directory into your binary directory which is usually
  /usr/local/bin so that programs that expect ispell or spell command will
  work correctly.
-\layout Subsection
-
-General Problems
-\layout Standard
-
-Aspell does not use a released version of GNU Libtool.
- If you have a need to modify configure.ac or any of the Makefile.am's you
- should install the CVS version of libtool.
 \layout Subsection
 
 Curses Notes
@@ -815,6 +806,14 @@ aspell
  This also means that dictionaries designed to work with the snapshot will
  no longer work with the official release.
  
+\layout Subsection
+
+Sun WorkShop 6 Compiler Notes
+\layout Standard
+
+Thanks to Flemming Frandsen Aspell should be able to compile with the Sun
+ WorkShop 6 Compiler.
+ However, you may still have some problems linking
 \layout Subsection
 
 Win32 Notes
@@ -5838,6 +5837,49 @@ Changelog
 \layout Section*
 
 Changes from 0.50.4.1 to 0.50.5
+\layout Itemize
+
+Reworked url filter which fixed several bugs and now accepts "bla.bla/kdkdl"
+ as a url.
+\layout Itemize
+
+Fixed bug in which the url filter was coming before all other filters when
+ it was suppose to come after.
+ This solved a number of problems where the url filter was interfering with
+ other filters.
+\layout Itemize
+
+Small bug fix in SGML filter.
+\layout Itemize
+
+Added cp125?.dat charsets.
+\layout Itemize
+
+Added natural (split) keyboard data file as 
+\begin_inset Quotes eld
+\end_inset 
+
+split.kbd
+\begin_inset Quotes erd
+\end_inset 
+
+
+\layout Itemize
+
+Compile fixes for the upcoming Gcc 3.4
+\layout Itemize
+
+Removed Solaris link hack as it was causing more problems than it fixes.
+\layout Itemize
+
+Compile fixes for Sun WorkShop 6 compiler, but there may still be some problems,
+ especially with linking.
+\layout Itemize
+
+Included patch to help compile with Microsoft Visual C++ 6.
+\layout Itemize
+
+Updated to Autoconf 2.59, Automake 1.82, and Libtool 1.5.2.
 \layout Section*
 
 Changes from 0.50.4 to 0.50.4.1 (Oct 11, 2003)
