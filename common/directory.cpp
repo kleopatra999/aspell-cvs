@@ -402,6 +402,49 @@ namespace acommon{
   }
   
   
+  bool PathBrowser::expand_file_part(regex_t * expression, String & filename, 
+                        bool restart){
+    String content;
+    Directory * actual;
+    int type=0;
+    char * startname=NULL;
+    char * new_startname=NULL;
+#ifndef _WIN32
+    struct stat filedescription;
+#else
+#endif
+  
+    if( restart ){
+      nextbase=0;
+    }
+     
+    for( ; nextbase < browsebase.size() ; nextbase++ ){
+      actual=&browsebase[nextbase];
+      if( actual->resume() ){
+        while( actual->read(type,&content) ){
+//FIXME if windows has different library functions for
+//      expanding regular expressions;
+          startname=(char*)content.c_str();
+          while( ( new_startname=strchr(startname,'/') ) ){
+            startname=new_startname+1;
+          }
+          if( ! regexec(expression,startname,0,NULL,0) ){
+            filename=content; 
+            return true;
+          }
+        }
+        actual->close();
+      }
+      else{
+        fprintf(stderr,"Can't open\n\t`%s'\n\t\tomitted\n",
+                actual->getname().c_str());
+      }
+    }
+    nextbase=0;
+    return false;
+  }
+  
+  
   PathBrowser::~PathBrowser(void){
     reset();
   }

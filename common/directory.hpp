@@ -16,9 +16,11 @@
 #define SYSTERM_DIRCETORY_BRFOWSE_WRAPPER
 
 #include "string.hpp"
-#include "vector.hpp"
+// This file is part of The New Aspell#include "vector.hpp"
 #include "can_have_error.hpp"
 #include "string_list.hpp"
+//FIXME below if Win(dos) is different
+#include <regex.h>
 
 #ifndef _WIN32
 #include <sys/types.h>
@@ -108,6 +110,7 @@ namespace acommon {
     vector< Directory > browsebase;
     vector< String > unloop;
     unsigned int nextbase; 
+    String actual_expression;
 
     void reset();
   public:
@@ -121,6 +124,8 @@ namespace acommon {
     void set_base_path(const String & pathlist);
     void set_base_path(const StringList & pathlist);
     bool expand_filename(String & filename ,bool cont=false );
+    bool expand_file_part(regex_t * expression,String & filename,
+                          bool restart=false);
     ~PathBrowser(void);
   };
 }
