@@ -10,6 +10,8 @@
 #include "string_enumeration.hpp"
 #include "mutable_container.hpp"
 #include "posib_err.hpp"
+#include <stdio.h>
+#include <cstdio>
 
 namespace acommon {
 
@@ -19,7 +21,8 @@ namespace acommon {
     String           data;
     StringListNode * next;
     StringListNode(ParmString str,  StringListNode * n = 0)
-      : data(str), next(n) {}
+      : data(str), next(n) {
+    }
   };
 
   class StringListEnumeration : public StringEnumeration {

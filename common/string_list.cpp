@@ -64,11 +64,20 @@ namespace acommon {
 
   PosibErr<bool> StringList::add(ParmString str)
   {
-    StringListNode * * cur = & first;
-    while (*cur != 0 && strcmp((*cur)->data.c_str(), str) != 0)
-      cur = &(*cur)->next;
-    if (*cur == 0) {
-      *cur = new StringListNode(str);
+    StringListNode * cur = first;
+    StringListNode * hold = 0;
+    while (cur != 0 && strcmp(cur->data.c_str(), str) != 0) {
+      hold = cur;
+      cur = cur->next;
+    }
+    if (cur == 0) {
+      cur = new StringListNode(str);
+      if(hold != 0) {
+        hold->next = cur;
+      }
+      else {
+        first = cur;
+      }
       return true;
     } else {
       return false;
@@ -77,17 +86,20 @@ namespace acommon {
 
   PosibErr<bool> StringList::remove(ParmString str)
   {
-    StringListNode * * prev = 0;
-    StringListNode * * cur  = & first;
-    while (*cur != 0 && strcmp((*cur)->data.c_str(), str)!=0 )  {
+    StringListNode  * prev = 0;
+    StringListNode  * cur  = first;
+    while (cur != 0 && strcmp(cur->data.c_str(), str)!=0 )  {
       prev = cur;
-      cur = &(*cur)->next;
+      cur = cur->next;
     }
-    if (*cur == 0) {
+    if (cur == 0) {
       return false;
     } else {
-      *prev = (*cur)->next;
-      delete *cur;
+      prev = cur->next;
+      if (cur == first) {
+        first = prev;
+      }
+      delete cur;
       return true;
     }
   }
