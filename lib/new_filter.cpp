@@ -451,6 +451,7 @@ namespace acommon
       char linenumber[9]="0";
       int activeoption=0;
       String expand="filter-";
+      int norealoption=0;
 
       if( ( namelength == 6 ) &&
           !strncmp(key->name,"filter",6) ){
@@ -575,8 +576,12 @@ namespace acommon
               }
               continue;
             }
-            if( optionkey.no_case() == "option" ){
-              if( config->have(optionkeyvalue.c_str()) ){
+            if( ( optionkey.no_case() == "option" ) || 
+                ( !activeoption && 
+                  ( (optionkey.no_case() == "desc" ) ||
+                    ( optionkey.no_case() == "description" ) ) && 
+                  ( norealoption=1) ) ){
+              if( !norealoption && config->have(optionkeyvalue.c_str()) ){
                 fprintf(stderr,"option %s: might conflict with Aspell option\n"
                                "try to prefix it by `filter-'\n",
                         optionkeyvalue.c_str());
@@ -590,29 +595,53 @@ namespace acommon
               }
               begin=(KeyInfo*)help;
               begin[optsize-1].name=begin[optsize-1].def=begin[optsize].desc=NULL;
-              expand="filter-";
-              expand+=optionkeyvalue;
-              if( config->have(expand.c_str()) ){
-                if( begin != NULL ){
-                  release_options(begin,begin+optsize);
-                  free(begin);
+              if( norealoption ){
+                begin[optsize-1].type=KeyInfoDescript;
+                ((char*)begin[optsize-1].def)=NULL;
+                if( ( ((char*)begin[optsize-1].desc)=strdup(optionkeyvalue.c_str()) ) == NULL ){
+                  if( begin !=NULL ){
+                    release_options(begin,begin+optsize);
+                    free(begin);
+                  }
+                  return make_err(cant_describe_filter,"add_filter",value);
                 }
-                optionkeyvalue.insert(0,"(filter-)");
-                sprintf(linenumber,"%i",linecount);
-                return make_err(identical_option,"add_filter",optionname,linenumber);
-              }
-              if( ( ((char*)begin[optsize-1].name)=strdup(optionkeyvalue.c_str()) ) == NULL ){
-                if( begin !=NULL ){
-                  release_options(begin,begin+optsize);
-                  free(begin);
+                if( ( ((char*)begin[optsize-1].name)=malloc(strlen(value)+strlen("filter-")+1) ) == NULL ){
+                  if( begin !=NULL ){
+                    release_options(begin,begin+optsize);
+                    free(begin);
+                  }
+                  return make_err(cant_describe_filter,"add_filter",value);
                 }
-                return make_err(cant_extend_options,"add_filter",value);
+                ((char*)begin[optsize-1].name)[0]='\0';
+                strncat(((char*)begin[optsize-1].name),"filter-",7);
+                strncat(((char*)begin[optsize-1].name),value,strlen(value));
               }
-              begin[optsize-1].type=KeyInfoBool;
-              ((char*)begin[optsize-1].def)=NULL;
-              ((char*)begin[optsize-1].desc)=NULL;
-              begin[optsize-1].otherdata[0]='\0';
-              activeoption=1;
+              else{
+                expand="filter-";
+                expand+=optionkeyvalue;
+                if( config->have(expand.c_str()) ){
+                  if( begin != NULL ){
+                    release_options(begin,begin+optsize);
+                    free(begin);
+                  }
+                  optionkeyvalue.insert(0,"(filter-)");
+                  sprintf(linenumber,"%i",linecount);
+                  return make_err(identical_option,"add_filter",optionname,linenumber);
+                }
+                if( ( ((char*)begin[optsize-1].name)=strdup(optionkeyvalue.c_str()) ) == NULL ){
+                  if( begin !=NULL ){
+                    release_options(begin,begin+optsize);
+                    free(begin);
+                  }
+                  return make_err(cant_extend_options,"add_filter",value);
+                }
+                begin[optsize-1].type=KeyInfoBool;
+                ((char*)begin[optsize-1].def)=NULL;
+                ((char*)begin[optsize-1].desc)=NULL;
+                begin[optsize-1].otherdata[0]='\0';
+                activeoption=1;
+              }
+              norealoption=0;
               continue;
             }
             if( !activeoption ){

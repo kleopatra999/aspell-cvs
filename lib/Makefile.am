@@ -1,3 +1,4 @@
+export SED=@SED@
 
 INCLUDES = -I${top_srcdir}/interfaces/cc/ -I${top_srcdir}/common
 
