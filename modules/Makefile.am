@@ -1,5 +1,5 @@
 export SED=@SED@
 
-SUBDIRS = speller tokenizer
+SUBDIRS = speller tokenizer filter
 
 

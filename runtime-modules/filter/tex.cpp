@@ -351,5 +351,5 @@ namespace acommon {
   //
   //
 
+ACTIVATE_FILTER(acommon,TexFilter,tex);
 }
-ACTIVATE_FILTER(acommon,TexFilter,"tex");

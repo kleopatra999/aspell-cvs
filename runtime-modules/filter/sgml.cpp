@@ -258,23 +258,7 @@ namespace acommon {
     stop  = buf.pend() - 1;
   }
 
-  IndividualFilter * new_sgml_decoder() 
-  {
-    return new SgmlDecoder();
-  }
-
-  IndividualFilter * new_sgml_filter() 
-  {
-    return new SgmlFilter();
-  }
-
-  IndividualFilter * new_sgml_encoder() 
-  {
-    return 0;
-    //return new SgmlEncoder();
-  }
-
+ACTIVATE_FILTER(acommon,SgmlFilter,sgml);
+ACTIVATE_DECODER(acommon,SgmlDecoder,sgml);
+//ACTIVATE_ENCODER(acommon,SgmlEncoder,sgml);
 }
-ACTIVATE_FILTER(acommon,SgmlFilter,"sgml");
-ACTIVATE_DECODER(acommon,SgmlDecoder,"sgml");
-//ACTIVATE_ENCODER(acommon,SgmlEncoder,"sgml");

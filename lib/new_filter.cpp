@@ -28,6 +28,7 @@
 #include "errors.hpp"
 #include "posib_err.hpp"
 #include "iostream.hpp"
+#include "filter_entry.hpp"
 #ifdef HAVE_LIBDL
 #include <dlfcn.h>
 #endif
@@ -38,6 +39,8 @@
 #endif
 #define NULL 0
 
+#define NEW_FILTER_CPP
+#include "static_filters.cpp"
 namespace acommon
 {
 
@@ -47,13 +50,15 @@ namespace acommon
 
   const char * filter_modes = "none,url,email,sgml,tex";
   
-  static const KeyInfo modes_module[] = {
+/*  static const KeyInfo modes_module[] = {
     {"fm-email", KeyInfoList, "url,email", 0},
     {"fm-none", KeyInfoList, "", 0},
     {"fm-sgml", KeyInfoList, "url,sgml", 0},
     {"fm-tex", KeyInfoList, "url,tex", 0},
     {"fm-url", KeyInfoList, "url", 0}
-  };
+  };*/
+
+//  extern const KeyInfo modes_module[];
 
   class IndividualFilter;
 
@@ -61,41 +66,27 @@ namespace acommon
   // filter constructors
   //
 
-  struct FilterEntry
-  {
-    const char * name;
-    IndividualFilter * (* decoder) ();
-    IndividualFilter * (* filter) ();
-    IndividualFilter * (* encoder) ();
-  };
-  
-  IndividualFilter * new_url_filter ();
-
-  static FilterEntry standard_filters[] = {
+//  extern const FilterEntry standard_filters[];
+/*  static FilterEntry standard_filters[] = {
     {"url",   0, new_url_filter, 0},
-  };
-  static unsigned int standard_filters_size 
-  = sizeof(standard_filters)/sizeof(FilterEntry);
+  };*/
+//  extern const unsigned int standard_filters_size; 
 
   //
   // config options for the filters
   //
   
-  extern const KeyInfo * url_options_begin;
-  extern const KeyInfo * url_options_end;
-  
-  static ConfigModule filter_modules[] =  {
+//  extern const ConfigModule filter_modules[];
+/*  static ConfigModule filter_modules[] =  {
     {"fm",NULL, modes_module,
-     modes_module + sizeof (modes_module) / sizeof (KeyInfo)},
-    {"url",NULL, url_options_begin,url_options_end}
-//    {"url",NULL,NULL,NULL},
-  };
+     modes_module + sizeof (modes_module) / sizeof (KeyInfo)}
+  };*/
+
 
   // these variables are used in the new_config function and
   // thus need external linkage
-  const ConfigModule * filter_modules_begin = filter_modules;
-  const ConfigModule * filter_modules_end   
-  = filter_modules + sizeof(filter_modules)/sizeof(ConfigModule);
+//  extern const ConfigModule * filter_modules_begin;
+//  extern const ConfigModule * filter_modules_end;   
   static int filter_modules_referencing=0;
 
   //
@@ -275,7 +266,7 @@ namespace acommon
     unsigned int i = 0;
     while (i != standard_filters_size) {
       if (standard_filters[i].name == filter_name) {
-	return standard_filters + i;
+	return (FilterEntry *) standard_filters + i;
       }
       ++i;
     }
@@ -367,8 +358,10 @@ namespace acommon
     } while (false);
   }
 
+//  extern const size_t filter_modules_size;
+
   FilterOptionExpandNotifier::~FilterOptionExpandNotifier(void) {
-    int countextended=sizeof(filter_modules)/sizeof(ConfigModule);
+    int countextended=filter_modules_size/sizeof(ConfigModule);
 
     if (--filter_modules_referencing == 0) {
       if (filter_modules_begin != &filter_modules[0]) {
@@ -388,7 +381,7 @@ namespace acommon
         }
         free((ConfigModule*)filter_modules_begin);
         (ConfigModule*)filter_modules_begin=&filter_modules[0];
-        (ConfigModule*)filter_modules_end=filter_modules_begin+sizeof(filter_modules)/
+        (ConfigModule*)filter_modules_end=filter_modules_begin+filter_modules_size/
                                                                sizeof(ConfigModule);
       }
       if (config != NULL) {
@@ -642,6 +635,12 @@ namespace acommon
               activeoption=1;
             }
             norealoption=0;
+            continue;
+          }
+          if (optionkey.no_case() == "static") {
+            fprintf(stderr,"Filter %s consists of %s\n",value.str(),
+                    optionkeyvalue.c_str());
+            activeoption=0;
             continue;
           }
           if (!activeoption) {

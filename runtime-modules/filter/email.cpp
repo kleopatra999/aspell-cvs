@@ -104,6 +104,6 @@ namespace acommon {
 	*i = ' ';
   }
   
+ACTIVATE_FILTER(acommon,EmailFilter,email);
 }
-ACTIVATE_FILTER(acommon,EmailFilter,"email");
 

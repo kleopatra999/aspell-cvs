@@ -1,7 +1,9 @@
 local %filter_tree=();
 local $dotest=0;
+local $static_option=0;
 while ($sourcefile = shift) {
   ( $sourcefile=~/^--?t(?:est)/) && ($dotest=1) && next;
+  ( $sourcefile=~/^--?s(?:atic)/) && ($static_option=1) && next;
   unless (-e $sourcefile && -r $sourcefile && (open SOURCEFILE,$sourcefile)) {
     printf STDERR "can not open file: $sourcefile\n";
     next;
@@ -189,9 +191,12 @@ printf STDERR "add-filter ".${$filter}{"NAME"}."\n";
   printf FILTEROPTIONS "\n#This line will be printed when typing `aspell".
                         " help $filter_name'\n";
   printf FILTEROPTIONS "DESCRIPTION ".${$filter}{"DESCRIPTION"}."\n";
+  $filterlist.=",{\"$filter_name\",NULL,$filter_name_options_begin,".
+               "$filter_name_options_end}";
   foreach $feature ("ENCODER","FILTER","DECODER") {
     ( ${${$filter}{$feature}}{"USED"}) || next;
     ( ${${$filter}{$feature}}{"ACTIVE"}) || next;
+    printf FILTEROPTIONS "\nSTATIC ".(lc $feature)."\n";
     while (($option_name,$option)=each %{${$filter}{$feature}}) {
       ( scalar @{${$option}{"FEATURES"}} > 0) || next;
       ( $option_name=~/(?:USED|ACTIVE|ISOPTION)/) && next;

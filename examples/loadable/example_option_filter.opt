@@ -5,6 +5,8 @@
 #  it at http://www.gnu.org/.
 # 
 #Aspell Example Option file designed and added by Christoph Hintermüller
+#Usually this file is generated via the loadable filter developement API and
+#mk-flt-opt.pl. Therefor there is no need to code it manually.
 #This file gives a short introduction into the elements needed by 
 #Aspell filter module to properly resolve the corresponding filter options
 #The keywords are kept in all uppercase for better Distinguishing them from
@@ -24,6 +26,17 @@ ASPELL >=0.51
 #filters
 #Keep this short but descriptive
 DESCRIPTION This\ is\ a\ filter\ for\ C/C++\ context\ filtering
+
+#this is required if filter is added to the standard Distribution
+#if aspell is built on a system without shared libraries and objects
+#or if aspell is built static than the STATIC line tells the built system which
+#filter feature is provided by the entire filter object(s).
+#for each feature there has to be a separate line.
+#the following features are supported
+#endoder -> encoding filter
+#decoder -> decoding filter
+#filter -> filter hiding parts of the spelled line from aspell
+STATIC filter
 
 #STARTS an new Option description block
 #it's value is the name of the option which is recognized by the filter
@@ -53,12 +66,17 @@ DEFAULT test
 #right now hardcoded to 15+1 or 16 might be changed in future
 #if omitted or no value set to "" if necessary
 #(short OTHER)
-OTHERDATA nothing\ yet
+#use this only if you know interna of aspell verry well
+#in other words this is "kevin only"
+#this is not available via mk-flt-opt.pl  
+#OTHERDATA nothing\ yet
 
 #this is just for those who like to end options explicitly and for tracking errors
-#it is called implicitly when OPTION is called at end of file
-#option modifiers like TYPE, DES, DEF,OTHER will cause an error if 
+#it is called implicitly when OPTION, STATIC or ENDFILE is called and at end of file
+#option modifiers like TYPE, DEF,OTHER will cause an error if 
 #no option has been defined yet or if located after ENDOPTION and before next OPTION
+#If the DES modifier is called inbetween options than the description of the filter
+#is altered
 ENDOPTION
 
 #the next option goes with the default values as described above

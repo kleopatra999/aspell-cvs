@@ -79,7 +79,8 @@ if test "$TEXT_DUMP" == "lynx" ;then
   DUMP_WIDTH="width"
 fi
 AC_SUBST( DUMP_WIDTH )
-  
+
+AM_CONDITIONAL(FORCE_STATIC, test "$enable_static" == "yes")
 
 dnl GETTEXT
 
@@ -353,6 +354,6 @@ AC_CONFIG_FILES([Makefile common/Makefile lib/Makefile data/Makefile m4/Makefile
                  modules/speller/Makefile modules/speller/default/Makefile
 		 interfaces/Makefile interfaces/cc/Makefile interfaces/filter/Makefile
 		 scripts/Makefile examples/Makefile examples/loadable/Makefile
-		 prog/Makefile manual/Makefile po/Makefile.in 
+		 prog/Makefile manual/Makefile po/Makefile.in modules/filter/Makefile
 		 ])
 AC_OUTPUT

@@ -5,9 +5,8 @@
 // it at http://www.gnu.org/.
 //
 // Added by Christoph Hintermüller
-// This file contains macros useful within loadable filter classes
-// These macros are required if one wants to use make_opt.awk script
-// (might be changed to make_opt.pl).
+// This file contains macros useful within filter classes
+// These macros are required by mk-flt-opt.pl script
 //
 // Further the FILTER_API_EXPORTS and FILTER_API_IMPORTS macros needed
 // for making filter usable in Windows too without changes 
@@ -84,9 +83,7 @@ FILE * controllout=stderr;
 
 /* The following macros have no impact on the behaviour of the filter, but
  * they allow the mk-flt-opt.pl script to compile the .opt file from the
- * sources. Even if the mk-flt-opt.pl script is not used during developement
- * of filter they should be specified inside the sources, as this eases
- * inclusion of the filter into Aspell standard distribution.
+ * sources.
  */
 
 /* ENCODER, FILTER, DECODER:
@@ -126,47 +123,80 @@ private:
 #endif
 /* ACTIVATE_ENCODER, ACTIVATE_FILTER, ACTIVATE_DECODER:
  *          Before a encoding, decoding or processing filter can be
- *          loaded by aspell filter interface it has to be activated.
+ *          loaded (if Aspell is built within a shared environment) and used
+ *          by aspell filter interface it has to be activated.
  *          If a specific class is denoted as encoder, decoder or filter
  *          by one of the above macros use the following ones to activate
  *          the entire filter feature.
- *          If not than write a wraperfunction named new_fencoder, new_filter or
- *          new_decoder and declare ist as extern C. This function should look like
  *          
- *          extern "C" acommon::IndividualFilter * new_<feture>(void){
- *            return new <YourFilterClass>;
- *          }
+ *              extern "C" acommon::IndividualFilter * new_<feature>(void){
+ *                return new <YourFilterClass>;
+ *              }
  *
  *          <feature> stands for either encoder, filter or decoder;
  *          <YourFilterClass> is the name of the corresponding class.
+ *          
+ *
+ *          In case Aspell is built on a system without shared objects and 
+ *          dynamic linking or the  FILTERS_STATIC_BUILD macro is defined
+ *          the filter is activated via the following line:
+ *          
+ *              extern "C" acommon::IndividualFilter * new_<filter>_<feature>(void){
+ *                return new <YourFilterClass>;
+ *              }
+ *
+ *          <filter> stands for the name of the filter
+ *          
+ *
  * Note: call this outside your filter class declaration. If your filter class
  *       does not contain to any specific namespace or these macros are called
  *       inside the same namespace as the class containing the entire feature, 
  *       nspace may be empty (not tested);
  */
 #ifndef ACTIVATE_ENCODER
+#ifndef FILTERS_STATIC_BUILD
 #define ACTIVATE_ENCODER(nspace,class_name,filter) \
 extern "C" { \
   FILTER_API_EXPORTS acommon::IndividualFilter * new_encoder(void) {\
     return new nspace::class_name;\
   }\
 }
+#else
+#define ACTIVATE_ENCODER(nspace,class_name,filter) \
+  FILTER_API_EXPORTS acommon::IndividualFilter * nspace::new_ ## filter ## _encoder(void) {\
+    return new nspace::class_name;\
+  }
+#endif
 #endif
 #ifndef ACTIVATE_FILTER
+#ifndef FILTERS_STATIC_BUILD
 #define ACTIVATE_FILTER(nspace,class_name,filter) \
 extern "C" { \
   FILTER_API_EXPORTS acommon::IndividualFilter * new_filter(void) {\
     return new nspace::class_name;\
   }\
 }
+#else
+#define ACTIVATE_FILTER(nspace,class_name,filter) \
+  FILTER_API_EXPORTS acommon::IndividualFilter * nspace::new_ ## filter ## _filter(void) {\
+    return new nspace::class_name;\
+  }
+#endif
 #endif
 #ifndef ACTIVATE_DECODER
+#ifndef FILTERS_STATIC_BUILD
 #define ACTIVATE_DECODER(nspace,class_name,filter) \
+extern "C" { \
   FILTER_API_EXPORTS acommon::IndividualFilter * new_decoder(void) {\
     return new nspace::class_name;\
   }\
-extern "C" { \
 }
+#else
+#define ACTIVATE_DECODER(nspace,class_name,filter) \
+  FILTER_API_EXPORTS acommon::IndividualFilter * nspace::new_ ## filter ## _decoder(void) {\
+    return new nspace::class_name;\
+  }
+#endif
 #endif
 
 /* ASPELL_VERSION: This may be used to explicitly specify the Aspell version
