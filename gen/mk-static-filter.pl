@@ -56,14 +56,9 @@ while ($filename=shift) {
 }
 
 (scalar (@allfilters = keys %filters)) || exit 0;
-open STATICFILTERS, ">static_filters.cpp" || die "cant generate static filter description\n";
+open STATICFILTERS, ">gen/static_filters.src.cpp" || die "cant generate static filter description\n";
 printf STATICFILTERS "/*File generated during static filter build\n".
                      "  Automatically generated file\n*/\n";
-printf STATICFILTERS "#ifdef NEW_FILTER_CPP\n";
-printf STATICFILTERS "#include \"filter_entry.hpp\"\n";
-printf STATICFILTERS "#include \"config.hpp\"\n";
-printf STATICFILTERS "#include \"key_info.hpp\"\n";
-printf STATICFILTERS "\nnamespace acommon {\n";
 @rallfilters=();
 while ($filter = shift @allfilters) {
   ( $filters{$filter}{"DECODER"} ne  "0") &&
@@ -135,8 +130,6 @@ printf STATICFILTERS "\n  const ConfigModule * filter_modules_end = ".
                          "sizeof(ConfigModule);\n";
 printf STATICFILTERS "\n  const size_t filter_modules_size = ".
                           "sizeof(filter_modules);\n";
-printf STATICFILTERS "\n};\n";
-printf STATICFILTERS "\n#endif\n";
 
 close STATICFILTERS;
 

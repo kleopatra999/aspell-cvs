@@ -4,6 +4,8 @@
 // license along with this library if you did not you can find
 // it at http://www.gnu.org/.
 
+#define COMPILE_IN_FILTER // url filter is always static
+
 #include "indiv_filter.hpp"
 #include "key_info.hpp"
 #include "loadable-filter-API.hpp"
@@ -11,10 +13,6 @@
 namespace acommon {
 
   class UrlFilter : public IndividualFilter {
-    FILTER ("url",get_name,UrlFilter);
-    SET_DESCRIPTION("url",\
-                    "Filter for hiding urls/pahtes and simular from Aspell",\
-                    "url");
   public:
     PosibErr<bool> setup(Config *);
     void reset() {}
@@ -23,7 +21,7 @@ namespace acommon {
 
   PosibErr<bool> UrlFilter::setup(Config *) 
   {
-    name_ = get_name();
+    name_ = "url-filter";
     order_num_ = 0.95;
     return true;
   }
@@ -76,15 +74,5 @@ namespace acommon {
     }
   }
 
-/*  IndividualFilter * new_url_filter() 
-  {
-    return new UrlFilter();
-  }
-*/
-
-/*  static const KeyInfo url_options[] = {};
-  const KeyInfo * url_options_begin = url_options;
-  const KeyInfo * url_options_end = url_options;
-*/
-ACTIVATE_FILTER(acommon,UrlFilter,url)
+  ACTIVATE_FILTER(acommon,UrlFilter,url)
 }

@@ -9,26 +9,27 @@
 
 #include "settings.h"
 
+
 #include "asc_ctype.hpp"
 #include "config.hpp"
+#include "directory.hpp"
 #include "enumeration.hpp"
+#include "errors.hpp"
 #include "filter.hpp"
+#include "filter_entry.hpp"
+#include "fstream.hpp"
+#include "getdata.hpp"
 #include "indiv_filter.hpp"
+#include "iostream.hpp"
 #include "itemize.hpp"
+#include "key_info.hpp"
 #include "parm_string.hpp"
+#include "posib_err.hpp"
 #include "stack_ptr.hpp"
 #include "string_enumeration.hpp"
 #include "string_list.hpp"
 #include "string_map.hpp"
-#include "directory.hpp"
-#include "getdata.hpp"
-#include "fstream.hpp"
-#include "asc_ctype.hpp"
-#include "key_info.hpp"
-#include "errors.hpp"
-#include "posib_err.hpp"
-#include "iostream.hpp"
-#include "filter_entry.hpp"
+
 #ifdef HAVE_LIBDL
 #include <dlfcn.h>
 #endif
@@ -39,10 +40,10 @@
 #endif
 #define NULL 0
 
-#define NEW_FILTER_CPP
-#include "static_filters.cpp"
 namespace acommon
 {
+
+#include "static_filters.src.cpp"
 
   //
   // filter modes
@@ -50,43 +51,8 @@ namespace acommon
 
   const char * filter_modes = "none,url,email,sgml,tex";
   
-/*  static const KeyInfo modes_module[] = {
-    {"fm-email", KeyInfoList, "url,email", 0},
-    {"fm-none", KeyInfoList, "", 0},
-    {"fm-sgml", KeyInfoList, "url,sgml", 0},
-    {"fm-tex", KeyInfoList, "url,tex", 0},
-    {"fm-url", KeyInfoList, "url", 0}
-  };*/
-
-//  extern const KeyInfo modes_module[];
-
   class IndividualFilter;
 
-  //
-  // filter constructors
-  //
-
-//  extern const FilterEntry standard_filters[];
-/*  static FilterEntry standard_filters[] = {
-    {"url",   0, new_url_filter, 0},
-  };*/
-//  extern const unsigned int standard_filters_size; 
-
-  //
-  // config options for the filters
-  //
-  
-//  extern const ConfigModule filter_modules[];
-/*  static ConfigModule filter_modules[] =  {
-    {"fm",NULL, modes_module,
-     modes_module + sizeof (modes_module) / sizeof (KeyInfo)}
-  };*/
-
-
-  // these variables are used in the new_config function and
-  // thus need external linkage
-//  extern const ConfigModule * filter_modules_begin;
-//  extern const ConfigModule * filter_modules_end;   
   static int filter_modules_referencing=0;
 
   //

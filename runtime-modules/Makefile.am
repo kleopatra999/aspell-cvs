@@ -1,2 +1,0 @@
-#SED = @SED@
-SUBDIRS = filter
