@@ -14,6 +14,7 @@
 #include "vector.hpp"
 #include "errors.hpp"
 
+#define FILTER_PROGRESS_CONTROL "tex-filter-debug.log"
 #include "loadable-filter-API.hpp"
 #include <stdio.h>
 #include <cstdio>
@@ -550,6 +551,7 @@ fprintf(stderr,"name %s \n",name_);
   class TexDecoder : public IndividualFilter {
     Vector<Recode> multibytes;
     FilterCharVector buf;
+    Vector<char *>hyphens;
      
   public:
      TexDecoder();
@@ -561,8 +563,10 @@ fprintf(stderr,"name %s \n",name_);
 
   TexDecoder::TexDecoder()
   : multibytes(0),
-    buf()
+    buf(),
+    hyphens()
   {
+FDEBUGNOTOPEN
   }
 
   PosibErr<bool> TexDecoder::setup(Config * config) {
@@ -600,6 +604,20 @@ fprintf(stderr,"name %s \n",name_);
         }
       }
     }
+  StringList hyphenChars;
+    
+    config->retrieve_list("filter-tex-hyphen", &hyphenChars);
+
+  StringEnumeration * hyphenList=hyphenChars.elements();
+  const char * hyphen=NULL;
+
+    hyphens.resize(0);
+    while ((hyphen=hyphenList->next())) {
+FDEBUGPRINTF("next hyphen char `")
+FDEBUGPRINTF(hyphen)
+FDEBUGPRINTF("'\n")
+      hyphens.push_back(strdup(hyphen));
+    }
     return true;
   }
 
@@ -608,6 +626,7 @@ fprintf(stderr,"name %s \n",name_);
 
   FilterChar * i=start;
 
+FDEBUGPRINTF("filtin `")
     while (i && (i != stop)) {
 
   FilterChar * old = i;
@@ -617,10 +636,62 @@ fprintf(stderr,"name %s \n",name_);
            count < multibytes.size();
            count++) { 
 
+FilterChar * j = i;
 
         i+=multibytes[count].decode(i,stop,&buf);
+
+while (j != i) {
+char jp[2]={'\0','\0'};
+
+jp[0]=*j;
+FDEBUGPRINTF(jp);
+j++;
+}
+      }
+      for(count=0;
+          count < hyphens.size();
+          count++) {
+        if (!hyphens[count]) {
+          continue;
+        }
+  char * hp = &hyphens[count][0];
+  char * hpo = hp;
+  FilterChar * j = i;
+        while (*hp && (j != stop) &&
+               (*hp == *j)) {
+          hp++;
+          j++;
+        }
+        if (!*hp) {
+FDEBUGPRINTF("{")
+FilterChar * k = i;
+while (k != j) {
+char kp[2]={'\0','\0'};
+
+kp[0]=*k;
+FDEBUGPRINTF(kp);
+k++;
+} 
+FDEBUGPRINTF("}")
+          if (buf.size()) {
+            buf[buf.size()-1].width+=strlen(hpo);
+//          buf.append(*i,strlen(hpo)+1);
+          }
+          else {
+//FIXME better solution for illegal hyphenation at begin of line
+//      illegal as new line chars are whitespace for latex
+            buf.append(*i,strlen(hpo));
+char ip[2]={'\0','\0'};
+ip[0]=*i;
+FDEBUGPRINTF(ip);
+          }
+          i=j;
+        }
       }
       if (i == old) {
+char ip[2]={'\0','\0'};
+ip[0]=*i;
+FDEBUGPRINTF(ip);
         buf.append(*i);
         i++;
       }
@@ -628,6 +699,15 @@ fprintf(stderr,"name %s \n",name_);
     buf.append('\0');
     start = buf.pbegin();
     stop  = buf.pend() - 1;
+FDEBUGPRINTF("'\nfiltout `")
+i = start;
+while (i != stop) {
+char ip[2]={'\0','\0'};
+ip[0]=*i;
+FDEBUGPRINTF(ip);
+i++;
+}
+FDEBUGPRINTF("'\n");
   }
 
 
@@ -637,6 +717,7 @@ fprintf(stderr,"name %s \n",name_);
   }
 
   TexDecoder::~TexDecoder(){
+FDEBUGCLOSE
   }
         
     
