@@ -412,22 +412,22 @@ they are inherited from the IndividualFilter class.
 \subsection{Adding a New Filter}
 
 A new filter basically is added by placing the corresponding loadable object inside a directory reachable by Aspell via filter-path list.
-Further it is necessary that the corresponding filter description file is loacated in one of the directories listed by the option-path list.
+Further it is necessary that the corresponding filter description file is located in one of the directories listed by the option-path list.
 
 The name of the loadable object has to confirm the following convention \verb#lib<filtername>-filter.so#.
-Where <\,{}filternam\,{}> stands for the name of the filter which is passed to Aspell by add-filter option.
-The same applies to the filter descriptiion file which has to confirm the following naming scheme: \verb#<filtername>-filter.opt#.
+Where <\,{}filtername\,{}> stands for the name of the filter which is passed to Aspell by add-filter option.
+The same applies to the filter description file which has to confirm the following naming scheme: \verb#<filtername>-filter.opt#.
 
-Another way to supply a new filter is to reassamble existing filters to a new filter.
+Another way to supply a new filter is to reassemble existing filters to a new filter.
 This is done by placing all necessary add-filter commands and corresponding option settings in a file called \verb#<filtername>.flt#.
-For fileplacement the same rules apply as for a filter contained in a loadable object.
+For file placement the same rules apply as for a filter contained in a loadable object.
 Filters assembled by .flt files do not have a corresponding .opt file.
 
-To add a new loadable filterobject create a new file. 
+To add a new loadable filter object create a new file. 
 Basically the file should be a C++ file and end in {}``.cpp''.
 The file should contain a new filter class inherited from IndividualFilter, a function to return a new filter called \verb#new_<filtertype>#, where <\,{}filtertype\,{}> is either encoder, decoder or filter.
 Further it is necessary to manually generate the filter description file.
-Finaly the resulting object has to be turned into a loadable filter object using libtool.
+Finally the resulting object has to be turned into a loadable filter object using libtool.
 
 A more convenient way is to use the developer Interface provided by Aspell distribution.
 This interface is contained inside the loadable-filter-API.hpp file and provides a collection of macros which hide details about retrieving and defining options while keeping the filter source compact and readable. 
@@ -458,26 +458,26 @@ constructor function.
 \subsection{Filter Description File\label{sec:filter_descript}}
 
 This file contains the description of a filter which is loaded by Aspell immediately when add-filter option is invoked.
-If this file is missing aspell will complain about it.
+If this file is missing Aspell will complain about it.
 It consists of lines containing commentaries which must be started by a \verb'#' character and lines containing key value pairs describing the filter.
-Each file at least has to contain the following to lines im the given order.
+Each file at least has to contain the following to lines in the given order.
 \begin{verbatim}
 ASPELL >=0.51
 DESCRIPTION this\ is\ short\ filter\ description
 \end{verbatim}
-The first non blank, non comment line has to contain the keyword \texttt{ASPELL} followed by the version of Aspell which the filter is useable with.
-To denote multible Aspell versions the version number may be prefixed by \textbf{<}, \textbf{<=}, \textbf{=}, \textbf{>=} or \textbf{>}.
-If the range prefix is ommited \textbf{=} is assumed.
-The line containing the \texttt{DESCRIPTION} of the filter may float freely in the description file unless it occures inside a description of an option.
-Whitespaces which occure inside the descriptive text have to escaped by \verb#\# character.
-The keyword \texttt{DESCRIPTION} may be abreviated by \texttt{DESC}.
+The first non blank, non comment line has to contain the keyword \texttt{ASPELL} followed by the version of Aspell which the filter is usable with.
+To denote multiple Aspell versions the version number may be prefixed by \textbf{<}, \textbf{<=}, \textbf{=}, \textbf{>=} or \textbf{>}.
+If the range prefix is omitted \textbf{=} is assumed.
+The line containing the \texttt{DESCRIPTION} of the filter may float freely in the description file unless it occurs inside a description of an option.
+Whitespaces which occur inside the descriptive text have to escaped by \verb#\# character.
+The keyword \texttt{DESCRIPTION} may be abbreviated by \texttt{DESC}.
 
 If the filter description contains the following line
 \begin{verbatim}
 ENDFILE
 \end{verbatim}
 than Aspell will assume end of file and ignore all following line.
-The same occures implicitly if the real end of file is reached.
+The same occurs implicitly if the real end of file is reached.
 
 \begin{verbatim}
 OPTION newoption
@@ -490,7 +490,7 @@ An option is added by a line containing the keyword \texttt{OPTION} followed by 
 If this name is not prefixed by the name of the filter Aspell will implicitly prefix it.
 For the \texttt{DESCRIPTION} of a filter option the same holds as for the filter description.
 The \texttt{TYPE} of the option may be one of \textbf{bool}, \textbf{int}, \textbf{string} or \textbf{list}.
-If the \texttt{TYPE} is ommitted \textbf{bool} is assumed. 
+If the \texttt{TYPE} is omitted \textbf{bool} is assumed. 
 The default value(s) for an option is specified via \texttt{DEFAULT} (short \texttt{DEF}) followed by the desired \texttt{TYPE} dependent default value.
 The table \ref{tab:filter_default_values} shows the possible values for each \texttt{TYPE}
 \begin{table}
@@ -505,27 +505,27 @@ list&&any comma separated list of strings\\\hline
 \caption{The default values Aspell assumes if option description lacks a \texttt{DEFAULT} or \texttt{DEF} line.}
 \label{tab:filter_default_values}
 \end{table}
-The \texttt{ENDOPTION} line may be ommited as it is asumed implicitly if a line containing \texttt{OPTION} or \texttt{ENDFILE} keyword occures or the file ends.
+The \texttt{ENDOPTION} line may be omitted as it is assumed implicitly if a line containing \texttt{OPTION} or \texttt{ENDFILE} keyword occurs or the file ends.
 
 \paragraph{Note:}
-The keywords in a filter description file are case insensitive. The above examples use the all uppercase for better destinguishing them from values and comments.
+The keywords in a filter description file are case insensitive. The above examples use the all uppercase for better distinguishing them from values and comments.
 Further a filter description may contain blank lines to enhance their readability.
 
 \subsection{Retrieve Options by a filter}
 
-If done manually one has to know option retrivement meachanism of aspell by heart.
+If done manually one has to know option retrieving mechanism of Aspell by heart.
 
 \subsection{Compiling and Linking}
-See a good book on unix programming on how to turn the filter source into a loadable object.
+See a good book on Unix programming on how to turn the filter source into a loadable object.
 
 \subsection{Programmers Interface}
 
-A more convenient way to build a new filter is provided by Aspells programmers interface for filter.
+A more convenient way to build a new filter is provided by Aspell's programmers interface for filter.
 It is provided by the loadable-filter-API.hpp file.
 Including this file gives access to a collection of macros hiding details about retrieving and declaring options and initialising the filter.
 Table \ref{tab:interface_macros} shows the macros provided by the interface.
-For details uppon the entire macros see interfaces/filter/loadable-filter-API.hpp\,{}.
-An example uppon how to use these macros can be found at examples/loadable/ccpp-context.hpp and examples/loadable/ccpp-context.cpp.
+For details upon the entire macros see interfaces/filter/loadable-filter-API.hpp\,{}.
+An example upon how to use these macros can be found at examples/loadable/ccpp-context.hpp and examples/loadable/ccpp-context.cpp.
 \begin{table}
 \centering
 \begin{minipage}{\textwidth}
@@ -560,21 +560,21 @@ ADD\_DEFAULT&&allows to set or expand list of default values for list type optio
 
 \subsection{Automatic Generation of Filter Description}
 
-If sourcfiles for one or more filters use the interface provided by loadable-filter-API.hpp than the filter description file described in section \ref{sec:filter_descript} can be generated automatically.
-This is done by passing all sourcefiles to mk-filter-opt.pl perlscript script via
+If source files for one or more filters use the interface provided by loadable-filter-API.hpp than the filter description file described in section \ref{sec:filter_descript} can be generated automatically.
+This is done by passing all source files to mk-filter-opt.pl perl-script script via
 \begin{verbatim}
 perl mk-filter-opt.pl [<option>] <sourcefile> [ <sourcefile> ... ]
 \end{verbatim}
 call.
-If aspell allready has been installed on the entire system mk-flt-opt.pl may be used instead via
+If Aspell already has been installed on the entire system mk-flt-opt.pl may be used instead via
 \begin{verbatim}
 mk-flt-opt.pl [<option>] <sourcefile> [<sourcefile> ...]
 \end{verbatim}
 call.
 
-If \textbf{--test} option is specified for <\,{}option\,{}> the filter and option hirachy of all filters found inside the given source file(s) is printed and developer is asked wether this is correct or not.
-The filter description file(s) is(are) in case of \textbf{--test} option only generated if and only if filter hirachy is accepted by answering yes.
-If \textbf{--test} option is not specified the filter description file(s) is(are) allways generated.
+If \textbf{--test} option is specified for <\,{}option\,{}> the filter and option hierarchy of all filters found inside the given source file(s) is printed and developer is asked whether this is correct or not.
+The filter description file(s) is(are) in case of \textbf{--test} option only generated if and only if filter hierarchy is accepted by answering yes.
+If \textbf{--test} option is not specified the filter description file(s) is(are) always generated.
  
 \section{Data Structures}
 

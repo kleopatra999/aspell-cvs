@@ -170,7 +170,7 @@ list) is saved it will now first update the list against the dictionary
 on disk in case another process modified it.
 \item Can share the memory used in the main word list between processes.
 \item Support for detachable dictionaries \textbf{}so that more than one
-aspell class can use the same dictionary.
+Aspell class can use the same dictionary.
 \item Support for multiple personal dictionaries as well as support for
 special auxiliary dictionaries.
 \item Better support for run-together words.
@@ -791,7 +791,7 @@ use and how they behave (see section \ref{dict-opts} for more information):
 
 \begin{description}
 \item [master,-d]\textit{(string)} base name of the dictionary to use.
-If this option is specifed than Aspell with either use this dictionary
+If this option is specified than Aspell with either use this dictionary
 or die.
 \item [dict-dir]\textit{(dir)} location of the main word list
 \item [lang]\textit{(string)} language to use, it follows the same format
@@ -816,7 +816,7 @@ the dictionary
 
 \subsection{Checker Options}
 
-These options control the beahvior of Aspell when checking documents.
+These options control the behavior of Aspell when checking documents.
 
 \begin{description}
 \item [ignore,-W](\textit{integer}) ignore words <= n chars
@@ -838,53 +838,53 @@ These options modify the behavior of Aspell filter interface in general (see sec
 \begin{description}
 \item [add|rem-filter]\textit{(list)} add or removes a filter
 \item [add|rem-filter-path]\textit{(list)}
-add or removes a path where aspell should look for filter ojects beeing loadable during runtime. If the object library of a filter can not be found, Aspell will refuse toload the filter.
-\item [add|rem-option-path]\textit{(list)}add or removes a path where the files containing the description of a filter (recognized options, version of Aspell the filter is desigend for, ...) is located. If this information can not be found or is corrupt aspell will refuse to load the entire filter.
+add or removes a path where Aspell should look for filter objects being loadable during runtime. If the object library of a filter can not be found, Aspell will refuse to load the filter.
+\item [add|rem-option-path]\textit{(list)}add or removes a path where the files containing the description of a filter (recognized options, version of Aspell the filter is designed for, ...) is located. If this information can not be found or is corrupt Aspell will refuse to load the entire filter.
 \item [mode]\textit{(string)} sets the filter mode. Mode is one if none,
 url, email, sgml, or tex. (The short cut options '-e' may be used
 for email, '-H' for Html/Sgml, or '-t' for Tex)
 \item [encoding]\textit{(string)} The encoding the input text is in. Valid
 values are {}``utf-8'', {}``iso8859-{*}'', {}``koi8-r'', {}``viscii'',
 {}``cp1252'', {}``machine unsigned 16'', {}``machine unsigned
-32''. However, the aspell utility will currently only function correctly
+32''. However, the Aspell utility will currently only function correctly
 with 8-bit encodings. I hope to provide utf-8 support in the future.
-The two {}``machine unsigned'' encodings are entended to be used
-by other programs using the Aspell librarary and it is unlikly the
+The two {}``machine unsigned'' encodings are intended to be used
+by other programs using the Aspell library and it is unlikely the
 Aspell utility will ever support these encodings.
 \end{description}
 These Options belong to filters packaged along with Aspell standard distribution.
-These options may be prefixed by the keyword \texttt{filter-} in order to explicitly indicate that they are options recognized by a filter and not by aspell itselve.
+These options may be prefixed by the keyword \texttt{filter-} in order to explicitly indicate that they are options recognized by a filter and not by Aspell itself.
 \begin{description}
-\item[email] This filter hides quoting characters and email preamgle and other parts of an email which need not to be spellchecked.
+\item[email] This filter hides quoting characters and email preamble and other parts of an email which need not to be spell checked.
 \begin{description}
 \item [add|rem-email-quote]\textit{(list)} email quote characters
 \item [email-margin]\textit{(integer)} num chars that can appear before
 the quote char
 \end{description}
-\item[sgml] This filter converts an sgml sourcefile into a format which eases spellchecking of sgml texts by aspell.
+\item[sgml] This filter converts an sgml source file into a format which eases spell checking of sgml texts by Aspell.
 \begin{description}
 \item [sgml-check]\textit{(list)} sgml attributes to always check.
 \item [sgml-extension]\textit{(list)} sgml file extensions.
 \end{description}
-\item[tex|latex]This filter hides all latex commands and corresponding paramters not beeing readable text in latex output from Aspell.
+\item[tex|latex]This filter hides all latex commands and corresponding parameters not being readable text in latex output from Aspell.
 \begin{description}
 \item [tex-command]\textit{(list)} \TeX{} commands
 \item [tex-check-comments]\textit{(boolean)} check \TeX{} comments
 \end{description}
 \item[context]
-This filter can be used to spellcheck source codes, html sources and othet texts which consist of different contexts.
+This filter can be used to spell check source codes, html sources and other texts which consist of different contexts.
 These contexts must be separated by pairs of unique delimiters.
-The different contexts may not be dependent uppon each other except for initial context which is assumed if not any other context applies.
+The different contexts may not be dependent upon each other except for initial context which is assumed if not any other context applies.
 \begin{description}
 \item[context-visible-first]\textit{(boolean)}
-Switches the context which should be visible to aspell.
-Per default the initial context is assumed to be invisible as one would expect when spellchecking source files of programms where relevant parts are contained in string constants and comments but not in the remaining code.
+Switches the context which should be visible to Aspell.
+Per default the initial context is assumed to be invisible as one would expect when spell checking source files of programs where relevant parts are contained in string constants and comments but not in the remaining code.
 If set to true the initial context is visible while the delimited ones are hidden.
 \item[add|rem-context-delimiters]\textit{(list)}
 Add or remove pairs of delimiters.
 This allows which characters contained in a text will be used to switch contexts and which will be assumed normal characters.
 The two delimiting chars belonging to one pair have to be separated by a space character.
-If multible pairs are specified by one add|rem-context-delimiters call the different pairs have to be separated by a literal comma.
+If multiple pairs are specified by one add|rem-context-delimiters call the different pairs have to be separated by a literal comma.
 Per default the delimiters are set to \texttt{C/C++} comment and string constant delimiters.
 If the end of line delimits a context than this has to be indicated by \verb#\0#.
 \end{description}
@@ -905,7 +905,7 @@ strung together
 
 \subsection{Misc Options}
 
-Misc. other options that don't fall under any other catagory
+Misc. other options that don't fall under any other category
 
 \begin{description}
 \item [conf]\textit{(file)} main configuration file
@@ -938,7 +938,7 @@ that the ispell utility uses.
 
 \section{Dumping Configuration Values}
 
-To find out the current value of all the options use the command {}``aspell
+To find out the current value of all the options use the command {}``Aspell
 dump config''. This will dump the current configuration to standard
 output. The format of the contents dumped is such that it can be used
 as either the global or personal configuration file.
@@ -952,14 +952,14 @@ The default configuration of a particular filter may be quested by passing the n
 This is done by passing +e <\,{}expr\,{}> to config command of Aspell.
 If +e is the only argument to config Aspell assumes +e all which lists the configuration of all installed and reachable filters.
 In any other case or in case of questing the configuration of a specific option +e allways has to be followed by <\,{}filtername\,{}>, <\,{}regex\,{}> or a literal all.
-The parameter +e and its argument allways must be specified immediatly after config command and before specifying name of option in order to be recognized by Aspell.
+The parameter +e and its argument always must be specified immediately after config command and before specifying name of option in order to be recognized by Aspell.
    
-\section{Printing Help creen}
+\section{Printing Help screen}
 
-To print the help screen of aspell simply invoke Aspell with help command or by -? parameter.
+To print the help screen of Aspell simply invoke Aspell with help command or by -? parameter.
 This will list all basic options and commands of Aspell but not the available filters and their options.
 
-In order to quest available filter(s) and/or the corresponding options call Aspells help comand whith the name of the entire filter or a regular expression.
+In order to quest available filter(s) and/or the corresponding options call Aspell's help command with the name of the entire filter or a regular expression.
 If corresponding filter(s) are installed and reachable via filter-path and option-path setting Aspell will in addition to it's default help screen print a short description of the filter and its options.
 
 If Aspell help command is called with keyword \verb#all#, all installed and available filters and the corresponding options are listed. 
@@ -1035,7 +1035,7 @@ and sgml. The extension are not case sensitive so extensions like
 The \textbf{tex} (all lowercase) filter/mode skips over \TeX{} commands
 and parameters and/or options to certain command. It also skips over
 \TeX{} comments by default. The option \textbf{{[}dont-{]}tex-check-comments}
-controls whether or not aspel will skip over \TeX{} comments. The
+controls whether or not Aspell will skip over \TeX{} comments. The
 option \textbf{add|rem-tex-command} controls which \TeX{} commands
 should have certain parameters and/or options also skipped over. Commands
 that are not specified will have all there parameters and/or options
@@ -1090,14 +1090,14 @@ The \textbf{tex} filter mode is allso available via \textbf{latex} alias name.
 \subsubsection{Context Filter/Mode}
 
 The \textbf{context} filter allows Aspell to distinguish between visible and invisible contexts.
-The visible ones will be spellchecked and the invisible ones will be ignored.
-The contexts are distinguised by the fact that the visible/invisible ones are delimited by specific and unique delimiter characters or character sequences.
-Whether the delimited contexts schould be visible or invisible only  stated by the value of the \textbf{{[}dont-{]}context-visible-first} option and not by the delimiters.
+The visible ones will be spell checked and the invisible ones will be ignored.
+The contexts are distinguished by the fact that the visible/invisible ones are delimited by specific and unique delimiter characters or character sequences.
+Whether the delimited contexts should be visible or invisible only  stated by the value of the \textbf{{[}dont-{]}context-visible-first} option and not by the delimiters.
 
 The context delimiters are specified as pairs of delimiters via the \textbf{add|rem-context-delimiters} option.
 The delimiters enclosing a specific context are specified as a space separated pair.
 If more than one delimiter pair is specified by one call of \textbf{add|rem-context-delimiters} they have to be combined to a comma separated list.
-To indicate that a context is allways closed by end of line use \verb#\0# sequence as closing delimiter.
+To indicate that a context is always closed by end of line use \verb#\0# sequence as closing delimiter.
 
 \subsection{Notes on the Prefix Option}
 
