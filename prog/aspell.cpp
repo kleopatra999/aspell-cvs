@@ -20,6 +20,12 @@
 
 #include "settings.h"
 
+#ifdef USE_FILE_INO
+# include <sys/types.h>
+# include <sys/stat.h>
+# include <unistd.h>
+#endif
+
 #include "aspell.h"
 
 #include "asc_ctype.hpp"
@@ -676,6 +682,7 @@ void check(bool interactive)
   FILE * in = 0;
   FILE * out = 0;
   Mapping mapping;
+  bool changed = false;
 
   if (interactive) {
     if (args.size() == 0) {
@@ -700,6 +707,14 @@ void check(bool interactive)
            << "\" for writing.  File not saved.\n";
       exit(-1);
     }
+
+#ifdef USE_FILE_INO
+    {
+      struct stat st;
+      fstat(fileno(in), &st);
+      fchmod(fileno(out), st.st_mode);
+    }
+#endif
 
     if (!options->have("mode"))
       set_mode_from_extension(options, file_name);
@@ -846,12 +861,14 @@ void check(bool interactive)
 	if (new_word[0] >= '1' && new_word[0] < (char)suggestions_size + '1')
 	  new_word = sug_con[new_word[0]-'1'];
 	state->replace(new_word);
+        changed = true;
 	if (mapping[choice] == ReplaceAll)
 	  replace_list->replace(word, new_word);
 	break;
       default:
 	if (choice >= '1' && choice < (char)suggestions_size + '1') { 
 	  state->replace(sug_con[choice-'1']);
+          changed = true;
 	} else {
 	  error("Sorry that is an invalid choice!");
 	  goto choice_loop;
@@ -870,14 +887,20 @@ exit_loop:
     state.del(); // to close the file handles
     delete_aspell_speller(speller);
     
-    bool keep_backup = options->retrieve_bool("backup");
-    String backup_name = file_name;
-    backup_name += ".bak";
-    if (keep_backup)
-      rename_file(file_name, backup_name);
-    rename_file(new_name, file_name);
+    if (changed) {
+
+      bool keep_backup = options->retrieve_bool("backup");
+      String backup_name = file_name;
+      backup_name += ".bak";
+      if (keep_backup)
+        rename_file(file_name, backup_name);
+      rename_file(new_name, file_name);
     
-    //end_check();
+    } else {
+
+      remove_file(new_name);
+
+    }
     
     return;
   }
