@@ -1366,7 +1366,7 @@ void print_help () {
     "  -l|list          produce a list of misspelled words from standard input\n"
     "  [dump] config [-e <expr>]  dumps the current configuration to stdout\n"
     "  config [+e <expr>] <key>   prints the current value of an option\n"
-    "  soundslike       returns the soundslike equivalent for each word entered\n"
+    "  soundslike       returns the sounds like equivalent for each word entered\n"
     "  filter           passes standard input through filters\n"
     "  -v|version       prints a version line\n"
     "  dump|create|merge master|personal|repl [word list]\n"
