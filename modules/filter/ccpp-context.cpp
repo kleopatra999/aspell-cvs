@@ -16,12 +16,12 @@
 #include "string_enumeration.hpp"
 #include "ccpp-context.hpp"
 
+
 namespace acommon {
   ContextFilter::ContextFilter(void)
   : opening(),
     closing()
   {
-FDEBUGOPEN;
     state=hidden;
     correspond=-1;
     opening.resize(3);
@@ -33,7 +33,6 @@ FDEBUGOPEN;
     closing[1]="*/";
     closing[2]="";
     filterversion=VERSION;
-    debugoutput=fopen("mydebugfile.dbg","a");
   }
     
   PosibErr<bool> ContextFilter::setup(Config * config){
@@ -52,8 +51,9 @@ FDEBUGOPEN;
       return true;
     }
 
-    if (config->retrieve_bool("filter-context-visible-first"))
+    if (config->retrieve_bool("filter-context-visible-first")) {
       state=visible;
+    }
 
     config->retrieve_list("filter-context-delimiters", &delimiters);
     delimiterpairs=delimiters.elements();
@@ -207,6 +207,7 @@ FDEBUGOPEN;
       state=hidden;
       correspond=-1;
     } 
+    
     if (beginblind < endblind) {
       hidecode(beginblind,endblind);
     }
@@ -231,7 +232,6 @@ FDEBUGOPEN;
   }
 
   ContextFilter::~ContextFilter() {
-FDEBUGCLOSE
     reset();
   }
 }
