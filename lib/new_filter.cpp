@@ -297,484 +297,502 @@ namespace acommon
     FilterOptionExpandNotifier(void) {
       filter_modules_referencing++;
     }
-
-    FilterOptionExpandNotifier(const FilterOptionExpandNotifier & brother):
-                               optionpath(), filterpath() {
-      *this=brother;
-      filter_modules_referencing++;
-    }
-    void operator=(const FilterOptionExpandNotifier & brother) {
-      optionpath=brother.optionpath;
-      filterpath=brother.filterpath;
-    }
-
-    void release_options(const KeyInfo * begin,const KeyInfo * end) {
-      KeyInfo * current=NULL;
-      
-      if (begin == NULL) {
-        return;
-      }
-      for (current=(KeyInfo*)begin;current < end; current++) {
-        if (current->name) {
-          free((char*)current->name);
-        }
-        if (current->def) {
-          free((char*)current->def);
-        }
-        if (current->desc) {
-          free((char*)current->desc);
-        }
-      }
-    }
-
+    FilterOptionExpandNotifier(const FilterOptionExpandNotifier & brother);
+    void operator=(const FilterOptionExpandNotifier & brother);
+    void release_options(const KeyInfo * begin,const KeyInfo * end);
   public:
     Config * config;
 
-    FilterOptionExpandNotifier(Config * conf) : optionpath(), filterpath(), config(conf) {
-      filter_modules_referencing++;
-      do {
-        StringList test;
-        config->retrieve_list("option-path",&test);
-        optionpath=test;
-      } while (false);
-      do {
-        StringList test;
-        config->retrieve_list("filter-path",&test);
-        filterpath=test;
-      } while (false);
+    FilterOptionExpandNotifier(Config * conf);
+    virtual ~FilterOptionExpandNotifier(void);
+    virtual Notifier * clone(Config * conf);
+    virtual PosibErr<void> item_added(const KeyInfo * key, ParmString value);
+    virtual PosibErr<void> item_updated(const KeyInfo * key, ParmString value);
+//FIXME Add item_removed member to clear away filter options 
+  };
+
+
+  void activate_dynamic_filteroptions(Config * config){
+    config->add_notifier(new FilterOptionExpandNotifier(config));
+  }
+
+
+  FilterOptionExpandNotifier::FilterOptionExpandNotifier(const FilterOptionExpandNotifier & brother)
+  : optionpath(),
+    filterpath()
+  {
+    *this=brother;
+    filter_modules_referencing++;
+  }
+  void  FilterOptionExpandNotifier::operator=(const FilterOptionExpandNotifier & brother) {
+    optionpath=brother.optionpath;
+    filterpath=brother.filterpath;
+  }
+
+  void FilterOptionExpandNotifier::release_options(const KeyInfo * begin,const KeyInfo * end) {
+    KeyInfo * current=NULL;
+    
+    if (begin == NULL) {
+      return;
     }
-
-    virtual ~FilterOptionExpandNotifier(void) {
-      int countextended=sizeof(filter_modules)/sizeof(ConfigModule);
-
-      if (--filter_modules_referencing == 0) {
-        if (filter_modules_begin != &filter_modules[0]) {
-          for( ; countextended < filter_modules_end-filter_modules_begin;
-              countextended++ ){
-            if (filter_modules_begin[countextended].name != NULL) {
-              free((char*)filter_modules_begin[countextended].name);
-            }
-            if (filter_modules_begin[countextended].load != NULL) {
-              free((char*)filter_modules_begin[countextended].load);
-            }
-            release_options(filter_modules_begin[countextended].begin,
-                            filter_modules_begin[countextended].end);
-            if (filter_modules_begin[countextended].begin) {
-              free((KeyInfo*)filter_modules_begin[countextended].begin);
-            }
-          }
-          free((ConfigModule*)filter_modules_begin);
-          (ConfigModule*)filter_modules_begin=&filter_modules[0];
-          (ConfigModule*)filter_modules_end=filter_modules_begin+sizeof(filter_modules)/
-                                                                 sizeof(ConfigModule);
-        }
-        if (config != NULL) {
-          config->set_modules(filter_modules_begin, filter_modules_end);
-        }
+    for (current=(KeyInfo*)begin;current < end; current++) {
+      if (current->name) {
+        free((char*)current->name);
+      }
+      if (current->def) {
+        free((char*)current->def);
+      }
+      if (current->desc) {
+        free((char*)current->desc);
       }
     }
+  }
 
-    virtual Notifier * clone(Config * conf) {
-      return new FilterOptionExpandNotifier(conf); 
-    }
 
-    virtual PosibErr<void> item_added(const KeyInfo * key, ParmString value) {
-      int namelength=strlen(key->name);
-      ConfigModule * current=(ConfigModule*)filter_modules_begin;
-      String optionname="";
-      String filtername="lib";
-      FStream options;
-      String optionkey;
-      String optionkeyvalue;
-      String version=PACKAGE_VERSION;
-      unsigned int optionstart=0;
-      unsigned int optioncount=0;
-      KeyInfo * begin=NULL;
-      int optsize=0;
-      ConfigModule * mbegin=NULL;
-      int modsize=filter_modules_end-filter_modules_begin;
-      void * help=NULL;
-      StringList filtpath;
-      StringList optpath;
-      bool greater;
-      bool equal;
-      bool less;
-      int linecount=0;
-      char linenumber[9]="0";
-      int activeoption=0;
-      String expand="filter-";
-      int norealoption=0;
+  FilterOptionExpandNotifier::FilterOptionExpandNotifier(Config * conf) 
+  : optionpath(),
+    filterpath(), 
+    config(conf) 
+  {
+    filter_modules_referencing++;
+    do {
+      StringList test;
+      config->retrieve_list("option-path",&test);
+      optionpath=test;
+    } while (false);
+    do {
+      StringList test;
+      config->retrieve_list("filter-path",&test);
+      filterpath=test;
+    } while (false);
+  }
 
-      if ((namelength == 6) &&
-          !strncmp(key->name,"filter",6)){
-        fprintf(stderr,"Expanding for %s ... \n",value.str());
-        while (current < filter_modules_end) {
-          if (!strncmp(value.str(), current->name,
-                       value.size() <= strlen(current->name)?
-                       value.size():strlen(current->name))) {
-            return no_err;
+  FilterOptionExpandNotifier::~FilterOptionExpandNotifier(void) {
+    int countextended=sizeof(filter_modules)/sizeof(ConfigModule);
+
+    if (--filter_modules_referencing == 0) {
+      if (filter_modules_begin != &filter_modules[0]) {
+        for( ; countextended < filter_modules_end-filter_modules_begin;
+            countextended++ ){
+          if (filter_modules_begin[countextended].name != NULL) {
+            free((char*)filter_modules_begin[countextended].name);
           }
-          current++;
+          if (filter_modules_begin[countextended].load != NULL) {
+            free((char*)filter_modules_begin[countextended].load);
+          }
+          release_options(filter_modules_begin[countextended].begin,
+                          filter_modules_begin[countextended].end);
+          if (filter_modules_begin[countextended].begin) {
+            free((KeyInfo*)filter_modules_begin[countextended].begin);
+          }
         }
-        if (current >= filter_modules_end) {
-          optionname+=value;
-          optionname+="-filter.opt";
-          filtername+=value;
-          filtername+="-filter.so";
-          if (!filterpath.expand_filename(filtername)) {
-            filtername=value;
-            filtername+=".flt";
-            if (!filterpath.expand_filename(filtername)) {
-              return make_err(no_such_filter, "add-filter", value);
-            }
-            RET_ON_ERR(options.open(filtername,"r"));
-            while (getdata_pair(options,optionkey,optionkeyvalue)) {
-              RET_ON_ERR(config->replace(optionkey,optionkeyvalue));
-            }
-            config->replace("rem-filter",value);
-            return no_err;
-          }
-          else if (!optionpath.expand_filename(optionname)) {
-            return make_err(no_options,"add_filter",optionname,"Options missing");
+        free((ConfigModule*)filter_modules_begin);
+        (ConfigModule*)filter_modules_begin=&filter_modules[0];
+        (ConfigModule*)filter_modules_end=filter_modules_begin+sizeof(filter_modules)/
+                                                               sizeof(ConfigModule);
+      }
+      if (config != NULL) {
+        config->set_modules(filter_modules_begin, filter_modules_end);
+      }
+    }
+  }
 
+  Notifier * FilterOptionExpandNotifier::clone(Config * conf) {
+    return new FilterOptionExpandNotifier(conf); 
+  }
+
+  PosibErr<void> FilterOptionExpandNotifier::item_added(const KeyInfo * key, ParmString value) {
+    int namelength=strlen(key->name);
+    ConfigModule * current=(ConfigModule*)filter_modules_begin;
+    String optionname="";
+    String filtername="lib";
+    FStream options;
+    String optionkey;
+    String optionkeyvalue;
+    String version=PACKAGE_VERSION;
+    unsigned int optionstart=0;
+    unsigned int optioncount=0;
+    KeyInfo * begin=NULL;
+    int optsize=0;
+    ConfigModule * mbegin=NULL;
+    int modsize=filter_modules_end-filter_modules_begin;
+    void * help=NULL;
+    StringList filtpath;
+    StringList optpath;
+    bool greater;
+    bool equal;
+    bool less;
+    int linecount=0;
+    char linenumber[9]="0";
+    int activeoption=0;
+    String expand="filter-";
+    int norealoption=0;
+
+    if ((namelength == 6) &&
+        !strncmp(key->name,"filter",6)){
+      fprintf(stderr,"Expanding for %s ... \n",value.str());
+      while (current < filter_modules_end) {
+        if (!strncmp(value.str(), current->name,
+                     value.size() <= strlen(current->name)?
+                     value.size():strlen(current->name))) {
+          return no_err;
+        }
+        current++;
+      }
+      if (current >= filter_modules_end) {
+        optionname+=value;
+        optionname+="-filter.opt";
+        filtername+=value;
+        filtername+="-filter.so";
+        if (!filterpath.expand_filename(filtername)) {
+          filtername=value;
+          filtername+=".flt";
+          if (!filterpath.expand_filename(filtername)) {
+            return make_err(no_such_filter, "add-filter", value);
           }
-          if (config->have(value)) {
-            fprintf(stderr,"warning: specifying filter twice makes no sense\n");
-            return no_err;
-          }
-          RET_ON_ERR(options.open(optionname,"r"));
-          greater=equal=less=false;
+          RET_ON_ERR(options.open(filtername,"r"));
           while (getdata_pair(options,optionkey,optionkeyvalue)) {
-            linecount++;
-            if (optionkey.no_case() == "aspell") {
-              optionstart=0;
-              if ((optionkeyvalue.length() > optionstart) &&
-                  (optionkeyvalue[optionstart] == '>')) {
-                greater=true;
-                optionstart++;
-              }
-              if ((optionkeyvalue.length() > optionstart) &&
-                  (optionkeyvalue[optionstart] == '<')) {
-                less=true;
-                optionstart++;
-              }
-              if ((optionkeyvalue.length() > optionstart) &&
-                  (optionkeyvalue[optionstart] == '=')) {
-                equal=true;
-                optionstart++;
-              }
-              if (optionstart == 0) {
-                equal=true;
-              }
-              if ((optionkeyvalue.length() > optionstart) &&
-                  !asc_isdigit(optionkeyvalue[optionstart])) {
-                sprintf(linenumber,"%i",linecount);
-                return make_err(confusing_version,"add_filter",optionname,linenumber);
-              }
-              optionkeyvalue.erase(0,optionstart);
-              for (optioncount=0;(optioncount < optionkeyvalue.length()) &&
-                                 (optioncount < version.length());
-                   optioncount++) {
-                if (asc_isdigit(optionkeyvalue[optioncount]) &&
-                    asc_isdigit(version[optioncount])) {
-                  if (greater &&
-                      ((optionkeyvalue[optioncount] < version[optioncount]) ||
-                       ((optionkeyvalue[optioncount] == version[optioncount]) &&
-                        (optionkeyvalue.length()-1 == optioncount) &&
-                        (optionkeyvalue.length() < version.length())))) {
-                     break;
-                  }
-                  if (less &&
-                      ((optionkeyvalue[optioncount] > version[optioncount]) ||
-                       ((optionkeyvalue[optioncount] == version[optioncount]) &&
-                        (version.length()-1 == optioncount) &&
-                        (optionkeyvalue.length() > version.length())))) {
-                    break;
-                  }
-                  if (optionkeyvalue[optioncount] == version[optioncount]) {
-                    if (equal &&
-                        (version.length()-1 == optioncount) &&
-                        (optionkeyvalue.length()-1 == optioncount)) {
-                      break;
-                    }
-                    else if ((version.length()-1 > optioncount) &&
-                             (optionkeyvalue.length()-1 > optioncount)) {
-                      continue;
-                    }
-                  }
-                  sprintf(linenumber,"%i",linecount);
-                  return make_err(bad_version,"add-filter",optionname,linenumber);
+            RET_ON_ERR(config->replace(optionkey,optionkeyvalue));
+          }
+          config->replace("rem-filter",value);
+          return no_err;
+        }
+        else if (!optionpath.expand_filename(optionname)) {
+          return make_err(no_options,"add_filter",optionname,"Options missing");
+
+        }
+        if (config->have(value)) {
+          fprintf(stderr,"warning: specifying filter twice makes no sense\n");
+          return no_err;
+        }
+        RET_ON_ERR(options.open(optionname,"r"));
+        greater=equal=less=false;
+        while (getdata_pair(options,optionkey,optionkeyvalue)) {
+          linecount++;
+          if (optionkey.no_case() == "aspell") {
+            optionstart=0;
+            if ((optionkeyvalue.length() > optionstart) &&
+                (optionkeyvalue[optionstart] == '>')) {
+              greater=true;
+              optionstart++;
+            }
+            if ((optionkeyvalue.length() > optionstart) &&
+                (optionkeyvalue[optionstart] == '<')) {
+              less=true;
+              optionstart++;
+            }
+            if ((optionkeyvalue.length() > optionstart) &&
+                (optionkeyvalue[optionstart] == '=')) {
+              equal=true;
+              optionstart++;
+            }
+            if (optionstart == 0) {
+              equal=true;
+            }
+            if ((optionkeyvalue.length() > optionstart) &&
+                !asc_isdigit(optionkeyvalue[optionstart])) {
+              sprintf(linenumber,"%i",linecount);
+              return make_err(confusing_version,"add_filter",optionname,linenumber);
+            }
+            optionkeyvalue.erase(0,optionstart);
+            for (optioncount=0;(optioncount < optionkeyvalue.length()) &&
+                               (optioncount < version.length());
+                 optioncount++) {
+              if (asc_isdigit(optionkeyvalue[optioncount]) &&
+                  asc_isdigit(version[optioncount])) {
+                if (greater &&
+                    ((optionkeyvalue[optioncount] < version[optioncount]) ||
+                     ((optionkeyvalue[optioncount] == version[optioncount]) &&
+                      (optionkeyvalue.length()-1 == optioncount) &&
+                      (optionkeyvalue.length() < version.length())))) {
+                   break;
                 }
                 if (less &&
-                    asc_isdigit(optionkeyvalue[optioncount]) &&
-                    (version[optioncount] == '.' ) &&
-                    (version.length()-1 > optioncount)) {
+                    ((optionkeyvalue[optioncount] > version[optioncount]) ||
+                     ((optionkeyvalue[optioncount] == version[optioncount]) &&
+                      (version.length()-1 == optioncount) &&
+                      (optionkeyvalue.length() > version.length())))) {
                   break;
                 }
-                if (greater &&
-                    asc_isdigit(version[optioncount]) &&
-                    (optionkeyvalue[optioncount] == '.') &&
-                    (optionkeyvalue.length()-1 > optioncount)) {
-                  break;
-                }
-                if ((version[optioncount] == '.') &&
-                    (optionkeyvalue[optioncount] == '.') &&
-                    (version.length()-1 > optioncount) &&
-                    (optionkeyvalue.length()-1 > optioncount)) {
-                  continue;
+                if (optionkeyvalue[optioncount] == version[optioncount]) {
+                  if (equal &&
+                      (version.length()-1 == optioncount) &&
+                      (optionkeyvalue.length()-1 == optioncount)) {
+                    break;
+                  }
+                  else if ((version.length()-1 > optioncount) &&
+                           (optionkeyvalue.length()-1 > optioncount)) {
+                    continue;
+                  }
                 }
                 sprintf(linenumber,"%i",linecount);
-                return make_err(confusing_version,"add_filter",optionname,linenumber);
+                return make_err(bad_version,"add-filter",optionname,linenumber);
               }
-              continue;
+              if (less &&
+                  asc_isdigit(optionkeyvalue[optioncount]) &&
+                  (version[optioncount] == '.' ) &&
+                  (version.length()-1 > optioncount)) {
+                break;
+              }
+              if (greater &&
+                  asc_isdigit(version[optioncount]) &&
+                  (optionkeyvalue[optioncount] == '.') &&
+                  (optionkeyvalue.length()-1 > optioncount)) {
+                break;
+              }
+              if ((version[optioncount] == '.') &&
+                  (optionkeyvalue[optioncount] == '.') &&
+                  (version.length()-1 > optioncount) &&
+                  (optionkeyvalue.length()-1 > optioncount)) {
+                continue;
+              }
+              sprintf(linenumber,"%i",linecount);
+              return make_err(confusing_version,"add_filter",optionname,linenumber);
             }
-            if ((optionkey.no_case() == "option") || 
-                (!activeoption && 
-                 ((optionkey.no_case() == "desc") ||
-                  (optionkey.no_case() == "description")) && 
-                 (norealoption=1))) {
-              if (!norealoption && config->have(optionkeyvalue.c_str())) {
-                fprintf(stderr,"option %s: might conflict with Aspell option\n"
-                               "try to prefix it by `filter-'\n",
-                        optionkeyvalue.c_str());
+            continue;
+          }
+          if ((optionkey.no_case() == "option") || 
+              (!activeoption && 
+               ((optionkey.no_case() == "desc") ||
+                (optionkey.no_case() == "description")) && 
+               (norealoption=1))) {
+            if (!norealoption && config->have(optionkeyvalue.c_str())) {
+              fprintf(stderr,"option %s: might conflict with Aspell option\n"
+                             "try to prefix it by `filter-'\n",
+                      optionkeyvalue.c_str());
+            }
+            if ((!norealoption) && 
+                (begin == NULL)) {
+              if ((help=realloc(begin,(optsize+=1)*sizeof(KeyInfo))) == NULL) {
+                if (begin != NULL) {
+                  release_options(begin,begin+optsize-1);
+                  free(begin);
+                }
+                return make_err(cant_extend_options,"add_filter",value);
               }
-              if ((!norealoption) && 
-                  (begin == NULL)) {
-                if ((help=realloc(begin,(optsize+=1)*sizeof(KeyInfo))) == NULL) {
-                  if (begin != NULL) {
-                    release_options(begin,begin+optsize-1);
-                    free(begin);
-                  }
-                  return make_err(cant_extend_options,"add_filter",value);
+              begin=(KeyInfo*)help;
+              begin[optsize-1].name=begin[optsize-1].def=begin[optsize-1].desc=NULL;
+              begin[optsize-1].type=KeyInfoDescript;
+            }
+            if (!norealoption || (begin == NULL)) {
+              if ((help=realloc(begin,(optsize+=1)*sizeof(KeyInfo)) ) == NULL) {
+                if (begin != NULL) {
+                  release_options(begin,begin+optsize-1);
+                  free(begin);
                 }
-                begin=(KeyInfo*)help;
-                begin[optsize-1].name=begin[optsize-1].def=begin[optsize-1].desc=NULL;
-                begin[optsize-1].type=KeyInfoDescript;
+                return make_err(cant_extend_options,"add_filter",value);
               }
-              if (!norealoption || (begin == NULL)) {
-                if ((help=realloc(begin,(optsize+=1)*sizeof(KeyInfo)) ) == NULL) {
-                  if (begin != NULL) {
-                    release_options(begin,begin+optsize-1);
-                    free(begin);
-                  }
-                  return make_err(cant_extend_options,"add_filter",value);
-                }
-                begin=(KeyInfo*)help;
-                begin[optsize-1].name=begin[optsize-1].def=begin[optsize-1].desc=NULL;
+              begin=(KeyInfo*)help;
+              begin[optsize-1].name=begin[optsize-1].def=begin[optsize-1].desc=NULL;
+            }
+            if (norealoption && (begin != NULL)) {
+              begin[0].type=KeyInfoDescript;
+              ((char*)begin[0].def)=NULL;
+              if (begin[0].desc != NULL) {
+                free(((char*)begin[0].desc));
+                ((char*)begin[0].desc)=NULL;
               }
-              if (norealoption && (begin != NULL)) {
-                begin[0].type=KeyInfoDescript;
-                ((char*)begin[0].def)=NULL;
-                if (begin[0].desc != NULL) {
-                  free(((char*)begin[0].desc));
-                  ((char*)begin[0].desc)=NULL;
+              if (optionkeyvalue.length() == 0) {
+                optionkeyvalue="-";
+              }
+              if ((((char*)begin[0].desc)=strdup(optionkeyvalue.c_str())) == NULL ) {
+                if (begin !=NULL) {
+                  release_options(begin,begin+optsize);
+                  free(begin);
                 }
-                if (optionkeyvalue.length() == 0) {
-                  optionkeyvalue="-";
-                }
-                if ((((char*)begin[0].desc)=strdup(optionkeyvalue.c_str())) == NULL ) {
+                return make_err(cant_describe_filter,"add_filter",value);
+              }
+              if (begin[0].name == NULL) {
+                if ((((char*)begin[0].name)=
+                     malloc(strlen(value)+strlen("filter-")+1)) == NULL) {
                   if (begin !=NULL) {
                     release_options(begin,begin+optsize);
                     free(begin);
                   }
                   return make_err(cant_describe_filter,"add_filter",value);
                 }
-                if (begin[0].name == NULL) {
-                  if ((((char*)begin[0].name)=
-                       malloc(strlen(value)+strlen("filter-")+1)) == NULL) {
-                    if (begin !=NULL) {
-                      release_options(begin,begin+optsize);
-                      free(begin);
-                    }
-                    return make_err(cant_describe_filter,"add_filter",value);
-                  }
-                  ((char*)begin[0].name)[0]='\0';
-                  strncat(((char*)begin[0].name),"filter-",7);
-                  strncat(((char*)begin[0].name),value,strlen(value));
-                }
+                ((char*)begin[0].name)[0]='\0';
+                strncat(((char*)begin[0].name),"filter-",7);
+                strncat(((char*)begin[0].name),value,strlen(value));
               }
-              else {
-                expand="filter-";
-                expand+=optionkeyvalue;
-                if (config->have(expand.c_str())) {
-                  if (begin != NULL) {
-                    release_options(begin,begin+optsize);
-                    free(begin);
-                  }
-                  optionkeyvalue.insert(0,"(filter-)");
-                  sprintf(linenumber,"%i",linecount);
-                  return make_err(identical_option,"add_filter",optionname,linenumber);
-                }
-                if ((((char*)begin[optsize-1].name)=strdup(optionkeyvalue.c_str())) == NULL) {
-                  if (begin !=NULL) {
-                    release_options(begin,begin+optsize);
-                    free(begin);
-                  }
-                  return make_err(cant_extend_options,"add_filter",value);
-                }
-                begin[optsize-1].type=KeyInfoBool;
-                ((char*)begin[optsize-1].def)=NULL;
-                ((char*)begin[optsize-1].desc)=NULL;
-                begin[optsize-1].otherdata[0]='\0';
-                activeoption=1;
-              }
-              norealoption=0;
-              continue;
             }
-            if (!activeoption) {
-              if (begin != NULL) {
-                free(begin);
+            else {
+              expand="filter-";
+              expand+=optionkeyvalue;
+              if (config->have(expand.c_str())) {
+                if (begin != NULL) {
+                  release_options(begin,begin+optsize);
+                  free(begin);
+                }
+                optionkeyvalue.insert(0,"(filter-)");
+                sprintf(linenumber,"%i",linecount);
+                return make_err(identical_option,"add_filter",optionname,linenumber);
               }
-              sprintf(linenumber,"%i",linecount);
-              return make_err(options_only,"add_filter",optionname,linenumber);
-            }
-            if (optionkey.no_case() == "type") {
-              if (optionkeyvalue.no_case() == "list") {
-                begin[optsize-1].type=KeyInfoList;
-                continue;
-              }
-              if ((optionkeyvalue.no_case() == "int") ||
-                  (optionkeyvalue.no_case() == "integer")) {
-                begin[optsize-1].type=KeyInfoInt;
-                continue;
-              }
-              if (optionkeyvalue.no_case() == "string") {
-                begin[optsize-1].type=KeyInfoString;
-                continue;
+              if ((((char*)begin[optsize-1].name)=strdup(optionkeyvalue.c_str())) == NULL) {
+                if (begin !=NULL) {
+                  release_options(begin,begin+optsize);
+                  free(begin);
+                }
+                return make_err(cant_extend_options,"add_filter",value);
               }
               begin[optsize-1].type=KeyInfoBool;
-              continue;
+              ((char*)begin[optsize-1].def)=NULL;
+              ((char*)begin[optsize-1].desc)=NULL;
+              begin[optsize-1].otherdata[0]='\0';
+              activeoption=1;
             }
-            if ((optionkey.no_case() == "def") ||
-                (optionkey.no_case() == "default")) {
-//Type detection ???
-              if (begin[optsize-1].type == KeyInfoList) {
-                if (begin[optsize-1].def != NULL) {
-                  optionkeyvalue+=",";
-                  optionkeyvalue+=begin[optsize-1].def;
-                  free((void*)begin[optsize-1].def);
-                }
-              }  
-              if ((((char*)begin[optsize-1].def)=strdup(optionkeyvalue.c_str()) ) == NULL) {
-                if (begin != NULL) {
-                  release_options(begin,begin+optsize);
-                  free(begin);
-                }
-                return make_err(cant_extend_options,"add_filter",value);
-              }
-              continue;
-            }
-            if ((optionkey.no_case() == "desc") ||
-                (optionkey.no_case() == "description")) {
-              if ((((char*)begin[optsize-1].desc)=strdup(optionkeyvalue.c_str())) == NULL) {
-                if (begin != NULL) {
-                  release_options(begin,begin+optsize);
-                  free(begin);
-                }
-                return make_err(cant_extend_options,"add_filter",value);
-              }
-              continue;
-            }
-            if (optionkey.no_case() == "other") {
-              strncpy(begin[optsize-1].otherdata,optionkeyvalue.c_str(),15);
-              begin[optsize-1].otherdata[15]='\0';
-              continue;
-            }
-            if (optionkey.no_case()=="endoption") {
-              activeoption=0;
-              continue;
-            }
-            if (optionkey.no_case() == "endfile") {
-              break;
-            }
+            norealoption=0;
+            continue;
+          }
+          if (!activeoption) {
             if (begin != NULL) {
-              release_options(begin,begin+optsize);
               free(begin);
             }
             sprintf(linenumber,"%i",linecount);
-            return make_err(invalid_option_modifier,"add_filter",optionname,linenumber);
+            return make_err(options_only,"add_filter",optionname,linenumber);
           }
-          if ((begin == NULL) || 
-              (begin[0].type != KeyInfoDescript) ||
-              (begin[0].name == NULL) || 
-              (begin[0].desc == NULL)) {
-            if (begin != NULL) {
-              release_options(begin,begin+optsize);
-              free(begin);
+          if (optionkey.no_case() == "type") {
+            if (optionkeyvalue.no_case() == "list") {
+              begin[optsize-1].type=KeyInfoList;
+              continue;
             }
-            return make_err(cant_extend_options,"add_filter",value);
+            if ((optionkeyvalue.no_case() == "int") ||
+                (optionkeyvalue.no_case() == "integer")) {
+              begin[optsize-1].type=KeyInfoInt;
+              continue;
+            }
+            if (optionkeyvalue.no_case() == "string") {
+              begin[optsize-1].type=KeyInfoString;
+              continue;
+            }
+            begin[optsize-1].type=KeyInfoBool;
+            continue;
           }
-          if (filter_modules_begin == filter_modules) {
-            if ((mbegin=(ConfigModule*)malloc(modsize*sizeof(ConfigModule))) == NULL) {     
+          if ((optionkey.no_case() == "def") ||
+              (optionkey.no_case() == "default")) {
+//Type detection ???
+            if (begin[optsize-1].type == KeyInfoList) {
+              if (begin[optsize-1].def != NULL) {
+                optionkeyvalue+=",";
+                optionkeyvalue+=begin[optsize-1].def;
+                free((void*)begin[optsize-1].def);
+              }
+            }  
+            if ((((char*)begin[optsize-1].def)=strdup(optionkeyvalue.c_str()) ) == NULL) {
               if (begin != NULL) {
                 release_options(begin,begin+optsize);
                 free(begin);
               }
               return make_err(cant_extend_options,"add_filter",value);
             }
-            memcpy(mbegin,filter_modules_begin,(modsize)*sizeof(ConfigModule));
-            ((ConfigModule*)filter_modules_begin)=mbegin;
-            ((ConfigModule*)filter_modules_end)=mbegin+modsize;
-            config->set_modules(filter_modules_begin,filter_modules_end);
+            continue;
           }
-          if ((mbegin=(ConfigModule*)realloc((ConfigModule*)filter_modules_begin,
-                       ++modsize*sizeof(ConfigModule))) == NULL) {     
+          if ((optionkey.no_case() == "desc") ||
+              (optionkey.no_case() == "description")) {
+            if ((((char*)begin[optsize-1].desc)=strdup(optionkeyvalue.c_str())) == NULL) {
+              if (begin != NULL) {
+                release_options(begin,begin+optsize);
+                free(begin);
+              }
+              return make_err(cant_extend_options,"add_filter",value);
+            }
+            continue;
+          }
+          if (optionkey.no_case() == "other") {
+            strncpy(begin[optsize-1].otherdata,optionkeyvalue.c_str(),15);
+            begin[optsize-1].otherdata[15]='\0';
+            continue;
+          }
+          if (optionkey.no_case()=="endoption") {
+            activeoption=0;
+            continue;
+          }
+          if (optionkey.no_case() == "endfile") {
+            break;
+          }
+          if (begin != NULL) {
+            release_options(begin,begin+optsize);
+            free(begin);
+          }
+          sprintf(linenumber,"%i",linecount);
+          return make_err(invalid_option_modifier,"add_filter",optionname,linenumber);
+        }
+        if ((begin == NULL) || 
+            (begin[0].type != KeyInfoDescript) ||
+            (begin[0].name == NULL) || 
+            (begin[0].desc == NULL)) {
+          if (begin != NULL) {
+            release_options(begin,begin+optsize);
+            free(begin);
+          }
+          return make_err(cant_extend_options,"add_filter",value);
+        }
+        if (filter_modules_begin == filter_modules) {
+          if ((mbegin=(ConfigModule*)malloc(modsize*sizeof(ConfigModule))) == NULL) {     
             if (begin != NULL) {
               release_options(begin,begin+optsize);
               free(begin);
             }
             return make_err(cant_extend_options,"add_filter",value);
           }
-          (char*)(mbegin[modsize-1].name)=strdup(value);
-          (char*)(mbegin[modsize-1].load)=strdup(filtername.c_str());
-          (KeyInfo*)(mbegin[modsize-1].begin)=begin;
-          (KeyInfo*)(mbegin[modsize-1].end)=begin+optsize;
+          memcpy(mbegin,filter_modules_begin,(modsize)*sizeof(ConfigModule));
           ((ConfigModule*)filter_modules_begin)=mbegin;
           ((ConfigModule*)filter_modules_end)=mbegin+modsize;
           config->set_modules(filter_modules_begin,filter_modules_end);
-          return no_err;
         }
-        return make_err(no_such_filter,"add_filter",value);
-      }
-      else if ((namelength == 11) &&
-               !strncmp(key->name,"filter-path",11)) {
-        RET_ON_ERR(config->retrieve_list("filter-path",&filtpath));
-        filterpath=filtpath;
-      }
-      else if ((namelength == 11) &&
-               !strncmp(key->name,"option-path",15)) {
-        RET_ON_ERR(config->retrieve_list("option-path",&optpath));
-        optionpath=optpath;
-      }
-      return no_err;
-    }
-
-    virtual PosibErr<void> item_updated(const KeyInfo * key, ParmString value){
-      int namelength=strlen(key->name);
-      String optionname="";
-      String filtername="lib";
-      FStream options;
-      String optionkey;
-      String optionkeyvalue;
-      String version=PACKAGE_VERSION;
-
-      if ((namelength == 13) &&
-          !strncmp(key->name,"loadable-name",13) &&
-          ((String)value).length() &&
-          (((String)value)[0] != '/')) {
-        filtername+=value;
-        filtername+="-filter.so";
-        if (!filterpath.expand_filename(filtername)) {
-            return make_err(no_such_filter,"add_filter",value);
+        if ((mbegin=(ConfigModule*)realloc((ConfigModule*)filter_modules_begin,
+                     ++modsize*sizeof(ConfigModule))) == NULL) {     
+          if (begin != NULL) {
+            release_options(begin,begin+optsize);
+            free(begin);
+          }
+          return make_err(cant_extend_options,"add_filter",value);
         }
-        RET_ON_ERR(config->replace("loadable-name",filtername));
+        (char*)(mbegin[modsize-1].name)=strdup(value);
+        (char*)(mbegin[modsize-1].load)=strdup(filtername.c_str());
+        (KeyInfo*)(mbegin[modsize-1].begin)=begin;
+        (KeyInfo*)(mbegin[modsize-1].end)=begin+optsize;
+        ((ConfigModule*)filter_modules_begin)=mbegin;
+        ((ConfigModule*)filter_modules_end)=mbegin+modsize;
+        config->set_modules(filter_modules_begin,filter_modules_end);
+        return no_err;
       }
-      return no_err;
+      return make_err(no_such_filter,"add_filter",value);
     }
-//FIXME Add item_removed member to clear away filter options 
-  };
-
-  void activate_dynamic_filteroptions(Config * config){
-    config->add_notifier(new FilterOptionExpandNotifier(config));
+    else if ((namelength == 11) &&
+             !strncmp(key->name,"filter-path",11)) {
+      RET_ON_ERR(config->retrieve_list("filter-path",&filtpath));
+      filterpath=filtpath;
+    }
+    else if ((namelength == 11) &&
+             !strncmp(key->name,"option-path",15)) {
+      RET_ON_ERR(config->retrieve_list("option-path",&optpath));
+      optionpath=optpath;
+    }
+    return no_err;
   }
+
+  PosibErr<void> FilterOptionExpandNotifier::item_updated(const KeyInfo * key, ParmString value){
+    int namelength=strlen(key->name);
+    String optionname="";
+    String filtername="lib";
+    FStream options;
+    String optionkey;
+    String optionkeyvalue;
+    String version=PACKAGE_VERSION;
+
+    if ((namelength == 13) &&
+        !strncmp(key->name,"loadable-name",13) &&
+        ((String)value).length() &&
+        (((String)value)[0] != '/')) {
+      filtername+=value;
+      filtername+="-filter.so";
+      if (!filterpath.expand_filename(filtername)) {
+          return make_err(no_such_filter,"add_filter",value);
+      }
+      RET_ON_ERR(config->replace("loadable-name",filtername));
+    }
+    return no_err;
+  }
+
 }
