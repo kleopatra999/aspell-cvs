@@ -189,7 +189,7 @@ namespace aspeller {
     assert(run_together_limit <= 8); // otherwise it will go above the 
                                      // bounds of the word array
     words[0].clear();
-    BasicWordInfo w = check_simple(word);
+    BasicWordInfo w = check_affix(word);
     if (w) {
       if (pos == CompoundInfo::Orig) {
 	words[0] = w.word;
@@ -216,7 +216,7 @@ namespace aspeller {
       {
 	char t = *i;
 	*i = '\0';
-	BasicWordInfo s = check_simple(word);
+	BasicWordInfo s = check_affix(word);
 	*i = t;
 	if (!s) continue;
 	CompoundInfo c = s.compound;

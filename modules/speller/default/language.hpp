@@ -3,6 +3,7 @@
 #ifndef __aspeller_language__
 #define __aspeller_language__
 
+#include "affix.hpp"
 #include "string.hpp"
 #include "posib_err.hpp"
 #include "stack_ptr.hpp"
@@ -58,6 +59,7 @@ namespace aspeller {
     String      soundslike_chars_;
 
     StackPtr<Soundslike> soundslike_;
+    StackPtr<AffixMgr>   affix_;
 
     Language(const Language &);
     void operator=(const Language &);
@@ -120,6 +122,10 @@ namespace aspeller {
     }
 
     const char * soundslike_chars() const {return soundslike_chars_.c_str();}
+
+    bool have_affix_info() const {return affix_;}
+
+    const AffixMgr * affix() const {return affix_;}
 
     static inline PosibErr<Language *> get_new(const String & lang, Config * config) {
       StackPtr<Language> l(new Language());

@@ -34,6 +34,7 @@ namespace aspeller {
     , {"ignore-accents" ,     KeyInfoBool, "", "", "c"}
     , {"use-soundslike" ,     KeyInfoBool, "",  ""}
     , {"keyboard",            KeyInfoString, "standard", "", "c"} 
+    , {"affix",               KeyInfoString, "none", "c"}
   };
 
   static GlobalCache<Language> language_cache;
@@ -161,6 +162,8 @@ namespace aspeller {
     if (pe.has_err()) return pe;
     soundslike_.reset(pe);
     soundslike_chars_ = soundslike_->soundslike_chars();
+
+    affix_.reset(new_affix_mgr(data.retrieve("affix"), this));
     
     return no_err;
   }

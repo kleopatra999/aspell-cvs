@@ -114,6 +114,14 @@ namespace aspeller {
 
     PosibErr<bool> check(const char * word) {return check(ParmString(word));}
 
+    BasicWordInfo check_affix(ParmString word)
+    {
+      BasicWordInfo w = check_simple(word);
+      if (w || !lang_->affix()) return w;
+      return lang_->affix()->affix_check(LookupInfo(this), 
+                                         word.str(), word.size());
+    }
+
     BasicWordInfo check_simple(ParmString);
     
     //

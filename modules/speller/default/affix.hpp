@@ -1,0 +1,131 @@
+// This file is part of The New Aspell
+// Copyright (C) 2002 by Kevin Atkinson under the GNU LGPL
+// license version 2.0 or 2.1.  You should have received a copy of the
+// LGPL license along with this library if you did not you can find it
+// at http://www.gnu.org/.
+//
+// Copyright 2002 Kevin B. Hendricks, Stratford, Ontario, Canada And
+// Contributors.  All rights reserved. See the file affix.license for
+// details.
+
+#ifndef _AFFIXMGR_HXX_
+#define _AFFIXMGR_HXX_
+
+#include "posib_err.hpp"
+#include "wordinfo.hpp"
+#include "fstream.hpp"
+#include "parm_string.hpp"
+#include "char_vector.hpp"
+
+#define SETSIZE         256
+#define MAXAFFIXES      256
+#define MAXWORDLEN      100
+#define XPRODUCT        (1 << 0)
+
+#define MAXLNLEN        1024
+
+#define TESTAFF( a , b) strchr(a, b)
+
+namespace acommon {
+  class Config;
+}
+
+namespace aspeller {
+
+  using namespace acommon;
+
+  class Language;
+
+  // FIXME: element by using AffEntry only
+  struct affentry
+  {
+    char * strip;
+    char * appnd;
+    short  stripl;
+    short  appndl;
+    short  numconds;
+    short  xpflg;
+    char   achar;
+    char   conds[SETSIZE];
+  };
+
+//   struct replentry {
+//     char * pattern;
+//     char * replacement;
+//   };
+
+  class SpellerImpl;
+
+  struct LookupInfo {
+    SpellerImpl * sp;
+    inline BasicWordInfo lookup (ParmString word);
+    LookupInfo(SpellerImpl * s) : sp(s) {}
+  };
+
+  class AffEntry
+  {
+  protected:
+    char *       appnd;
+    char *       strip;
+    short        appndl;
+    short        stripl;
+    short        numconds;
+    short        xpflg;
+    char         achar;
+    char         conds[SETSIZE];
+  };
+
+  class AffixMgr
+  {
+
+    AffEntry *          pStart[SETSIZE];
+    AffEntry *          sStart[SETSIZE];
+    AffEntry *          pFlag[SETSIZE];
+    AffEntry *          sFlag[SETSIZE];
+
+    String              encoding;
+    String              compound;
+    int                 cpdmin;
+
+    String affix_file;
+
+  public:
+ 
+    AffixMgr() {}
+    ~AffixMgr();
+
+    PosibErr<void> setup(ParmString affpath);
+
+    BasicWordInfo       affix_check(LookupInfo, const char * word, int len) const;
+    BasicWordInfo       prefix_check(LookupInfo, const char * word, int len) const;
+    BasicWordInfo       suffix_check(LookupInfo, const char * word, int len, 
+				     int sfxopts, AffEntry* ppfx) const;
+    int                 expand_rootword(struct guessword * wlst, int maxn,
+                                        const char * ts, int wl, const char * ap, int al) const;
+
+    char *              get_encoding();
+             
+  private:
+    PosibErr<void> parse_file(const char * affpath);
+    PosibErr<void> parse_affix(String & line, const char at, FStream & af);
+
+    void encodeit(struct affentry * ptr, char * cs);
+    PosibErr<void> build_pfxlist(AffEntry* pfxptr);
+    PosibErr<void> build_sfxlist(AffEntry* sfxptr);
+    PosibErr<void> process_pfx_order();
+    PosibErr<void> process_sfx_order();
+  };
+
+  struct guessword {
+    char * word;
+    bool allow;
+  };
+  
+  PosibErr<AffixMgr *> new_affix_mgr(ParmString name, 
+                                     const Language * lang);
+  
+
+}
+
+#endif
+
