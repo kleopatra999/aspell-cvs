@@ -22,6 +22,7 @@
 
 #include "aspell.h"
 
+#include "asc_ctype.hpp"
 #include "check_funs.hpp"
 #include "config.hpp"
 #include "document_checker.hpp"
@@ -390,17 +391,18 @@ void dicts()
 // pipe
 //
 
+// precond: strlen(str) > 0
 char * trim_wspace (char * str)
 {
-  unsigned int last = strlen(str) - 1;
-  while (isspace(str[0])) {
+  int last = strlen(str) - 1;
+  while (asc_isspace(str[0])) {
     ++str;
     --last;
   }
-  while (isspace(str[last])) {
-    str[last] = '\0';
+  while (last > 0 && asc_isspace(str[last])) {
     --last;
   }
+  str[last] = '\0';
   return str;
 }
 
@@ -494,8 +496,7 @@ void pipe()
     fflush(stdout);
     while (c = getchar(), c != '\n' && c != EOF)
       buf.push_back(static_cast<char>(c));
-    if (c == '\n')
-      buf.push_back(static_cast<char>(c));
+    buf.push_back('\n'); // always add new line so strlen > 0
     buf.push_back('\0');
     line = buf.data();
     ignore = 0;
