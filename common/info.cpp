@@ -232,6 +232,7 @@ namespace acommon {
 	to_add->c_struct.dict_dirs = &(to_add->dict_exts);
 	itemize(data, to_add->dict_exts);
       } else {
+fprintf(stderr,"File: %s(%i)\n",__FILE__,__LINE__);
 	err.prim_err(unknown_key, key);
 	goto ERROR;
       }

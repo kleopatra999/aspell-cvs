@@ -181,6 +181,7 @@ namespace acommon {
     virtual void assign(const KeyInfoEnumeration *) = 0;
     virtual bool at_end() const = 0;
     virtual const KeyInfo * next() = 0;
+    virtual const char * active_module_name(void) = 0;
     virtual ~KeyInfoEnumeration() {}
   };
 
