@@ -169,6 +169,21 @@ namespace acommon
       config->replace("mode", mode);
   }
 
+#ifdef HAVE_LIBDL
+  class FilterHandle {
+  public:
+    FilterHandle() : handle(0) {}
+    ~FilterHandle() {if (handle) dlclose(handle);}
+    void * release() {void * tmp = handle; handle = 0; return handle;}
+    operator bool() {return handle != NULL;}
+    void * val() {return handle;}
+    FilterHandle & operator= (void * h) 
+      {assert(handle == NULL); handle=h; return *this;}
+  private:
+    void * handle;
+  };
+#endif
+
   PosibErr<void> setup_filter(Filter & filter, 
 			      Config * config, 
 			      bool use_decoder, 
@@ -180,13 +195,14 @@ namespace acommon
     StackPtr<IndividualFilter> ifilter;
     const char * filter_name;
     String filtername;
-    void * filterhandle[3]={NULL, NULL, NULL};
+    FilterHandle filterhandle[3];
     FilterEntry dynamicfilter;
     int addcount=0;
     int modsize=filter_modules_end-filter_modules_begin;
     ConfigModule * currentfilter=NULL;
 
-    while ((filter_name = els.next()) != 0) {
+    while ((filter_name = els.next()) != 0) 
+    {
       filterhandle[0]=filterhandle[1]=filterhandle[2]=NULL;
       addcount=0;
       fprintf(stderr, "Loading %s ... \n", filter_name);
@@ -200,8 +216,10 @@ namespace acommon
 #ifdef HAVE_LIBDL
       if (!f)
       {
-        for( currentfilter=(ConfigModule*)filter_modules_begin+standard_filters_size;
-            currentfilter < (ConfigModule*)filter_modules_end; currentfilter++){
+        for (currentfilter=(ConfigModule*)filter_modules_begin+standard_filters_size;
+	     currentfilter < (ConfigModule*)filter_modules_end; 
+	     currentfilter++)
+	{
           if (strcmp(currentfilter->name,filter_name) == 0) {
             break;
           }
@@ -213,27 +231,15 @@ namespace acommon
             ((filterhandle[1]=dlopen(currentfilter->load,RTLD_NOW)) == NULL) ||
             ((filterhandle[2]=dlopen(currentfilter->load,RTLD_NOW)) == NULL))
 	{
-          if (filterhandle[0]) {
-            dlclose(filterhandle[0]);
-          }
-          if (filterhandle[1]) {
-            dlclose(filterhandle[1]);
-          }
-          if (filterhandle[2]) {
-            dlclose(filterhandle[2]);
-          }
           return make_err(cant_dlopen_file,"filter setup",filter_name,dlerror());
         }
         dynamicfilter.decoder=NULL;
         dynamicfilter.encoder=NULL;
         dynamicfilter.filter=NULL;
-        if (!( ((void*)dynamicfilter.decoder)=dlsym(filterhandle[0],"new_decoder")) &&
-	    !( ((void*)dynamicfilter.encoder)=dlsym(filterhandle[1],"new_encoder")) &&
-	    !( ((void*)dynamicfilter.filter)=dlsym(filterhandle[2],"new_filter")) ) 
+        if (!(((void*)dynamicfilter.decoder)=dlsym(filterhandle[0].val(),"new_decoder")) &&
+	    !(((void*)dynamicfilter.encoder)=dlsym(filterhandle[1].val(),"new_encoder")) &&
+	    !(((void*)dynamicfilter.filter)=dlsym(filterhandle[2].val(),"new_filter")) ) 
 	{
-          dlclose(filterhandle[0]);
-          dlclose(filterhandle[1]);
-          dlclose(filterhandle[2]);
           return make_err(empty_filter,"filter setup",filter_name);
         }
         f=&dynamicfilter;
@@ -243,75 +249,30 @@ namespace acommon
 #else
       assert(f); //FIXME: Return Error Condition
 #endif
-      if( use_decoder && f->decoder && ( ifilter=f->decoder () ) ){
-//no dlclose to all 3 handles in case of error of the following line :(
-//has to be fixed sometime :(
+      if (use_decoder && f->decoder && (ifilter=f->decoder())) {
         RET_ON_ERR_SET(ifilter->setup(config), bool, keep);
-//no dlclose to all 3 handles in case of error of the above line :(
-        if ( !keep ){
-          ifilter.release();
-#ifdef HAVE_LIBDL
-          if (filterhandle[0] != NULL) {
-            dlclose(filterhandle[0]);
-          }
-#endif
-        } else {
-          filter.add_filter(ifilter.release(),filterhandle[0]);
+	if (!keep) {
+	  ifilter.del();
+	} else {
+          filter.add_filter(ifilter.release(),filterhandle[0].release());
         }
       } 
-#ifdef HAVE_LIBDL
-      else if (filterhandle[0] != NULL) {
-        dlclose(filterhandle[0]);
-      }
-#endif
-      if( use_filter && f->filter && ( ifilter=f->filter() ) ){
-//FIXME
-//no dlclose to all 3 handles in case of error of the following line :(
-//has to be fixed sometime :(
+      if (use_filter && f->filter && (ifilter=f->filter())) {
         RET_ON_ERR_SET(ifilter->setup(config), bool, keep);
-//FIXME
-//no dlclose to all 3 handles in case of error of the above line :(
-        if ( !keep ){
-          ifilter.release();
-#ifdef HAVE_LIBDL
-          if( filterhandle[2] != NULL ){
-            dlclose(filterhandle[2]);
-          }
-#endif
-        }
-        else{
-          filter.add_filter(ifilter.release(), filterhandle[2]);
+        if (!keep) {
+          ifilter.del();
+        } else {
+          filter.add_filter(ifilter.release(), filterhandle[2].release());
         }
       }
-#ifdef HAVE_LIBDL
-      else if( filterhandle[2] != NULL ){
-        dlclose(filterhandle[2]);
-      }
-#endif
       if( use_encoder && f->encoder && ( ifilter=f->encoder() ) ){
-//FIXME
-//no dlclose to all 3 handles in case of error of the following line :(
-//has to be fixed sometime :(
         RET_ON_ERR_SET(ifilter->setup(config), bool, keep);
-//FIXME
-//no dlclose to all 3 handles in case of error of the above line :(
-        if ( !keep ){
-          ifilter.release();
-#ifdef HAVE_LIBDL
-          if( filterhandle[1] != NULL ){
-            dlclose(filterhandle[1]);
-          }
-#endif
-        }
-        else{
-          filter.add_filter(ifilter.release(), filterhandle[1]);
+        if (!keep) {
+          ifilter.del();
+        } else {
+          filter.add_filter(ifilter.release(), filterhandle[1].release());
         }
       }
-#ifdef HAVE_LIBDL
-      else if( filterhandle[1] != NULL ){
-        dlclose(filterhandle[1]);
-      }
-#endif
     }
     return no_err;
   }
