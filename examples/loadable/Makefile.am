@@ -1,11 +1,13 @@
+export SED=@SED@
 filterdir = "$(libdir)/aspell"
 
 INCLUDES = -I${top_srcdir}/interfaces/cc/ -I${top_srcdir}/common
-FILTERVERSION = "0:0:1"
+FILTERVERSION = "0:1:0"
 CXXFLAGS= @CXXFLAGS@ -DVERSION="\"${FILTERVERSION}\""
 SUFFIXES = .opt
 
-filter_PROGRAMS = libcontext-filter.la
+#filter_PROGRAMS = libcontext-filter.la
+filter_LTLIBRARIES = libcontext-filter.la
 filter_SCRIPTS=make_opt.awk
 EXTRA_DIST = example_option_filter.opt make_opt.awk
 

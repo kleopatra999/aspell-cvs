@@ -23,7 +23,6 @@ ASPELL >=0.51
 #this is the description Aspell help displays when listing all options and known
 #filters
 #Keep this short but descriptive
-#!!This is not yet supported so do not use it if you do Aspell will issue an error!!
 DESCRIPTION This\ is\ a\ filter\ for\ C/C++\ context\ filtering
 
 #STARTS an new Option description block

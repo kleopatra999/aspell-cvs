@@ -28,25 +28,25 @@
 //do not call directly as called by OPTION and NEW_OPTION macro
 #ifndef string_opt
 #define string_opt(config,name,returns,filter) \
-        RET_ON_ERR_SET(config->retrieve(filter"-"name),String,returns)
+        RET_ON_ERR_SET(config->retrieve("filter-"filter"-"name),String,returns)
 #endif
 
 //do not call directly as called by OPTION and NEW_OPTION macro
 #ifndef bool_opt
 #define bool_opt(config,name,returns,filter) \
-        RET_ON_ERR_SET(config->retrieve_bool(filter"-"name),bool,returns)
+        RET_ON_ERR_SET(config->retrieve_bool("filter-"filter"-"name),bool,returns)
 #endif
 
 //do not call directly as called by OPTION and NEW_OPTION macro
 #ifndef int_opt
 #define int_opt(config,name,returns,filter) \
-        RET_ON_ERR_SET(config->retrieve_int(filter"-"name),int,returns)
+        RET_ON_ERR_SET(config->retrieve_int("filter-"filter"-"name),int,returns)
 #endif
 
 //do not call directly as called by OPTION and NEW_OPTION macro
 #ifndef list_opt
 #define list_opt(config,name,returns,filter) \
-        RET_ON_ERR(config->retrieve_list(filter"-"name,returns))
+        RET_ON_ERR(config->retrieve_list("filter-"filter"-"name,returns))
 #endif
 
 //use this if you have already called NEW_OPTION once for a specific
@@ -80,6 +80,7 @@
 //!used by make_opt to extract *.opt file
 //!name is the name of the filter version
 //!ver is the actual version of the filter
+//!desc a short description of the filter
 //!aspell is the version of Aspell required by filter
 //!       it may start with >= <= =,
 //!       per default = will be assumed
