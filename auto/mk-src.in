@@ -496,6 +496,13 @@ errors:
 		cant describe filter
 			mesg => %where: "%filter" error setting filter description.
 
+	expression
+		mesg => %action: invalid regular expression.
+		parms => action
+		/
+		invalid expression
+			mesg => %action: `%expression' is not a valid regular expression.
+			parms => expression
 }
 group: speller
 {
