@@ -51,6 +51,8 @@ namespace acommon {
   {
     name_ = "email-filter";
     order_num_ = 0.85;
+    opts->retrieve_list("filter-email-quote", &is_quote_char);
+    margin = opts->retrieve_int("filter-email-margin");
     reset();
     return true;
   }

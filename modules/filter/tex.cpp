@@ -80,7 +80,10 @@ namespace acommon {
   {
     name_ = "tex-filter";
     order_num_ = 0.35;
+
     commands.clear();
+    opts->retrieve_list("filter-tex-command", &commands);
+    
     check_comments = opts->retrieve_bool("filter-tex-check-comments");
 
     reset();

@@ -65,6 +65,7 @@ namespace acommon {
     name_ = "sgml-filter";
     order_num_ = 0.35;
     noskip_tags.clear();
+    opts->retrieve_list("filter-sgml-check", &noskip_tags);
     reset();
     return true;
   }
