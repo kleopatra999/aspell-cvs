@@ -2373,7 +2373,7 @@ place you are ready to compile the main word list.  To find out what
 to do, see @ref{Working With Dictionaries}.  This section also
 includes instructions for creating the AWLI file.
 
-@node Phonetic Code, Controlling the Behavior of Run-together Words, Compiling the Word List, Adding Support For Other Languages
+@node Phonetic Code, Affix Compression, Compiling the Word List, Adding Support For Other Languages
 @section Phonetic Code
 
 
@@ -2723,7 +2723,7 @@ be found at @url{http://lingucomponent.openoffice.org/dictionary.html}.
 It is possible to have both soundslike and affix support but without
 the affix compression.
 
-@node Controlling the Behavior of Run-together Words,  , Phonetic Code, Adding Support For Other Languages
+@node Controlling the Behavior of Run-together Words,  , Affix Compression, Adding Support For Other Languages
 @section Controlling the Behavior of Run-together Words
 
 Aspell has support for either unconditionally accepting run-together
