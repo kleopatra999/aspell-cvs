@@ -134,7 +134,8 @@ namespace aspeller {
       }
       if (lang->special(*a).end) ++a;
       if (lang->special(*b).end) ++b;
-      return lang->to_stripped(*a) - lang->to_stripped(*b);
+      return static_cast<unsigned char>(lang->to_stripped(*a)) 
+	- static_cast<unsigned char>(lang->to_stripped(*b));
     }
   };
 
