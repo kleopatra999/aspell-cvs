@@ -261,6 +261,8 @@ namespace acommon {
   }
 
   static const KeyInfo tex_options[] = {
+    {"filter-tex",KeyInfoDescript,NULL,
+     N_("Filter for recognizing TeX/LaTeX commands")},
     {"tex-command", KeyInfoList, 
        // counters
        "addtocounter pp,"

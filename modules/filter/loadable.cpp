@@ -95,6 +95,7 @@ namespace acommon {
 
   static KeyInfo *actualoptions=NULL;
   static const KeyInfo loadable_options[] = {
+    {"filter-loadable",KeyInfoDescript,NULL,"obsolet"},
     {"loadable-name", KeyInfoString, "",
      N_("Name of external filter to load")}
   };

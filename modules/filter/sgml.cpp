@@ -263,6 +263,8 @@ namespace acommon {
   }
   
   static const KeyInfo sgml_options[] = {
+    {"filter-sgml",KeyInfoDescript,NULL,
+     N_("Filters for encoding, filtering and decoding sgml characters")},
     {"sgml-check", KeyInfoList, "alt",
      N_("sgml attributes to always check.")},
     {"sgml-extension", KeyInfoList, "html,htm,php,sgml",

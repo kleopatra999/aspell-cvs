@@ -97,6 +97,8 @@ namespace acommon {
   }
 
   static const KeyInfo email_options[] = {
+    {"filter-email", KeyInfoDescript,NULL,
+     N_("Filter for eliminating email quote characters")},
     {"email-quote", KeyInfoList, ">,|",
      N_("email quote characters")},
     {"email-margin", KeyInfoInt, "10",
