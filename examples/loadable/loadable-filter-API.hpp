@@ -122,7 +122,7 @@ public: const char * save(void) { \
 #ifndef ACTIVATE_ENCODER
 #define ACTIVATE_ENCODER(nspace,class_name,filter) \
 extern "C" { \
-  acommon::IndividualFilter * new_encoder(void) {\
+  FILTER_API_EXPORTS acommon::IndividualFilter * new_encoder(void) {\
     return new nspace::class_name;\
   }\
 }
@@ -130,14 +130,14 @@ extern "C" { \
 #ifndef ACTIVATE_FILTER
 #define ACTIVATE_FILTER(nspace,class_name,filter) \
 extern "C" { \
-  acommon::IndividualFilter * new_filter(void) {\
+  FILTER_API_EXPORTS acommon::IndividualFilter * new_filter(void) {\
     return new nspace::class_name;\
   }\
 }
 #endif
 #ifndef ACTIVATE_DECODER
 #define ACTIVATE_DECODER(nspace,class_name,filter) \
-  acommon::IndividualFilter * new_decoder(void) {\
+  FILTER_API_EXPORTS acommon::IndividualFilter * new_decoder(void) {\
     return new nspace::class_name;\
   }\
 extern "C" { \
