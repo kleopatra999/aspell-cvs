@@ -633,54 +633,104 @@ void AffixMgr::expand(ParmString word, ParmString af, CheckList * cl) const
   CheckInfo * ci = gi->add();
   ci->word = mystrdup(word);
 
-  
-
-  // handle suffixes
-  for (unsigned int i = 0; i < af.size(); i++) {
-    unsigned char c = (unsigned char) af[i];
-    for (SfxEntry * sptr = sFlag[c]; sptr; sptr = sptr ->flag_next) {
-      char * newword = sptr->add(word);
+  // handle prefixes
+  for (unsigned int m = 0; m < af.size(); m++) {
+    unsigned char c = (unsigned char) af[m];
+    for (PfxEntry * pfx = pFlag[c]; pfx; pfx = pfx->flag_next) {
+      char * newword = pfx->add(word);
       if (!newword) continue;
       ci = gi->add();
       if (!ci) return; // No more room
       ci->word = newword;
-      ci->suf_flag = sptr->achar;
-      ci->suf_add = sptr->appnd;
-      ci->suf_strip = sptr->strip;
-      if (sptr->allow_cross()) {
-        // now handle possible cross products
+      ci->pre_flag = pfx->achar;
+      ci->pre_add = pfx->appnd;
+      ci->pre_strip = pfx->strip;
+
+      // now handle possible cross products
+      if (pfx->allow_cross()) {
         for (unsigned int m = 0; m < af.size(); m++) {
           unsigned char c = (unsigned char) af[m];
-          for (PfxEntry * ptr = pFlag[c]; ptr; ptr = ptr ->flag_next) {
-            if (!ptr->allow_cross()) continue;
-            char * newword2 = ptr->add(newword);
+          for (SfxEntry * sfx = sFlag[c]; sfx; sfx = sfx->flag_next) {
+            if (!sfx->allow_cross()) continue;
+            char * newword2 = sfx->add(newword);
             if (!newword2) continue;
             ci = gi->add();
             if (!ci) return; // No more room
             ci->word = newword2;
-            ci->pre_flag = ptr->achar;
-            ci->pre_add = ptr->appnd;
-            ci->pre_strip = ptr->strip;
+            ci->pre_flag = sfx->achar;
+            ci->pre_add = sfx->appnd;
+            ci->pre_strip = sfx->strip;
           }
         }
       }
     }
   }
 
-  // now handle pure prefixes
-  for (unsigned int m = 0; m < af.size(); m++) {
-    unsigned char c = (unsigned char) af[m];
-    for (PfxEntry * ptr = pFlag[c]; ptr; ptr = ptr ->flag_next) {
-      char * newword = ptr->add(word);
+  // handle suffixes
+  for (unsigned int i = 0; i < af.size(); i++) {
+    unsigned char c = (unsigned char) af[i];
+    for (SfxEntry * sfx = sFlag[c]; sfx; sfx = sfx->flag_next) {
+      char * newword = sfx->add(word);
       if (!newword) continue;
       ci = gi->add();
       if (!ci) return; // No more room
       ci->word = newword;
-      ci->pre_flag = ptr->achar;
-      ci->pre_add = ptr->appnd;
-      ci->pre_strip = ptr->strip;
+      ci->suf_flag = sfx->achar;
+      ci->suf_add = sfx->appnd;
+      ci->suf_strip = sfx->strip;
     }
   }
+}
+
+int AffixMgr::expand(ParmString word, ParmString af, 
+                     int limit, WordAff * l) const
+{
+  CharVector sf,csf;
+  int n = 0;
+  for (unsigned int m = 0; m < af.size(); m++) {
+    unsigned char c = (unsigned char) af[m];
+    if (sFlag[c]) sf.push_back(c);
+    if (pFlag[c] && pFlag[c]->allow_cross()) csf.push_back(c);
+
+    for (PfxEntry * pfx = pFlag[c]; pfx; pfx = pfx->flag_next) {
+      char * newword = pfx->add(word);
+      if (!newword) continue;
+      l[n].word = newword;
+      if (pfx->allow_cross())
+        l[n].af.assign(1, '\0');
+      else
+        l[n].af.clear();
+      ++n;
+    }
+  }
+  l[n].word = word;
+  l[n].af.assign(sf.data(), sf.size());
+  ++n;
+
+  WordAff * end = l + n;
+  for (WordAff * p = l; p != end; ++p)
+  {
+    if (p->af.size() == 1 && p->af[0] == '\0') p->af.assign(csf.data(), csf.size());
+    for (unsigned int m = 0; m < p->af.size();) {
+      unsigned char c = (unsigned char) p->af[m];
+      bool remove_flag = false;
+      for (SfxEntry * sfx = sFlag[c]; sfx; sfx = sfx->flag_next) {
+        char * newword = sfx->add(word);
+        if (!newword) continue;
+        if (strncmp(p->word.c_str(), newword, limit) == 0) continue;
+        remove_flag = true;
+        l[n].word = newword;
+        l[n].af.clear();
+        ++n;
+      }
+      if (remove_flag)
+        p->af.erase(m,1);
+      else
+        ++m;
+    }
+  }
+
+  return n;
 }
 
 // strip strings into token based on single char delimiter
@@ -894,7 +944,7 @@ PosibErr<AffixMgr *> new_affix_mgr(ParmString name,
 {
   if (name == "none")
     return 0;
-  CERR << "NEW AFFIX MGR\n";
+  //CERR << "NEW AFFIX MGR\n";
   String file;
   file += lang->data_dir();
   file += '/';

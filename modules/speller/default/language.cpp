@@ -32,9 +32,10 @@ namespace aspeller {
     , {"soundslike",          KeyInfoString, "generic", ""}
     , {"special",             KeyInfoString, "", ""}
     , {"ignore-accents" ,     KeyInfoBool, "", "", "c"}
-    , {"use-soundslike" ,     KeyInfoBool, "",  ""}
+    //, {"use-soundslike" ,     KeyInfoBool, "",  ""}
     , {"keyboard",            KeyInfoString, "standard", "", "c"} 
-    , {"affix",               KeyInfoString, "none", "c"}
+    , {"affix",               KeyInfoString, "none", ""}
+    , {"affix-compress",      KeyInfoBool, "false", "c"}
   };
 
   static GlobalCache<Language> language_cache;
@@ -164,6 +165,7 @@ namespace aspeller {
     soundslike_chars_ = soundslike_->soundslike_chars();
 
     affix_.reset(new_affix_mgr(data.retrieve("affix"), this));
+    affix_compress_ = data.retrieve_bool("affix-compress");
     
     return no_err;
   }

@@ -140,7 +140,9 @@ const PossibleOption possible_options[] = {
   OPTION("dont-backup",      'x' , 0),
   OPTION("run-together",     'C',  0),
   OPTION("dont-run-together",'B',  0),
-
+  OPTION("include-guesses",      'm', 0),
+  OPTION("dont-include-guesses", 'P', 0),
+  
   COMMAND("version",   'v', 0),
   COMMAND("help",      '?', 0),
   COMMAND("config",    '\0', 0),
@@ -157,8 +159,8 @@ const PossibleOption possible_options[] = {
   COMMAND("create", '\0', 1),
   COMMAND("merge",  '\0', 1),
 
-  ISPELL_COMP('n',0), ISPELL_COMP('P',0), ISPELL_COMP('m',0),
-  ISPELL_COMP('S',0), ISPELL_COMP('w',1), ISPELL_COMP('T',1),
+  ISPELL_COMP('n',0), ISPELL_COMP('S',0), 
+  ISPELL_COMP('w',1), ISPELL_COMP('T',1),
 
   {"",'\0'}, {"",'\0'}
 };
@@ -712,8 +714,8 @@ void pipe()
                  << ": " << guesses.c_str() + 2;
 	}
 	if (do_time)
-	  COUT << _("Suggestion Time: ")
-	       << (finish-start)/(double)CLOCKS_PER_SEC << "\n";
+          COUT << _("Suggestion Time: ")
+               << (finish-start)/(double)CLOCKS_PER_SEC << "\n";
       }
       COUT << "\n";
     }
@@ -1322,6 +1324,10 @@ void munch()
 
 void expand() 
 {
+  int level = 1;
+  if (args.size() != 0)
+    level = atoi(args[0].c_str());
+  
   using namespace aspeller;
   CachePtr<Language> lang;
   PosibErr<Language *> res = new_language(*options);
@@ -1330,19 +1336,27 @@ void expand()
   String word;
   CheckList * cl = new_check_list();
   while (CIN >> word) {
-    const char * w = word.c_str();
-    const char * af = strchr(w, '/');
-    if (af) {
-      const_cast<char *>(af)[0] = '\0';
-      lang->affix()->expand(ParmString(w, af-w), ParmString(af + 1), cl);
-      for (const aspeller::CheckInfo * ci = check_list_data(cl); ci; ci = ci->next)
-      {
-        COUT << ci->word << ' ';
+    CharVector buf; buf.append(word.c_str(), word.size() + 1);
+    char * w = buf.data();
+    char * af = strchr(w, '/');
+    af[0] = '\0';
+    lang->affix()->expand(ParmString(w, af-w), ParmString(af + 1), cl);
+    const aspeller::CheckInfo * ci = check_list_data(cl);
+    if (level <= 2) {
+      if (level == 2) 
+        COUT << word << ' ';
+      while (ci) {
+        COUT << ci->word;
+        ci = ci->next;
+        if (ci) COUT << ' ';
       }
-    } else {
-      COUT << word;
+      COUT << '\n';
+    } else if (level >= 3) {
+      while (ci) {
+        COUT << word << ' ' << ci->word << '\n';
+        ci = ci->next;
+      }
     }
-    COUT << '\n';
   }
   delete_check_list(cl);
 }
@@ -1475,6 +1489,8 @@ void print_help () {
     "  [dump] config [-e <expr>]  dumps the current configuration to stdout\n"
     "  config [+e <expr>] <key>   prints the current value of an option\n"
     "  soundslike       returns the sounds like equivalent for each word entered\n"
+    "  munch            generate possible root words and affixes\n"
+    "  expand [1-4]     expands affix flags\n"
     "  filter           passes standard input through filters\n"
     "  -v|version       prints a version line\n"
     "  dump|create|merge master|personal|repl [word list]\n"

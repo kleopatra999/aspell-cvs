@@ -291,6 +291,8 @@ namespace aspeller {
     String w;
     c.convert(word, w);
     o << w;
+    if (*affixes)
+      o << '/' << affixes;
     compound.write(o,l);
     return o;
   }

@@ -62,6 +62,8 @@ namespace aspeller {
     StackPtr<Soundslike> soundslike_;
     StackPtr<AffixMgr>   affix_;
 
+    bool affix_compress_;
+
     Language(const Language &);
     void operator=(const Language &);
 
@@ -124,9 +126,9 @@ namespace aspeller {
 
     const char * soundslike_chars() const {return soundslike_chars_.c_str();}
 
-    bool have_affix_info() const {return affix_;}
-
     const AffixMgr * affix() const {return affix_;}
+
+    bool affix_compress() const {return affix_compress_;}
 
     static inline PosibErr<Language *> get_new(const String & lang, Config * config) {
       StackPtr<Language> l(new Language());

@@ -164,6 +164,7 @@ namespace aspeller {
 
   BasicWordInfo SpellerImpl::check_simple (ParmString w) {
     const char * x = w;
+    BasicWordInfo w1;
     BasicWordInfo w0;
     while (*x != '\0' && (x-w) < static_cast<int>(ignore_count)) ++x;
     if (*x == '\0') return w.str();
@@ -175,11 +176,24 @@ namespace aspeller {
       if  (i->use_to_check && 
 	   i->data_set->basic_type == DataSet::basic_word_set &&
 	   (w0 = static_cast<const BasicWordSet *>(i->data_set)
-	    ->lookup(w,i->local_info.compare))
-	   )
-	return w0;
+	    ->lookup(w,i->local_info.compare)) )
+      {
+        if (w1 && w0.affixes && w1.affixes) {
+          // FIXME: THIS WILL LEAK MEMORY
+          //        affixes is not normally dynamically allocated 
+          //        except in this case
+          size_t s0 = strlen(w0.affixes);
+          size_t s1 = strlen(w1.affixes);
+          char * str = (char *)malloc(s0 + s1 + 1);
+          memcpy(str, w0.affixes, s0);
+          memcpy(str + s0, w1.affixes, s1 + 1);
+          w1.affixes = str;
+        } else {
+          w1 = w0;
+        }
+      }
     }
-    return 0;
+    return w1;
   };
 
   PosibErr<bool> SpellerImpl::check(char * word, char * word_end, 

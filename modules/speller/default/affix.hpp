@@ -66,6 +66,12 @@ namespace aspeller {
   struct PfxEntry;
   struct SfxEntry;
 
+  struct WordAff
+  {
+    String word;
+    String af;
+  };
+
   class AffixMgr
   {
 
@@ -98,6 +104,10 @@ namespace aspeller {
     void                munch(ParmString word, CheckList *) const;
     void                expand(ParmString word, ParmString affixes,
                                CheckList *) const;
+    // expand enough so the affixes does not effect the first limit
+    // characters
+    int                 expand(ParmString word, ParmString af, 
+                               int limit, WordAff * l) const;
 
     char *              get_encoding();
              
