@@ -23,11 +23,8 @@ namespace acommon {
 
     Config * config = new_basic_config();
 
-DEBUG
     activate_filter_modes(config);
-DEBUG
     activate_dynamic_filteroptions(config);
-DEBUG
     return config;
   }
 

@@ -244,11 +244,6 @@ namespace acommon
     virtual ~FilterOptionExpandNotifier(void);
     virtual Notifier * clone(Config * conf);
     virtual PosibErr<void> item_added(const KeyInfo * key, ParmString value);
-/*
- * FIXME obsolete as no loadable filter exists any more and filtermodes
- *       are handled by new_fmode file
- *  virtual PosibErr<void> item_updated(const KeyInfo * key, ParmString value);
- */
 //FIXME Add item_removed member to clear away filter options 
   };
 
@@ -309,7 +304,6 @@ namespace acommon
     } while (false);
   }
 
-//  extern const size_t filter_modules_size;
 
   FilterOptionExpandNotifier::~FilterOptionExpandNotifier(void) 
   {
@@ -356,7 +350,6 @@ namespace acommon
     String option_name = "";
     String filter_name = "lib";
     FStream options;
-    //String option_key;
     String option_value;
     String version = PACKAGE_VERSION;
     unsigned int option_start = 0;
@@ -373,12 +366,10 @@ namespace acommon
     char line_number[9]="0";
     int active_option = 0;
     String expand = "filter-";
-//FIXME remove    int norealoption = 0;
     FixedBuffer<> buf; DataPair d;
 
     if ((name_len == 6) &&
         !strncmp(key->name,"filter",6)){
-      //fprintf(stderr,"Expanding for %s ... \n",value.str());
       while (current < filter_modules_end) {
         if (!strncmp(value.str(), current->name,
                      value.size() <= strlen(current->name) 
@@ -427,7 +418,6 @@ namespace acommon
             char * requirement = d.value.str();
             char * relop = requirement;
             char swap = '\0';
-fprintf(stderr," %s = %s (%s)\n",d.key.str(),d.value.str(),requirement);
             
             if ( *requirement == '>' || *requirement == '<' || 
                  *requirement == '!' ) {
@@ -445,13 +435,11 @@ fprintf(stderr," %s = %s (%s)\n",d.key.str(),d.value.str(),requirement);
             String relOp(relop);
 
             *requirement = swap;
-fprintf(stderr," %s = %s (%s)\n",d.key.str(),d.value.str(),requirement);
 
             char actVersion[] = PACKAGE_VERSION;
             char * act = &actVersion[0];
             char * seek = act;
 
-fprintf(stderr,"* %s * %s * %s * %s\n",act,seek,actVersion,PACKAGE_VERSION);
             while (    ( seek != NULL )
                     && ( *seek != '\0' ) 
                     && ( *seek < '0' )
@@ -459,10 +447,8 @@ fprintf(stderr,"* %s * %s * %s * %s\n",act,seek,actVersion,PACKAGE_VERSION);
                     && ( *seek != '.' )
                     && ( *seek != 'x' )
                     && ( *seek != 'X' ) ) {
-fprintf(stderr,"%c",*seek);
               seek++;
             }
-fprintf(stderr,"-");
             act = seek;
             while (    ( seek != NULL )
                     && ( seek != '\0' ) 
@@ -471,13 +457,11 @@ fprintf(stderr,"-");
                          || ( *seek == '.' )
                          || ( *seek == 'x' )
                          || ( *seek == 'X' ) ) ) {
-fprintf(stderr,"%c",*seek);
               seek++;
             }
             if ( seek != NULL ) {
               *seek = '\0';
             }
-fprintf(stderr,"-%s\n",act);
 
             PosibErr<bool> peb = verifyVersion(relOp.c_str(),act,requirement,"add_filter");
 
@@ -504,7 +488,6 @@ fprintf(stderr,"-%s\n",act);
                 free(begin);
               }
               option_value.insert(0,"(filter-)");
-//              sprintf(line_number,"%i",line_count);
               return make_err(identical_option,"add_filter",option_name,line_number);
             }
 
@@ -549,8 +532,6 @@ fprintf(stderr,"-%s\n",act);
 	  // key == static
 	  //
           if (d.key == "static") {
-            //fprintf(stderr,"Filter %s consists of `%s'\n",value.str(),
-            //        option_value.c_str());
             active_option = 0;
             continue;
           }
@@ -597,7 +578,6 @@ fprintf(stderr,"-%s\n",act);
             if (begin != NULL) {
               free(begin);
             }
-//            sprintf(line_number,"%i",line_count);
             return make_err(options_only,"add_filter",option_name,line_number);
           }
 
@@ -623,20 +603,13 @@ fprintf(stderr,"-%s\n",act);
 	  //
           if (d.key == "def" || d.key == "default") {
             
-            //
-            //try some syntax checking 
-            //if ( cur_opt->type != KeyInfoList && cur_opt->def != NULL ) {
-            //
-            //  //SyntaxError
-            //  continue;
-            //}
             if ( cur_opt->type == KeyInfoList && cur_opt->def != NULL) {
               option_value += ",";
               option_value += cur_opt->def;
               free((void*)cur_opt->def);
             }
 
-            //
+            // FIXME
             //may try some syntax checking
             //if ( cur_opt->type == KeyInfoBool ) {
             //  check for valid bool values true false 0 1 on off ...
@@ -731,32 +704,4 @@ fprintf(stderr,"-%s\n",act);
     }
     return no_err;
   }
-
-/*
- * FIXME remove as there is no `loadable' filter any more and mode parsing done
- *       by mode_notifier in new_config.cpp
- * 
-  PosibErr<void> FilterOptionExpandNotifier::item_updated(const KeyInfo * key, ParmString value){
-    int name_len = strlen(key->name);
-    String option_name;
-    String filter_name="lib";
-    FStream options;
-    String version = PACKAGE_VERSION;
-
-    if ((name_len == 13) &&
-        !strncmp(key->name,"loadable-name",13) &&
-        !value.empty() &&
-        value[0] != '/')
-    {
-      filter_name += value;
-      filter_name += "-filter.so";
-      if (!filter_path.expand_filename(filter_name)) {
-          return make_err(no_such_filter,"add_filter",value);
-      }
-      RET_ON_ERR(config->replace("loadable-name",filter_name));
-    }
-    return no_err;
-  }
- */
-
 }
