@@ -24,6 +24,7 @@
 #endif
 
 #include "aspell.h"
+#include <limits.h>
 //FIXME if Win(dos) is different
 #include <regex.h>
 
@@ -46,6 +47,9 @@
 #include "speller_impl.hpp"
 #include "data.hpp"
 #include "directory.hpp"
+
+#include <stdio.h>
+#include <cstdio>
 
 using namespace acommon;
 
@@ -524,7 +528,21 @@ void pipe()
   char * word2;
   int    ignore;
   PosibErrBase err;
+  
+  int pipemode=0;
 
+  if (args.size()) {
+    if (args.front() == "word") {
+      args.pop_front();
+      pipemode|=1;
+    }
+  }
+  if (args.size()) {
+    if (args.front() == "noauto") {
+      args.pop_front();
+      pipemode|=2;
+    }
+  }
   print_ver();
 
   for (;;) {
@@ -630,18 +648,41 @@ void pipe()
 	// continue on (no break)
       }
     case '^':
+    case '?':
+    case '§':
       ignore = 1;
     default:
+      int oldpipemode=pipemode;
+      switch (line[0]) {
+        case '?': {
+          pipemode &= INT_MAX-2;
+          break;
+        }
+        case '§': {
+          pipemode &= INT_MAX-1;
+          break;
+        }
+      }
       line += ignore;
       checker->process(line, strlen(line));
-      while (Token token = checker->next_misspelling()) {
+
+bool steped=false;
+Token token ;
+
+      while ((token = checker->next_misspelling()) && !steped) {
+        if ( pipemode & 1 ) {
+          steped=true;
+        }
 	word = line + token.offset;
 	word[token.len] = '\0';
 	start = clock();
-        const AspellWordList * suggestions 
-	  = aspell_speller_suggest(speller, word, -1);
-	finish = clock();
-	if (!aspell_word_list_empty(suggestions)) {
+        const AspellWordList * suggestions = 0;
+        if ( !(pipemode & 2)) {
+          ((AspellWordList *) suggestions)
+             = aspell_speller_suggest(speller, word, -1);
+	  finish = clock();
+        }
+	if (suggestions && !aspell_word_list_empty(suggestions)) {
 	  COUT << "& " << word 
 	       << " " << aspell_word_list_size(suggestions) 
 	       << " " << token.offset + ignore
@@ -678,6 +719,7 @@ void pipe()
 	  COUT << "Suggestion Time: " 
 	       << (finish-start)/(double)CLOCKS_PER_SEC << "\n";
       }
+      pipemode=oldpipemode;
       COUT << "\n";
     }
     if (c == EOF) break;
@@ -1362,7 +1404,7 @@ void print_help () {
     "  -?|help [<expr>] display this help message\n"
     "                    and help for filters matching <expr>if nstalled\n"
     "  -c|check <file>  to check a file\n"
-    "  -a|pipe          \"ispell -a\" compatibility mode\n"
+    "  -a|pipe [word|noauto] \"ispell -a\" compatibility mode\n"
     "  -l|list          produce a list of misspelled words from standard input\n"
     "  [dump] config [-e <expr>]  dumps the current configuration to stdout\n"
     "  config [+e <expr>] <key>   prints the current value of an option\n"
