@@ -345,8 +345,6 @@ AC_CONFIG_FILES([Makefile common/Makefile lib/Makefile data/Makefile m4/Makefile
                  modules/speller/Makefile modules/speller/default/Makefile
 		 interfaces/Makefile interfaces/cc/Makefile scripts/Makefile
                  examples/Makefile examples/loadable/Makefile prog/Makefile
-                 manual/Makefile manual/man-html/Makefile manual/man-text/Makefile
-		 manual/dev-html/Makefile manual/dev-text/Makefile
-		 po/Makefile.in
+                 manual/Makefile po/Makefile.in
 		 ])
 AC_OUTPUT
