@@ -8,11 +8,16 @@
 #include "indiv_filter.hpp"
 #include "mutable_container.hpp"
 #include "copy_ptr-t.hpp"
+#include "loadable-filter-API.hpp"
 
 namespace acommon {
 
   class EmailFilter : public IndividualFilter 
   {
+    FILTER("email",filtername,EmailFilter);
+    SET_DESCRIPTION("email","Filter for eliminating email quote characters",\
+                    "email");
+    ASPELL_VERSION("email",">=0.51");
     bool prev_newline;
     bool in_quote;
     int margin;
@@ -48,10 +53,18 @@ namespace acommon {
 
   PosibErr<bool> EmailFilter::setup(Config * opts) 
   {
-    name_ = "email";
+    name_ = filtername();
     order_num_ = 0.85;
-    opts->retrieve_list("email-quote", &is_quote_char);
-    margin = opts->retrieve_int("email-margin");
+    LIST_OPTION(opts,"quote",&is_quote_char,"email","filter");
+    SET_DESCRIPTION("quote","email quote characters","email");
+    SET_DEFAULT("quote",">","email");
+    ADD_DEFAULT("quote","|","email");
+
+    INT_OPTION(opts,"margin",margin,"email","filter");
+    SET_DESCRIPTION("margin","num chars that can appear before the quote char",\
+                    "email");
+    SET_DEFAULT("margin","10","email");
+
     reset();
     return true;
   }
@@ -91,22 +104,6 @@ namespace acommon {
 	*i = ' ';
   }
   
-  IndividualFilter * new_email_filter() 
-  {
-    return new EmailFilter();
-  }
-
-  static const KeyInfo email_options[] = {
-    {"filter-email", KeyInfoDescript,NULL,
-     N_("Filter for eliminating email quote characters")},
-    {"email-quote", KeyInfoList, ">,|",
-     N_("email quote characters")},
-    {"email-margin", KeyInfoInt, "10",
-     N_("num chars that can appear before the quote char")}
-  };
-
-  const KeyInfo * email_options_begin = email_options;
-  const KeyInfo * email_options_end   = email_options + 2;
-
-
 }
+ACTIVATE_FILTER(acommon,EmailFilter,"email");
+

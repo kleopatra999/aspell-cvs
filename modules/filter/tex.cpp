@@ -13,12 +13,17 @@
 #include "clone_ptr-t.hpp"
 #include "vector.hpp"
 #include "errors.hpp"
+#include "loadable-filter-API.hpp"
 
 namespace acommon {
 
 
   class TexFilter : public IndividualFilter 
   {
+    FILTER("tex",filter_name,TexFilter);
+    ALIAS("latex","tex");
+    SET_DESCRIPTION("tex","Filter for recognizing TeX/LaTeX commands","tex");
+    ASPELL_VERSION("tex",">=0.51");
   private:
     enum InWhat {Name, Opt, Parm, Other, Swallow};
     struct Command {
@@ -75,11 +80,99 @@ namespace acommon {
 
   PosibErr<bool> TexFilter::setup(Config * opts) 
   {
-    name_ = "tex";
+    name_ = filter_name();
     order_num_ = 0.35;
     commands.clear();
-    RET_ON_ERR(opts->retrieve_list("tex-command", &commands));
-    check_comments = opts->retrieve_bool("tex-check-comments");
+    LIST_OPTION(opts,"command",&commands,"tex","filter");
+    SET_DESCRIPTION("command","TeX commands","tex");
+    // counters
+    SET_DEFAULT("command","addtocounter pp","tex");
+    ADD_DEFAULT("command","addtolength pp","tex")
+    ADD_DEFAULT("command","alpha p","tex")
+    ADD_DEFAULT("command","arabic p","tex")
+    ADD_DEFAULT("command","fnsymbol p","tex")
+    ADD_DEFAULT("command","roman p","tex")
+    ADD_DEFAULT("command","stepcounter p","tex")
+    ADD_DEFAULT("command","setcounter pp","tex")
+    ADD_DEFAULT("command","usecounter p","tex")
+    ADD_DEFAULT("command","value p","tex")
+    ADD_DEFAULT("command","newcounter po","tex")
+    ADD_DEFAULT("command","refstepcounter p","tex")
+    // cross ref
+    ADD_DEFAULT("command","label p","tex")
+    ADD_DEFAULT("command","pageref p","tex")
+    ADD_DEFAULT("command","ref p","tex")
+    // Definitions
+    ADD_DEFAULT("command","newcommand poOP","tex")
+    ADD_DEFAULT("command","renewcommand poOP","tex")
+    ADD_DEFAULT("command","newenvironment poOPP","tex")
+    ADD_DEFAULT("command","renewenvironment poOPP","tex")
+    ADD_DEFAULT("command","newtheorem poPo","tex")
+    ADD_DEFAULT("command","newfont pp","tex")
+    // Document Classes
+    ADD_DEFAULT("command","documentclass op","tex")
+    ADD_DEFAULT("command","usepackage op","tex")
+    // Environments
+    ADD_DEFAULT("command","begin po","tex")
+    ADD_DEFAULT("command","end p","tex")
+    // Lengths
+    ADD_DEFAULT("command","setlength pp","tex")
+    ADD_DEFAULT("command","addtolength pp","tex")
+    ADD_DEFAULT("command","settowidth pp","tex")
+    ADD_DEFAULT("command","settodepth pp","tex")
+    ADD_DEFAULT("command","settoheight pp","tex")
+    // Line & Page Breaking
+    ADD_DEFAULT("command","enlargethispage p","tex")
+    ADD_DEFAULT("command","hyphenation p","tex")
+    // Page Styles
+    ADD_DEFAULT("command","pagenumbering p","tex")
+    ADD_DEFAULT("command","pagestyle p","tex")
+    // Spaces & Boxes
+    ADD_DEFAULT("command","addvspace p","tex")
+    ADD_DEFAULT("command","framebox ooP","tex")
+    ADD_DEFAULT("command","hspace p","tex")
+    ADD_DEFAULT("command","vspace p","tex")
+    ADD_DEFAULT("command","makebox ooP","tex")
+    ADD_DEFAULT("command","parbox ooopP","tex")
+    ADD_DEFAULT("command","raisebox pooP","tex")
+    ADD_DEFAULT("command","rule opp","tex")
+    ADD_DEFAULT("command","sbox pO","tex")
+    ADD_DEFAULT("command","savebox pooP","tex")
+    ADD_DEFAULT("command","usebox p","tex")
+    // Splitting the Input
+    ADD_DEFAULT("command","include p","tex")
+    ADD_DEFAULT("command","includeonly p","tex")
+    ADD_DEFAULT("command","input p","tex")
+    // Table of Contents
+    ADD_DEFAULT("command","addcontentsline ppP","tex")
+    ADD_DEFAULT("command","addtocontents pP","tex")
+    // Typefaces
+    ADD_DEFAULT("command","fontencoding p","tex")
+    ADD_DEFAULT("command","fontfamily p","tex")
+    ADD_DEFAULT("command","fontseries p","tex")
+    ADD_DEFAULT("command","fontshape p","tex")
+    ADD_DEFAULT("command","fontsize pp","tex")
+    ADD_DEFAULT("command","usefont pppp","tex")
+    // Misc
+    ADD_DEFAULT("command","documentstyle op","tex")
+    ADD_DEFAULT("command","cite p","tex")
+    ADD_DEFAULT("command","nocite p","tex")
+    ADD_DEFAULT("command","psfig p","tex")
+    ADD_DEFAULT("command","selectlanguage p","tex")
+    ADD_DEFAULT("command","includegraphics op","tex")
+    ADD_DEFAULT("command","bibitem op","tex")
+    // Geometry Package
+    ADD_DEFAULT("command","geometry p","tex")
+
+    BOOL_OPTION(opts,"check-comments",checkcomments,"tex","filter");
+    SET_DESCRIPTION("check-comments","check TeX comments","tex");
+    SET_DEFAULT("check-comments","false","tex");
+    check_comments = checkcomments;
+
+//  Unused
+//  LIST_OPTION(opts,"extention",&tex_extentions,"tex","filter");
+//  SET_DESCTIPTION("extention","TeX file extensions","tex");
+//  SET_DEFAULT("extention","tex","tex");
     reset();
     return true;
   }
@@ -255,100 +348,5 @@ namespace acommon {
   //
   //
 
-  IndividualFilter * new_tex_filter() 
-  {
-    return new TexFilter();
-  }
-
-  static const KeyInfo tex_options[] = {
-    {"filter-tex",KeyInfoDescript,NULL,
-     N_("Filter for recognizing TeX/LaTeX commands")},
-    {"tex-command", KeyInfoList, 
-       // counters
-       "addtocounter pp,"
-       "addtolength pp,"
-       "alpha p,"
-       "arabic p,"
-       "fnsymbol p,"
-       "roman p,"
-       "stepcounter p,"
-       "setcounter pp,"
-       "usecounter p,"
-       "value p,"
-       "newcounter po,"
-       "refstepcounter p,"
-       // cross ref
-       "label p,"
-       "pageref p,"
-       "ref p,"
-       // Definitions
-       "newcommand poOP,"
-       "renewcommand poOP,"
-       "newenvironment poOPP,"
-       "renewenvironment poOPP,"
-       "newtheorem poPo,"
-       "newfont pp,"
-       // Document Classes
-       "documentclass op,"
-       "usepackage op,"
-       // Environments
-       "begin po,"
-       "end p,"
-       // Lengths
-       "setlength pp,"
-       "addtolength pp,"
-       "settowidth pp,"
-       "settodepth pp,"
-       "settoheight pp,"
-       // Line & Page Breaking
-       "enlargethispage p,"
-       "hyphenation p,"
-       // Page Styles
-       "pagenumbering p,"
-       "pagestyle p,"
-       // Spaces & Boxes
-       "addvspace p,"
-       "framebox ooP,"
-       "hspace p,"
-       "vspace p,"
-       "makebox ooP,"
-       "parbox ooopP,"
-       "raisebox pooP,"
-       "rule opp,"
-       "sbox pO,"
-       "savebox pooP,"
-       "usebox p,"
-       // Splitting the Input
-       "include p,"
-       "includeonly p,"
-       "input p,"
-       // Table of Contents
-       "addcontentsline ppP,"
-       "addtocontents pP,"
-       // Typefaces
-       "fontencoding p,"
-       "fontfamily p,"
-       "fontseries p,"
-       "fontshape p,"
-       "fontsize pp,"
-       "usefont pppp,"
-       // Misc
-       "documentstyle op,"
-       "cite p,"
-       "nocite p,"
-       "psfig p,"
-       "selectlanguage p,"
-       "includegraphics op,"
-       "bibitem op,"
-       // Geometry Package
-       "geometry p,"
-       ,
-     N_("TeX commands")},
-    {"tex-check-comments", KeyInfoBool, "false",
-     N_("check TeX comments")},
-    {"tex-extension", KeyInfoList, "tex",
-     N_("TeX file extensions")}
-  };
-  const KeyInfo * tex_options_begin = tex_options;
-  const KeyInfo * tex_options_end = tex_options + 3;
 }
+ACTIVATE_FILTER(acommon,TexFilter,"tex");

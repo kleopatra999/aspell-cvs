@@ -14,6 +14,13 @@
 #include "copy_ptr-t.hpp"
 #include "clone_ptr-t.hpp"
 #include "filter_char_vector.hpp"
+#include "loadable-filter-API.hpp"
+
+//right now unused option
+//  static const KeyInfo sgml_options[] = {
+//    {"sgml-extension", KeyInfoList, "html,htm,php,sgml",
+//     N_("sgml file extensions")}
+//  };
 
 namespace acommon {
 
@@ -35,6 +42,11 @@ namespace acommon {
 
   class SgmlFilter : public IndividualFilter 
   {
+    FILTER("sgml",filter_name,SgmlFilter);
+    SET_DESCRIPTION("sgml",\
+                    "Filters for encoding\; filtering and decoding sgml characters",\
+                    "sgml");
+    ASPELL_VERSION("sgml",">=0.51");
     bool in_markup;
     FilterChar::Chr in_quote;
     bool new_token;
@@ -55,10 +67,12 @@ namespace acommon {
 
   PosibErr<bool> SgmlFilter::setup(Config * opts) 
   {
-    name_ = "sgml";
+    name_ = filter_name();
     order_num_ = 0.35;
     noskip_tags.clear();
-    RET_ON_ERR(opts->retrieve_list("sgml-check", &noskip_tags));
+    LIST_OPTION(opts,"check", &noskip_tags,"sgml","filter");
+    SET_DESCRIPTION("check","sgml attributes to always check.","sgml");
+    SET_DEFAULT("check","alt","sgml");
     reset();
     return true;
   }
@@ -149,6 +163,7 @@ namespace acommon {
 
   class SgmlDecoder : public IndividualFilter 
   {
+    DECODER("sgml",filter_name,SgmlDecoder);
     FilterCharVector buf;
   public:
     PosibErr<bool> setup(Config *);
@@ -158,7 +173,7 @@ namespace acommon {
 
   PosibErr<bool> SgmlDecoder::setup(Config *) 
   {
-    name_ = "sgml-decoder";
+    name_ = filter_name();
     order_num_ = 0.65;
     return true;
   }
@@ -206,6 +221,7 @@ namespace acommon {
 
   class SgmlEncoder : public IndividualFilter 
   {
+    ENCODER("sgml",filter_name,SgmlEncoder);
     FilterCharVector buf;
   public:
     PosibErr<bool> setup(Config *);
@@ -215,7 +231,7 @@ namespace acommon {
 
   PosibErr<bool> SgmlEncoder::setup(Config *) 
   {
-    name_ = "sgml-encoder";
+    name_ = filter_name();
     order_num_ = 0.99;
     return true;
   }
@@ -242,10 +258,6 @@ namespace acommon {
     stop  = buf.pend() - 1;
   }
 
-  //
-  //
-  //
-  
   IndividualFilter * new_sgml_decoder() 
   {
     return new SgmlDecoder();
@@ -261,16 +273,8 @@ namespace acommon {
     return 0;
     //return new SgmlEncoder();
   }
-  
-  static const KeyInfo sgml_options[] = {
-    {"filter-sgml",KeyInfoDescript,NULL,
-     N_("Filters for encoding, filtering and decoding sgml characters")},
-    {"sgml-check", KeyInfoList, "alt",
-     N_("sgml attributes to always check.")},
-    {"sgml-extension", KeyInfoList, "html,htm,php,sgml",
-     N_("sgml file extensions")}
-  };
-  const KeyInfo * sgml_options_begin = sgml_options;
-  const KeyInfo * sgml_options_end = sgml_options + 2;
 
 }
+ACTIVATE_FILTER(acommon,SgmlFilter,"sgml");
+ACTIVATE_DECODER(acommon,SgmlDecoder,"sgml");
+//ACTIVATE_ENCODER(acommon,SgmlEncoder,"sgml");
