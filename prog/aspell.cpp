@@ -492,7 +492,6 @@ void pipe()
     while (c = getchar(), c != '\n' && c != EOF)
       buf.push_back(static_cast<char>(c));
     buf.push_back('\0');
-    if (c == EOF) break;
     line = buf.data();
     ignore = 0;
     switch (line[0]) {
@@ -636,6 +635,7 @@ void pipe()
       }
       COUT << "\n";
     }
+    if (c == EOF) break;
   }
 
   delete_aspell_speller(speller);
