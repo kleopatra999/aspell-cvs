@@ -502,7 +502,8 @@ void pipe()
     ignore = 0;
     switch (line[0]) {
     case '\n':
-      continue;
+      if (c != EOF) continue;
+      else          break;
     case '*':
       word = trim_wspace(line + 1);
       aspell_speller_add_to_personal(speller, word, -1);
