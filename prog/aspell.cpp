@@ -969,8 +969,10 @@ void Mapping::to_ispell()
 
 void filter()
 {
-  assert(setvbuf(stdin, 0, _IOLBF, 0) == 0);
-  assert(setvbuf(stdout, 0, _IOLBF, 0) == 0);
+  //assert(setvbuf(stdin, 0, _IOLBF, 0) == 0);
+  //assert(setvbuf(stdout, 0, _IOLBF, 0) == 0);
+  CERR << "Sorry \"filter\" is currently unimplemented.\n";
+  exit(3);
 }
 
 
@@ -1089,7 +1091,10 @@ void personal () {
   }
   options->replace("module", "aspeller");
   if (action == do_create || action == do_merge) {
-    abort(); // FIXME
+    CERR << "Sorry \"create/merge personal\" is currently unimplemented.\n";
+    exit(3);
+
+    // FIXME
 #if 0
     StackPtr<Speller> speller(new_speller(options));
 
@@ -1141,7 +1146,11 @@ void repl() {
   }
 
   if (action == do_create || action == do_merge) {
-    abort(); //fixme
+
+    CERR << "Sorry \"create/merge repl\" is currently unimplemented.\n";
+    exit(3);
+
+    // FIXME
 #if 0
     SpellerImpl speller(options);
 
