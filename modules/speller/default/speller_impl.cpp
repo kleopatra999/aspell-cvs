@@ -184,27 +184,21 @@ namespace aspeller {
                                     /* it WILL modify word */
 				    unsigned int run_together_limit,
 				    CompoundInfo::Position pos,
-				    SingleWordInfo * words)
+				    CheckInfo * ci, GuessInfo * gi)
   {
     assert(run_together_limit <= 8); // otherwise it will go above the 
                                      // bounds of the word array
-    words[0].clear();
-    BasicWordInfo w = check_affix(word);
+    clear_check_info(*ci);
+    BasicWordInfo w = check_affix(word, *ci, gi);
     if (w) {
-      if (pos == CompoundInfo::Orig) {
-	words[0] = w.word;
-	words[1].clear();
+      if (pos == CompoundInfo::Orig)
 	return true;
-      }
       bool check_if_valid = !(unconditional_run_together_ 
 			      && strlen(word) >= run_together_min_);
-      if (!check_if_valid || w.compound.compatible(pos)) { 
-	words[0] = w.word;
-	words[1].clear();
+      if (!check_if_valid || w.compound.compatible(pos))
 	return true;
-      } else {
+      else
 	return false;
-      }
     }
     
     if (run_together_limit <= 1 
@@ -216,7 +210,8 @@ namespace aspeller {
       {
 	char t = *i;
 	*i = '\0';
-	BasicWordInfo s = check_affix(word);
+        //FIXME: clear ci, gi?
+	BasicWordInfo s = check_affix(word, *ci, gi);
 	*i = t;
 	if (!s) continue;
 	CompoundInfo c = s.compound;
@@ -237,20 +232,21 @@ namespace aspeller {
 	  if (c.mid_required() && *i != m)
 	    continue;
 	}
-	words[0].set(s.word, *i == m ? m : '\0');
-	words[1].clear();
 	if ((!check_if_valid || !c.mid_required()) // if check then !s.mid_required() 
-	    && check(i, word_end, run_together_limit - 1, end_pos, words + 1))
+	    && check(i, word_end, run_together_limit - 1, end_pos, ci + 1, 0)) {
+          ci->next = ci + 1;
 	  return true;
+        }
 	if ((check_if_valid ? *i == m : strchr(run_together_middle_, *i) != 0) 
 	    && word_end - (i + 1) >= static_cast<int>(run_together_min_)) {
-	  if (check(i+1, word_end, run_together_limit - 1, end_pos, words + 1))
+	  if (check(i+1, word_end, run_together_limit - 1, end_pos, ci + 1, 0)) {
+            ci->next = ci + 1;
 	    return true;
-	  else // already checked word (i+1) so no need to check it again
-	    ++i;
+          }
+          // already checked word (i+1) so no need to check it again
+          ++i;
 	}
       }
-    words[0].clear();
     return false;
   }
   

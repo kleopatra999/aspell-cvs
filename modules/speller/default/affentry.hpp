@@ -23,71 +23,47 @@ namespace aspeller {
 
 class PfxEntry : public AffEntry
 {
-       AffixMgr*    pmyMgr;
-
-       PfxEntry * next;
-       PfxEntry * nexteq;
-       PfxEntry * nextne;
-       PfxEntry * flgnxt;
-
 public:
-
+  AffixMgr*    pmyMgr;
+  
+  PfxEntry * next;
+  PfxEntry * next_eq;
+  PfxEntry * next_ne;
+  PfxEntry * flag_next;
   PfxEntry(AffixMgr* pmgr, affentry* dp );
   ~PfxEntry();
 
-  BasicWordInfo      check(LookupInfo, const char * word, int len);
+  BasicWordInfo      check(LookupInfo, ParmString, CheckInfo &, GuessInfo *) const;
 
-  inline bool          allowCross() { return ((xpflg & XPRODUCT) != 0); }
-  inline unsigned char getFlag()    { return achar;  }
-  inline const char *  getKey()     { return appnd;  }
+  inline bool          allow_cross() { return ((xpflg & XPRODUCT) != 0); }
+  inline unsigned char flag()    { return achar;  }
+  inline const char *  key()     { return appnd;  }
   char *               add(const char * word, int len);
-
-  inline PfxEntry *    getNext()   { return next;   }
-  inline PfxEntry *    getNextNE() { return nextne; }
-  inline PfxEntry *    getNextEQ() { return nexteq; }
-  inline PfxEntry *    getFlgNxt() { return flgnxt; }
-
-  inline void   setNext(PfxEntry * ptr)   { next = ptr;   }
-  inline void   setNextNE(PfxEntry * ptr) { nextne = ptr; }
-  inline void   setNextEQ(PfxEntry * ptr) { nexteq = ptr; }
-  inline void   setFlgNxt(PfxEntry * ptr) { flgnxt = ptr; }
 };
 
 /* A Suffix Entry */
 
 class SfxEntry : public AffEntry
 {
-       AffixMgr*    pmyMgr;
-       char *       rappnd;
-
-       SfxEntry *   next;
-       SfxEntry *   nexteq;
-       SfxEntry *   nextne;
-       SfxEntry *   flgnxt;
-
 public:
+  AffixMgr*    pmyMgr;
+  char *       rappnd;
+  
+  SfxEntry *   next;
+  SfxEntry *   next_eq;
+  SfxEntry *   next_ne;
+  SfxEntry *   flag_next;
 
   SfxEntry(AffixMgr* pmgr, affentry* dp );
   ~SfxEntry();
 
-  BasicWordInfo   check(LookupInfo, const char * word, int len, 
-			int optflags, AffEntry* ppfx);
+  BasicWordInfo      check(LookupInfo, ParmString, CheckInfo &, GuessInfo *,
+                           int optflags, AffEntry * ppfx);
 
-  inline bool          allowCross() { return ((xpflg & XPRODUCT) != 0); }
-  inline unsigned char getFlag()   { return achar;  }
-  inline const char *  getKey()    { return rappnd; } 
+  inline bool          allow_cross() { return ((xpflg & XPRODUCT) != 0); }
+  inline unsigned char flag()   { return achar;  }
+  inline const char *  key()    { return rappnd; } 
   char * add(const char * word, int len);
-
-  inline SfxEntry *    getNext()   { return next;   }
-  inline SfxEntry *    getNextNE() { return nextne; }
-  inline SfxEntry *    getNextEQ() { return nexteq; }
-  inline SfxEntry *    getFlgNxt() { return flgnxt; }
-
-  inline void   setNext(SfxEntry * ptr)   { next = ptr;   }
-  inline void   setNextNE(SfxEntry * ptr) { nextne = ptr; }
-  inline void   setNextEQ(SfxEntry * ptr) { nexteq = ptr; }
-  inline void   setFlgNxt(SfxEntry * ptr) { flgnxt = ptr; }
-
 };
 
 }

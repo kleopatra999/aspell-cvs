@@ -639,6 +639,17 @@ void pipe()
       line += ignore;
       checker->process(line, strlen(line));
       while (Token token = checker->next_misspelling()) {
+        String guesses;
+        const CheckInfo * ci = reinterpret_cast<Speller * >(speller)->check_info();
+        while (ci) {
+          guesses << ", ";
+          if (ci->pre_add && ci->pre_add[0])      guesses << ci->pre_add << "+";
+          guesses << ci->root;
+          if (ci->pre_strip && ci->pre_strip[0]) guesses << "-" << ci->pre_strip;
+          if (ci->suf_strip && ci->suf_strip[0]) guesses << "-" << ci->suf_strip;
+          if (ci->suf_add   && ci->suf_add[0])   guesses << "+" << ci->suf_add;
+          ci = ci->next;
+        }
 	word = line + token.offset;
 	word[token.len] = '\0';
 	start = clock();
@@ -674,11 +685,17 @@ void pipe()
 	    }
 	  }
 	  delete_aspell_string_enumeration(els);
+          COUT << guesses;
 	  COUT << "\n";
 	} else {
-	  COUT << "# " << word << " " 
-	       << token.offset + ignore
-	       << "\n";
+          if (guesses.empty())
+            COUT << "# " << word << " " 
+                 << token.offset + ignore
+                 << "\n";
+          else
+            COUT << "? " << word << " 0 " 
+                 << token.offset + ignore
+                 << ": " << guesses.c_str() + 2;
 	}
 	if (do_time)
 	  COUT << _("Suggestion Time: ")

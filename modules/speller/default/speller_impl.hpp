@@ -28,6 +28,29 @@ namespace aspeller {
   class Language;
   class SensitiveCompare;
   class Suggest;
+
+  typedef acommon::CheckInfo CheckInfo;
+
+  static inline void clear_check_info(CheckInfo & ci)
+  {
+    memset(&ci, 0, sizeof(ci));
+  }
+
+  struct GuessInfo 
+  {
+    int num;
+    CheckInfo * last;
+    void reset(CheckInfo * ci) { num = 0; last = ci; }
+    CheckInfo & add() {
+      num++;
+      assert(num <= 7);
+      last->next = last + 1;
+      last = const_cast<CheckInfo *>(last->next);
+      clear_check_info(*last);
+      last->guess = true;
+      return *last;
+    }
+  };
   
   class SpellerImpl : public Speller
   {
@@ -95,15 +118,15 @@ namespace aspeller {
     PosibErr<bool> check(char * word, char * word_end, /* it WILL modify word */
 			 unsigned int run_together_limit,
 			 CompoundInfo::Position pos,
-			 SingleWordInfo * words);
+			 CheckInfo *, GuessInfo *);
 
     PosibErr<bool> check(MutableString word) {
-      WordInfo wi;
+      guess_info.reset(guesses);
       return check(word.begin(), 
 		   word.end(), 
 		   run_together_limit_,
 		   CompoundInfo::Orig,
-		   wi.words);
+		   check_inf, &guess_info);
     }
     PosibErr<bool> check(ParmString word)
     {
@@ -114,15 +137,24 @@ namespace aspeller {
 
     PosibErr<bool> check(const char * word) {return check(ParmString(word));}
 
-    BasicWordInfo check_affix(ParmString word)
+    BasicWordInfo check_affix(ParmString word, CheckInfo & ci, GuessInfo * gi)
     {
       BasicWordInfo w = check_simple(word);
+      if (w) ci.root = w.word;
       if (w || !lang_->affix()) return w;
-      return lang_->affix()->affix_check(LookupInfo(this), 
-                                         word.str(), word.size());
+      return lang_->affix()->affix_check(LookupInfo(this), word, ci, gi);
     }
 
     BasicWordInfo check_simple(ParmString);
+
+    const CheckInfo * check_info() {
+      if (check_inf[0].root)
+        return check_inf;
+      else if (guess_info.num > 0)
+        return guesses + 1;
+      else
+        return 0;
+    }
     
     //
     // High level Word List management methods
@@ -144,6 +176,10 @@ namespace aspeller {
 
     PosibErr<void> store_replacement(const String & mis, const String & cor,
 				     bool memory);
+
+
+    
+
     //
     // Private Stuff (from here to the end of the class)
     //
@@ -184,6 +220,10 @@ namespace aspeller {
   
     double distance (const char *, const char *, 
 		     const char *, const char *) const;
+
+    CheckInfo check_inf[8];
+    CheckInfo guesses[8];
+    GuessInfo guess_info;;
   };
 
 }

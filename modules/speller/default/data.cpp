@@ -269,18 +269,7 @@ namespace aspeller {
     abort();
   }
 
-  //
-  // SingleWordInfo impl
-  //
-
-  void SingleWordInfo::append_word(String & w, const Language &, 
-				   const ConvertWord & c) const
-  {
-    c.convert(word,w);
-    if (middle_char != '\0')
-      w += middle_char;
-  }
-  
+/*
   //
   // [Basic]WordInfo impl
   //
@@ -293,6 +282,7 @@ namespace aspeller {
       i->append_word(word,l,c);
     }
   }
+*/
 
   OStream & BasicWordInfo::write (OStream & o,
 				  const Language & l,
@@ -305,6 +295,7 @@ namespace aspeller {
     return o;
   }
 
+/*
   OStream & WordInfo::write(OStream & o, 
 			    const Language & l, 
 			    const ConvertWord & c) const
@@ -318,6 +309,7 @@ namespace aspeller {
   //
   // add_data_set
   //
+*/
 
   PosibErr<LoadableDataSet *> add_data_set(ParmString fn,
 					   Config & config,

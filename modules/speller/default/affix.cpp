@@ -14,16 +14,15 @@
 
 #include "iostream.hpp"
 
-#include "affix.hpp"
 #include "affentry.hpp"
-#include "getdata.hpp"
-
+#include "affix.hpp"
 #include "errors.hpp"
+#include "getdata.hpp"
+#include "parm_string.hpp"
 
 using namespace std;
 
 namespace aspeller {
-
 
 // First some base level utility routines
   char * mystrdup(const char * s);                   // duplicate string
@@ -58,7 +57,7 @@ namespace aspeller {
       PfxEntry * ptr = (PfxEntry *)pStart[i];
       PfxEntry * nptr = NULL;
       while (ptr) {
-	nptr = ptr->getNext();
+	nptr = ptr->next;
 	delete(ptr);
 	ptr = nptr;
 	nptr = NULL;
@@ -71,7 +70,7 @@ namespace aspeller {
       SfxEntry * ptr = (SfxEntry *)sStart[j];
       SfxEntry * nptr = NULL;
       while (ptr) {
-	nptr = ptr->getNext();
+	nptr = ptr->next;
 	delete(ptr);
 	ptr = nptr;
 	nptr = NULL;
@@ -122,7 +121,7 @@ namespace aspeller {
 
       else if (key == "TRY" || key == "REP");
 
-      else if (key == "PTF" || key == "SFX")
+      else if (key == "PFX" || key == "SFX")
         ft = key[0];
 
       // parse this affix: P - prefix, S - suffix
@@ -178,12 +177,12 @@ namespace aspeller {
     PfxEntry * ep = (PfxEntry*) pfxptr;
 
     // get the right starting point 
-    const char * key = ep->getKey();
-    const unsigned char flg = ep->getFlag();
+    const char * key = ep->key();
+    const unsigned char flg = ep->flag();
 
     // first index by flag which must exist
     ptr = (PfxEntry*)pFlag[flg];
-    ep->setFlgNxt(ptr);
+    ep->flag_next = ptr;
     pFlag[flg] = (AffEntry *) ep;
 
     // next index by affix string
@@ -192,7 +191,7 @@ namespace aspeller {
     if (strlen(key) == 0) {
       // always inset them at head of list at element 0
       ptr = (PfxEntry*)pStart[0];
-      ep->setNext(ptr);
+      ep->next = ptr;
       pStart[0] = (AffEntry*)ep;
       return no_err;
     }
@@ -202,23 +201,22 @@ namespace aspeller {
     ptr = (PfxEntry*)pStart[sp];
   
     /* handle the insert at top of list case */
-    if ((!ptr) || ( strcmp( ep->getKey() , ptr->getKey() ) <= 0)) {
-      ep->setNext(ptr);
+    if ((!ptr) || ( strcmp( ep->key() , ptr->key() ) <= 0)) {
+      ep->next = ptr;
       pStart[sp] = (AffEntry*)ep;
       return no_err;
     }
 
     /* otherwise find where it fits in order and insert it */
     pptr = NULL;
-    for (; ptr != NULL; ptr = ptr->getNext()) {
-      if (strcmp( ep->getKey() , ptr->getKey() ) <= 0) break;
+    for (; ptr != NULL; ptr = ptr->next) {
+      if (strcmp( ep->key() , ptr->key() ) <= 0) break;
       pptr = ptr;
     }
-    pptr->setNext(ep);
-    ep->setNext(ptr);
+    pptr->next = ep;
+    ep->next = ptr;
     return no_err;
   }
-
 
 
   // we want to be able to quickly access suffix information
@@ -232,13 +230,13 @@ namespace aspeller {
     SfxEntry * ep = (SfxEntry *) sfxptr;
 
     /* get the right starting point */
-    const char * key = ep->getKey();
-    const unsigned char flg = ep->getFlag();
+    const char * key = ep->key();
+    const unsigned char flg = ep->flag();
 
 
     // first index by flag which must exist
     ptr = (SfxEntry*)sFlag[flg];
-    ep->setFlgNxt(ptr);
+    ep->flag_next = ptr;
     sFlag[flg] = (AffEntry *) ep;
 
 
@@ -248,7 +246,7 @@ namespace aspeller {
     if (strlen(key) == 0) {
       // always inset them at head of list at element 0
       ptr = (SfxEntry*)sStart[0];
-      ep->setNext(ptr);
+      ep->next = ptr;
       sStart[0] = (AffEntry*)ep;
       return no_err;
     }
@@ -258,20 +256,20 @@ namespace aspeller {
     ptr = (SfxEntry*)sStart[sp];
   
     /* handle the insert at top of list case */
-    if ((!ptr) || ( strcmp( ep->getKey() , ptr->getKey() ) <= 0)) {
-      ep->setNext(ptr);
+    if ((!ptr) || ( strcmp( ep->key() , ptr->key() ) <= 0)) {
+      ep->next = ptr;
       sStart[sp] = (AffEntry*)ep;
       return no_err;
     }
 
     /* otherwise find where it fits in order and insert it */
     pptr = NULL;
-    for (; ptr != NULL; ptr = ptr->getNext()) {
-      if (strcmp( ep->getKey(), ptr->getKey() ) <= 0) break;
+    for (; ptr != NULL; ptr = ptr->next) {
+      if (strcmp( ep->key(), ptr->key() ) <= 0) break;
       pptr = ptr;
     }
-    pptr->setNext(ep);
-    ep->setNext(ptr);
+    pptr->next = ep;
+    ep->next = ptr;
     return no_err;
   }
 
@@ -294,17 +292,17 @@ namespace aspeller {
       // use next in list that you are a subset
       // of as NextEQ
 
-      for (; ptr != NULL; ptr = ptr->getNext()) {
+      for (; ptr != NULL; ptr = ptr->next) {
 
-	PfxEntry * nptr = ptr->getNext();
-	for (; nptr != NULL; nptr = nptr->getNext()) {
-	  if (! isSubset( ptr->getKey() , nptr->getKey() )) break;
+	PfxEntry * nptr = ptr->next;
+	for (; nptr != NULL; nptr = nptr->next) {
+	  if (! isSubset( ptr->key() , nptr->key() )) break;
 	}
-	ptr->setNextNE(nptr);
-	ptr->setNextEQ(NULL);
-	if ((ptr->getNext()) && isSubset(ptr->getKey() , 
-					 (ptr->getNext())->getKey())) 
-	  ptr->setNextEQ(ptr->getNext());
+	ptr->next_ne = nptr;
+	ptr->next_eq = NULL;
+	if ((ptr->next) && isSubset(ptr->key() , 
+					 (ptr->next)->key())) 
+	  ptr->next_eq = ptr->next;
       }
 
       // now clean up by adding smart search termination strings:
@@ -313,14 +311,14 @@ namespace aspeller {
       // so set NextNE properly
 
       ptr = (PfxEntry *) pStart[i];
-      for (; ptr != NULL; ptr = ptr->getNext()) {
-	PfxEntry * nptr = ptr->getNext();
+      for (; ptr != NULL; ptr = ptr->next) {
+	PfxEntry * nptr = ptr->next;
 	PfxEntry * mptr = NULL;
-	for (; nptr != NULL; nptr = nptr->getNext()) {
-	  if (! isSubset(ptr->getKey(),nptr->getKey())) break;
+	for (; nptr != NULL; nptr = nptr->next) {
+	  if (! isSubset(ptr->key(),nptr->key())) break;
 	  mptr = nptr;
 	}
-	if (mptr) mptr->setNextNE(NULL);
+	if (mptr) mptr->next_ne = NULL;
       }
     }
     return no_err;
@@ -345,15 +343,15 @@ namespace aspeller {
       // use next in list that you are a subset
       // of as NextEQ
 
-      for (; ptr != NULL; ptr = ptr->getNext()) {
-	SfxEntry * nptr = ptr->getNext();
-	for (; nptr != NULL; nptr = nptr->getNext()) {
-	  if (! isSubset(ptr->getKey(),nptr->getKey())) break;
+      for (; ptr != NULL; ptr = ptr->next) {
+	SfxEntry * nptr = ptr->next;
+	for (; nptr != NULL; nptr = nptr->next) {
+	  if (! isSubset(ptr->key(),nptr->key())) break;
 	}
-	ptr->setNextNE(nptr);
-	ptr->setNextEQ(NULL);
-	if ((ptr->getNext()) && isSubset(ptr->getKey(),(ptr->getNext())->getKey())) 
-	  ptr->setNextEQ(ptr->getNext());
+	ptr->next_ne = nptr;
+	ptr->next_eq = NULL;
+	if ((ptr->next) && isSubset(ptr->key(),(ptr->next)->key())) 
+	  ptr->next_eq = ptr->next;
       }
 
 
@@ -363,14 +361,14 @@ namespace aspeller {
       // so set NextNE properly
 
       ptr = (SfxEntry *) sStart[i];
-      for (; ptr != NULL; ptr = ptr->getNext()) {
-	SfxEntry * nptr = ptr->getNext();
+      for (; ptr != NULL; ptr = ptr->next) {
+	SfxEntry * nptr = ptr->next;
 	SfxEntry * mptr = NULL;
-	for (; nptr != NULL; nptr = nptr->getNext()) {
-	  if (! isSubset(ptr->getKey(),nptr->getKey())) break;
+	for (; nptr != NULL; nptr = nptr->next) {
+	  if (! isSubset(ptr->key(),nptr->key())) break;
 	  mptr = nptr;
 	}
-	if (mptr) mptr->setNextNE(NULL);
+	if (mptr) mptr->next_ne = NULL;
       }
     }
     return no_err;
@@ -483,29 +481,30 @@ namespace aspeller {
 
 
 // check word for prefixes
-  BasicWordInfo AffixMgr::prefix_check (LookupInfo linf, const char * word, int len) const
+  BasicWordInfo AffixMgr::prefix_check (LookupInfo linf, ParmString word, 
+                                        CheckInfo & ci, GuessInfo * gi) const
   {
     BasicWordInfo wordinfo;
  
     // first handle the special case of 0 length prefixes
     PfxEntry * pe = (PfxEntry *) pStart[0];
     while (pe) {
-      wordinfo = pe->check(linf,word,len);
+      wordinfo = pe->check(linf,word,ci,gi);
       if (wordinfo) return wordinfo;
-      pe = pe->getNext();
+      pe = pe->next;
     }
   
     // now handle the general case
-    unsigned char sp = *((const unsigned char *)word);
+    unsigned char sp = *reinterpret_cast<const unsigned char *>(word.str());
     PfxEntry * pptr = (PfxEntry *)pStart[sp];
 
     while (pptr) {
-      if (isSubset(pptr->getKey(),word)) {
-	wordinfo = pptr->check(linf, word,len);
+      if (isSubset(pptr->key(),word)) {
+	wordinfo = pptr->check(linf,word,ci,gi);
 	if (wordinfo) return wordinfo;
-	pptr = pptr->getNextEQ();
+	pptr = pptr->next_eq;
       } else {
-	pptr = pptr->getNextNE();
+	pptr = pptr->next_ne;
       }
     }
     
@@ -514,8 +513,8 @@ namespace aspeller {
 
 
 // check word for suffixes
-  BasicWordInfo AffixMgr::suffix_check (LookupInfo linf,
-					const char * word, int len, 
+  BasicWordInfo AffixMgr::suffix_check (LookupInfo linf, ParmString word, 
+                                        CheckInfo & ci, GuessInfo * gi,
 					int sfxopts, AffEntry * ppfx) const
   {
     BasicWordInfo wordinfo;
@@ -523,9 +522,9 @@ namespace aspeller {
     // first handle the special case of 0 length suffixes
     SfxEntry * se = (SfxEntry *) sStart[0];
     while (se) {
-      wordinfo = se->check(linf, word,len, sfxopts, ppfx);
+      wordinfo = se->check(linf, word, ci, gi, sfxopts, ppfx);
       if (wordinfo) return wordinfo;
-      se = se->getNext();
+      se = se->next;
     }
   
     // now handle the general case
@@ -534,15 +533,15 @@ namespace aspeller {
     SfxEntry * sptr = (SfxEntry *) sStart[sp];
 
     while (sptr) {
-      if (isSubset(sptr->getKey(),tmpword)) {
-	wordinfo = sptr->check(linf, word,len, sfxopts, ppfx);
+      if (isSubset(sptr->key(),tmpword)) {
+	wordinfo = sptr->check(linf, word, ci, gi, sfxopts, ppfx);
 	if (wordinfo) {
 	  free(tmpword);
 	  return wordinfo;
 	}
-	sptr = sptr->getNextEQ();
+	sptr = sptr->next_eq;
       } else {
-	sptr = sptr->getNextNE();
+	sptr = sptr->next_ne;
       }
     }
     
@@ -555,21 +554,22 @@ namespace aspeller {
 
 
 // check if word with affixes is correctly spelled
-  BasicWordInfo AffixMgr::affix_check(LookupInfo linf, const char * word, int len) const
+  BasicWordInfo AffixMgr::affix_check(LookupInfo linf, ParmString word, 
+                                      CheckInfo & ci, GuessInfo * gi) const
   {
     BasicWordInfo wordinfo;
 
     // check all prefixes (also crossed with suffixes if allowed) 
-    wordinfo = prefix_check(linf, word, len);
+    wordinfo = prefix_check(linf, word, ci, gi);
     if (wordinfo) return wordinfo;
 
     // if still not found check all suffixes
-    wordinfo = suffix_check(linf, word, len, 0, NULL);
+    wordinfo = suffix_check(linf, word, ci, gi, 0, NULL);
     return wordinfo;
   }
 
 int AffixMgr::expand_rootword(struct guessword * wlst, int maxn, 
-                       const char * ts, int wl, const char * ap, int al) const
+                              const char * ts, int wl, const char * ap, int al) const
 {
 
     int nh=0;
@@ -591,13 +591,13 @@ int AffixMgr::expand_rootword(struct guessword * wlst, int maxn,
          if (newword) {
            if (nh < maxn) {
 	      wlst[nh].word = newword;
-              wlst[nh].allow = sptr->allowCross();
+              wlst[nh].allow = sptr->allow_cross();
               nh++;
 	   } else {
 	      free(newword);
            }
 	 }
-         sptr = (SfxEntry *)sptr ->getFlgNxt();
+         sptr = (SfxEntry *)sptr ->flag_next;
        }
     }
 
@@ -610,20 +610,20 @@ int AffixMgr::expand_rootword(struct guessword * wlst, int maxn,
              unsigned char c = (unsigned char) ap[k];
              PfxEntry * cptr = (PfxEntry *) pFlag[c];
              while (cptr) {
-                if (cptr->allowCross()) {
+                if (cptr->allow_cross()) {
 	            int l1 = strlen(wlst[j].word);
 	            char * newword = cptr->add(wlst[j].word, l1);
                     if (newword) {
 		       if (nh < maxn) {
 	                  wlst[nh].word = newword;
-                          wlst[nh].allow = cptr->allowCross();
+                          wlst[nh].allow = cptr->allow_cross();
                           nh++;
 		       } else {
 			  free(newword);
                        }
 	            }
                 }
-                cptr = (PfxEntry *)cptr ->getFlgNxt();
+                cptr = (PfxEntry *)cptr->flag_next;
              }
 	  }
        }
@@ -638,13 +638,13 @@ int AffixMgr::expand_rootword(struct guessword * wlst, int maxn,
          if (newword) {
 	     if (nh < maxn) {
 	        wlst[nh].word = newword;
-                wlst[nh].allow = ptr->allowCross();
+                wlst[nh].allow = ptr->allow_cross();
                 nh++;
              } else {
 	        free(newword);
 	     } 
 	 }
-         ptr = (PfxEntry *)ptr ->getFlgNxt();
+         ptr = (PfxEntry *)ptr ->flag_next;
        }
     }
 

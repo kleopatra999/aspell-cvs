@@ -28,6 +28,7 @@
 
 namespace acommon {
   class Config;
+  struct CheckInfo;
 }
 
 namespace aspeller {
@@ -55,6 +56,8 @@ namespace aspeller {
 //   };
 
   class SpellerImpl;
+  typedef acommon::CheckInfo CheckInfo;
+  struct GuessInfo;
 
   struct LookupInfo {
     SpellerImpl * sp;
@@ -64,7 +67,7 @@ namespace aspeller {
 
   class AffEntry
   {
-  protected:
+  public:
     char *       appnd;
     char *       strip;
     short        appndl;
@@ -96,9 +99,9 @@ namespace aspeller {
 
     PosibErr<void> setup(ParmString affpath);
 
-    BasicWordInfo       affix_check(LookupInfo, const char * word, int len) const;
-    BasicWordInfo       prefix_check(LookupInfo, const char * word, int len) const;
-    BasicWordInfo       suffix_check(LookupInfo, const char * word, int len, 
+    BasicWordInfo       affix_check(LookupInfo, ParmString, CheckInfo &, GuessInfo *) const;
+    BasicWordInfo       prefix_check(LookupInfo, ParmString, CheckInfo &, GuessInfo *) const;
+    BasicWordInfo       suffix_check(LookupInfo, ParmString, CheckInfo &, GuessInfo *,
 				     int sfxopts, AffEntry* ppfx) const;
     int                 expand_rootword(struct guessword * wlst, int maxn,
                                         const char * ts, int wl, const char * ap, int al) const;

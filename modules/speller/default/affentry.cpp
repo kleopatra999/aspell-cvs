@@ -46,8 +46,8 @@ PfxEntry::PfxEntry(AffixMgr* pmgr, affentry* dp)
   // then copy over all of the conditions
   memcpy(&conds[0],&dp->conds[0],SETSIZE*sizeof(conds[0]));
   next = NULL;
-  nextne = NULL;
-  nexteq = NULL;
+  next_ne = NULL;
+  next_eq = NULL;
 }
 
 
@@ -90,8 +90,8 @@ char * PfxEntry::add(const char * word, int len)
 }
 
 // check if this prefix entry matches 
-BasicWordInfo PfxEntry::check(LookupInfo linf,
-			      const char * word, int len)
+BasicWordInfo PfxEntry::check(LookupInfo linf, ParmString word,
+                              CheckInfo & ci, GuessInfo * gi) const
 {
     int			cond;	// condition number being examined
     int	                tmpl;   // length of tmpword
@@ -105,7 +105,7 @@ BasicWordInfo PfxEntry::check(LookupInfo linf,
     // and if there are enough chars in root word and added back strip chars
     // to meet the number of characters conditions, then test it
 
-     tmpl = len - appndl;
+     tmpl = word.size() - appndl;
 
      if ((tmpl > 0) &&  (tmpl + stripl >= numconds)) {
 
@@ -129,19 +129,44 @@ BasicWordInfo PfxEntry::check(LookupInfo linf,
             // root word in the dictionary
 
 	    if (cond >= numconds) {
-		tmpl += stripl;
-		if ((wordinfo = linf.lookup(tmpword))) {
-		  if (TESTAFF(wordinfo.affixes, achar)) return wordinfo;
-		}
-
-		// prefix matched but no root word was found 
-                // if XPRODUCT is allowed, try again but now 
-                // ross checked combined with a suffix
-
-		if (xpflg & XPRODUCT) {
-		  wordinfo = pmyMgr->suffix_check(linf, tmpword, tmpl, XPRODUCT, (AffEntry *)this);
-		  if (wordinfo) return wordinfo;
-		}
+              CheckInfo * lci = 0;
+              tmpl += stripl;
+              if ((wordinfo = linf.lookup(tmpword))) {
+                if (TESTAFF(wordinfo.affixes, achar))
+                  lci = &ci;
+                else if (gi)
+                  lci = &gi->add();
+              }
+              
+              // prefix matched but no root word was found 
+              // if XPRODUCT is allowed, try again but now 
+              // ross checked combined with a suffix
+              
+              if (gi)
+                lci = gi->last;
+              
+              if (!wordinfo && (xpflg & XPRODUCT)) {
+                wordinfo = pmyMgr->suffix_check(linf, ParmString(tmpword, tmpl), 
+                                                ci, gi,
+                                                XPRODUCT, (AffEntry *)this);
+                if (wordinfo)
+                  lci = &ci;
+                else if (gi->last != lci) {
+                  while (lci = const_cast<CheckInfo *>(lci->next), lci) {
+                    lci->pre_flag = achar;
+                    lci->pre_add = appnd;
+                    lci->pre_strip = strip;
+                  }
+                }
+              }
+              
+              if (lci) {
+                lci->root = wordinfo.word;
+                lci->pre_flag = achar;
+                lci->pre_add = appnd;
+                lci->pre_strip = strip;
+              }
+              if (lci ==&ci) return wordinfo;
 	    }
      }
      return BasicWordInfo();
@@ -215,9 +240,9 @@ char * SfxEntry::add(const char * word, int len)
 }
 
 // see if this suffix is present in the word 
-BasicWordInfo SfxEntry::check(LookupInfo linf,
-				const char * word, int len,
-				int optflags, AffEntry* ppfx)
+BasicWordInfo SfxEntry::check(LookupInfo linf, ParmString word,
+                              CheckInfo & ci, GuessInfo * gi,
+                              int optflags, AffEntry* ppfx)
 {
     int	                tmpl;		 // length of tmpword 
     int			cond;		 // condition beng examined
@@ -238,7 +263,7 @@ BasicWordInfo SfxEntry::check(LookupInfo linf,
     // and if there are enough chars in root word and added back strip chars
     // to meet the number of characters conditions, then test it
 
-    tmpl = len - appndl;
+    tmpl = word.size() - appndl;
 
     if ((tmpl > 0)  &&  (tmpl + stripl >= numconds)) {
 
@@ -267,15 +292,25 @@ BasicWordInfo SfxEntry::check(LookupInfo linf,
             // root word in the dictionary
 
 	    if (cond < 0) {
+              CheckInfo * lci = 0;
+              tmpl += stripl;
               if ((wordinfo = linf.lookup(tmpword))) {
-                CERR << "FOUND " << wordinfo.word
-                     << "-" << strip
-                     << "+" << appnd << "\n";
                 if (TESTAFF(wordinfo.affixes, achar) && 
-                    ((optflags & XPRODUCT) == 0 || 
-                     TESTAFF(wordinfo.affixes, ep->getFlag()))) 
-                  return wordinfo;
-              }  
+			 ((optflags & XPRODUCT) == 0 || 
+			  TESTAFF(wordinfo.affixes, ep->achar)))
+                  lci = &ci;
+                else if (gi)
+                  lci = &gi->add();
+              }
+              
+              if (lci) {
+                lci->root = wordinfo.word;
+                lci->suf_flag = achar;
+                lci->suf_add = appnd;
+                lci->suf_strip = strip;
+              }
+              if (lci == &ci) return wordinfo;
+              
 	    }
     }
     return BasicWordInfo();
