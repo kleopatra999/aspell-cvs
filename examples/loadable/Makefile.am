@@ -8,19 +8,17 @@ SUFFIXES = .opt
 
 #filter_PROGRAMS = libcontext-filter.la
 filter_LTLIBRARIES = libcontext-filter.la
-filter_SCRIPTS=make_opt.awk
-EXTRA_DIST = example_option_filter.opt make_opt.awk
+filter_SCRIPTS= mk-flt-opt.pl
+EXTRA_DIST = example_option_filter.opt mk-flt-opt.pl
 
-libcontext_filter_la_SOURCES =	ccpp-context.h ccpp-context.cpp\
+libcontext_filter_la_SOURCES =	ccpp-context.hpp ccpp-context.cpp\
 				loadable-filter-API.hpp
 libcontext_filter_la_LIBADD = ${top_builddir}/lib/libaspell.la
 
 
 optdir=${pkgdatadir}
 
-context-filter.opt : ccpp-context.hpp ccpp-context.cpp
-	$(AWK) -f $(srcdir)/make_opt.awk $^
+context-filter.opt : ${libcontext_filter_la_SOURCES}
+	perl mk-flt-opt.pl $^
 
-opt_DATA=	context-filter.opt
-
-
+opt_DATA= context-filter.opt
