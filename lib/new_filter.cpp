@@ -31,6 +31,7 @@
 #ifdef HAVE_LIBDL
 #include <dlfcn.h>
 #endif
+#define DEBUG {fprintf(stderr,"File: %s(%i)\n",__FILE__,__LINE__);}
 
 namespace acommon
 {
@@ -172,12 +173,28 @@ namespace acommon
   class FilterHandle {
   public:
     FilterHandle() : handle(0) {}
-    ~FilterHandle() {if (handle) dlclose(handle);}
-    void * release() {void * tmp = handle; handle = 0; return handle;}
-    operator bool() {return handle != NULL;}
-    void * val() {return handle;}
-    FilterHandle & operator= (void * h) 
-      {assert(handle == NULL); handle=h; return *this;}
+    ~FilterHandle() {
+      if (handle) {
+        dlclose(handle);
+      }
+    }
+    void * release() {
+      void * tmp = handle;
+      handle = 0;
+      return handle;
+    }
+    operator bool() {
+      return handle != NULL;
+    }
+    void * val() {
+      return handle;
+    }
+//The direct interface usually when new_filter ... functions are coded
+//manually
+    FilterHandle & operator= (void * h) {
+      assert(handle == NULL);
+      handle=h; return *this;
+    }
   private:
     void * handle;
   };
@@ -201,7 +218,7 @@ namespace acommon
 
     while ((filter_name = els.next()) != 0) 
     {
-      filterhandle[0]=filterhandle[1]=filterhandle[2]=NULL;
+      filterhandle[0]=filterhandle[1]=filterhandle[2]=(void*)NULL;
       addcount=0;
       fprintf(stderr, "Loading %s ... \n", filter_name);
       FilterEntry * f = find_individual_filter(filter_name);
@@ -234,9 +251,9 @@ namespace acommon
         dynamicfilter.decoder=NULL;
         dynamicfilter.encoder=NULL;
         dynamicfilter.filter=NULL;
-        if (!(((void*)dynamicfilter.decoder)=dlsym(filterhandle[0].val(),"new_decoder")) &&
-	    !(((void*)dynamicfilter.encoder)=dlsym(filterhandle[1].val(),"new_encoder")) &&
-	    !(((void*)dynamicfilter.filter)=dlsym(filterhandle[2].val(),"new_filter")) ) 
+        if (!(((void*)dynamicfilter.decoder=dlsym(filterhandle[0].val(),"new_decoder"))) &&
+	    !(((void*)dynamicfilter.encoder=dlsym(filterhandle[1].val(),"new_encoder"))) &&
+	    !(((void*)dynamicfilter.filter=dlsym(filterhandle[2].val(),"new_filter"))) )
 	{
           return make_err(empty_filter,"filter setup",filter_name);
         }
@@ -628,10 +645,17 @@ namespace acommon
               begin[optsize-1].type=KeyInfoBool;
               continue;
             }
-            if( ( optionkey.no_case() == "def" ) ||
-                ( optionkey.no_case() == "default" ) ){
+            if ((optionkey.no_case() == "def" ) ||
+                (optionkey.no_case() == "default" ) ){
 //Type detection ???
-              if( ( ((char*)begin[optsize-1].def)=strdup(optionkeyvalue.c_str()) ) == NULL){
+              if (begin[optsize-1].type == KeyInfoList) {
+                if (begin[optsize-1].def != NULL) {
+                  optionkeyvalue+=",";
+                  optionkeyvalue+=begin[optsize-1].def;
+                  free((void*)begin[optsize-1].def);
+                }
+              }  
+              if ((((char*)begin[optsize-1].def)=strdup(optionkeyvalue.c_str()) ) == NULL){
                 if( begin != NULL ){
                   release_options(begin,begin+optsize);
                   free(begin);
