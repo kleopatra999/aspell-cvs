@@ -2,7 +2,8 @@ export SED=@SED@
 
 AUTOMAKE_OPTIONS = foreign
 
-SUBDIRS = m4 auto common modules lib examples prog data scripts interfaces manual po
+SUBDIRS = m4 auto common modules lib examples runtime-modules prog data\
+          scripts interfaces manual po
 
 EXTRA_DIST = config.rpath  README filter-readme.txt
 

@@ -10,11 +10,10 @@ libaspell_la_SOURCES =\
   error-c.cpp           mutable_container-c.cpp  string_pair_enumeration-c.cpp\
   find_speller.cpp      new_checker.cpp new_filter.cpp new_config.cpp\
   string_enumeration-c.cpp   word_list-c.cpp \
-  filter-c.cpp          document_checker-c.cpp
+  filter-c.cpp          document_checker-c.cpp   url.cpp
 
 libaspell_la_LIBADD = ${top_builddir}/common/libaspell-common.la \
                       ${top_builddir}/modules/speller/default/libaspell-speller-default.la \
-                      ${top_builddir}/modules/filter/libaspell-filter-standard.la \
                       ${top_builddir}/modules/tokenizer/libaspell-tokenizer-standard.la
 
 libaspell_la_LDFLAGS = ${extra_ldflags} -version-info 15:2:0

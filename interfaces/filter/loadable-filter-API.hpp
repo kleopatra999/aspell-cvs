@@ -81,24 +81,30 @@
 #ifndef ENCODER
 #define ENCODER(name,save,class_name) \
 public: const char * save(void) { \
-    return name;\
-  }
+    return name"-encoder";\
+  }\
+private:
 #endif
 
 #ifndef FILTER
 #define FILTER(name,save,class_name) \
 public: const char * save(void) { \
-    return name;\
-  }
+    return name"-filter";\
+  }\
+private:
 #endif
 
 #ifndef DECODER
 #define DECODER(name,save,class_name) \
 public: const char * save(void) { \
-    return name;\
-  }
+    return name"-decoder";\
+  }\
+private:
 #endif
 
+#ifndef ALIAS
+#define ALIAS(alias_name,filter)
+#endif
 /* ACTIVATE_ENCODER, ACTIVATE_FILTER, ACTIVATE_DECODER:
  *          Before a encoding, decoding or processing filter can be
  *          loaded by aspell filter interface it has to be activated.

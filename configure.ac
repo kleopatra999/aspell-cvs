@@ -348,8 +348,8 @@ AC_TRY_COMPILE(
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 AC_CONFIG_FILES([Makefile common/Makefile lib/Makefile data/Makefile m4/Makefile 
-                 auto/Makefile modules/Makefile 
-                 modules/filter/Makefile modules/tokenizer/Makefile
+                 auto/Makefile modules/Makefile runtime-modules/Makefile
+                 runtime-modules/filter/Makefile modules/tokenizer/Makefile
                  modules/speller/Makefile modules/speller/default/Makefile
 		 interfaces/Makefile interfaces/cc/Makefile interfaces/filter/Makefile
 		 scripts/Makefile examples/Makefile examples/loadable/Makefile

@@ -92,12 +92,29 @@ while ($sourcefile = shift) {
       $line="";
       next;
     }  
+    if ($line=~/^[ \t]*ALIAS[ \t]*\(([^\(\)]*)\)/) {
+      $argumentstring=$1;
+      ( scalar (@argumentlist = split /[ \t]*,[ \t]*/,$argumentstring) == 2) ||
+        (die "$sourcefile($.): Wrong number of arguments for".
+             " ALIAS macro\n");
+              destring($argumentlist[0],0)."\n";
+      ( $filter=get_filter(destring($argumentlist[1],0))) ||
+        (die "$sourcefile($.): Filter $argumentlist[1] unknown.\n");
+      ( $alias=get_filter(destring($argumentlist[0],0))) &&
+        (die "$sourcefile($.): name $argumentlist[0] for Alias allready in use.\n");
+      ( $alias_name = destring($argumentlist[0],0) ) ||
+        (die "$sourcefile($.): $arugmentlist[0] invalid alias name\n");
+      $filter_tree{$alias_name}=$filter;
+      $line="";
+      next;
+    }
     $line="";
   }
   close SOURCEFILE;
 }      
 while ($dotest && (($filter_name,$filter)=each %filter_tree)) {
-  printf STDERR "Filter: $filter_name \n";
+  printf STDERR "Filter: $filter_name ".
+         (($filter_name ne ${$filter}{"NAME"})?"(ALIAS)":"")."\n";
   @filter_keys=();
   @havekeys=keys %{$filter};
   @filter_keys=sort_keys(\@havekeys,"NAME","ASPELL_VERSION","DESCRIPTION",
@@ -148,6 +165,16 @@ printf STDERR "Accept filter listing (yes|no): ";
   (die "User abbort ...\n"); 
 scalar keys %filter_tree;
 while (($filter_name,$filter)=each %filter_tree) {
+#FIXME this line only works on systems with symlinks
+  unless ($filter_name eq ${$filter}{"NAME"}) {
+    printf STDERR "Generating $filter_name alias name for ".
+                   ${$filter}{"NAME"}." filter\n";
+    open ALIASFILE,">${filter_name}.flt" || next
+printf STDERR "add-filter ".${$filter}{"NAME"}."\n";
+    printf ALIASFILE "add-filter ".${$filter}{"NAME"}."\n";
+    close ALIASFILE; 
+    next;
+  }
   printf STDERR "Generating option file for $filter_name filter... \n";
   ( open FILTEROPTIONS,">${filter_name}-filter.opt") ||
     (die "Can not open ${filter_name}-filter.opt for writing\n");

@@ -273,7 +273,6 @@ namespace acommon {
 			     const ConfigModule * i, 
 			     const ConfigModule * end) 
   {
-    ParmString newkey=strchr(key,'-')+1;
 
     while (i != end) {
       if (strcmp(key, i->name) == 0){ 
@@ -310,31 +309,31 @@ namespace acommon {
   
     const char * h = strchr(localkey, '-');
 
-    if ( ( h != 0 ) &&
-         ( strncmp(key,"filter",h-localkey) == 0 ) ){
+    if ((h != 0) &&
+        (strncmp(key,"filter",h-localkey) == 0)) {
       localkey=h+1;
       h=strchr(localkey,'-');
     }
 
-    if ( h == 0 ) {
+    if (h == 0) {
       return Ret().prim_err(unknown_key, key);
     }
 
     const ConfigModule * j = kmi.modules_end;
-    while ( ( h != NULL ) && ( j == kmi.modules_end ) ) {
+    while ((h!= NULL) && (j == kmi.modules_end)) {
       String k(localkey, h-localkey);
       j = acommon::find(k, kmi.modules_begin,
 			kmi.modules_end);
-      if ( j == kmi.modules_end ){
+      if (j == kmi.modules_end) {
         h=strchr(h+1, '-');
       }
     }
-    if ( j == kmi.modules_end ){
+    if (j == kmi.modules_end) {
       return Ret().prim_err(unknown_key, key);
     }
   
     i = acommon::find(localkey, j->begin, j->end);
-    if ( i != j->end ) return Ret(i);
+    if (i != j->end) return Ret(i);
 
     i = acommon::find(h+1, j->begin, j->end);
     if (i != j->end) return Ret(i);
@@ -346,12 +345,12 @@ namespace acommon {
   {
     if (lang == 0) return false;
     const char * i = lang;
-    if (! (asc_islower(i[0]) && asc_islower(i[1])) ) return false;
+    if (!(asc_islower(i[0]) && asc_islower(i[1]))) return false;
     final_str.assign(i, 2);
     i += 2;
     if (! (i[0] == '_' || i[0] == '-')) return true;
     i += 1;
-    if (! (asc_isupper(i[0]) && asc_isupper(i[1])) ) return true;
+    if (!(asc_isupper(i[0]) && asc_isupper(i[1]))) return true;
     final_str += '_';
     final_str.append(i, 2);
     return true;
@@ -539,10 +538,11 @@ namespace acommon {
     const char * key;
     const char * i = strchr(k, '-');
     int p = (i == 0 ? -1 : i - k);
-    if ((p == 3 && (strncmp(k, "add",p) == 0 
-		    || strncmp(k, "rem",p) == 0))
-	|| (p == 4 && strncmp(k, "dont",p) == 0))
-      {
+    if (((p == 3) && 
+         ((strncmp(k, "add",p) == 0) ||
+          (strncmp(k, "rem",p) == 0))) ||
+        ((p == 4) &&
+         (strncmp(k, "dont",p) == 0))) {
 	key = k + p + 1;
 	if (strncmp(key, "all-", 4) == 0) {
 	  key = key + 4;
@@ -575,7 +575,9 @@ namespace acommon {
     
     case KeyInfoBool:{
     
-      if (p == 4 || (p == 0 && strcmp(value,"false") == 0)) {
+      if ((p == 4) || 
+          ((p == 0) &&
+           (strcmp(value,"false") == 0))) {
 
 	data_.replace(alt_flt_key.c_str(), "false");
 	notify_all(ki, false, item_updated);
@@ -585,7 +587,7 @@ namespace acommon {
 
 	return make_err(unknown_key,  k);
 
-      } else if (value[0] == '\0' || strcmp(value,"true") == 0) {
+      } else if ((value[0] == '\0') || (strcmp(value,"true") == 0)) {
 
 	data_.replace(alt_flt_key.c_str(), "true");
 	notify_all(ki, true, item_updated);
@@ -786,7 +788,7 @@ namespace acommon {
 	return 0;
       }
 
-      if (i == m->end) {
+      while (i == m->end) {
 	++m;
 	if (m == cd->kmi.modules_end) return 0;
 	else i = m->begin;
@@ -926,29 +928,29 @@ namespace acommon {
     String this_value;
     String other_value;
     while ( (k = els->next()) != 0) {
-      if( k->type == KeyInfoDescript ){
+      if (k->type == KeyInfoDescript) {
         continue;
       }
-      if (diff_name && k->otherdata[0] == 'p'
-	  && strncmp(k->name, other.name_.c_str(), other.name_.size())
-	  && k->name[other.name_.size()] == '_'){
+      if (diff_name && k->otherdata[0] == 'p' &&
+          strncmp(k->name, other.name_.c_str(), other.name_.size()) &&
+          (k->name[other.name_.size()] == '_')) {
         expanded_name="";
-        if( ( strlen(els->active_module_name()) > strlen(k->name) ) ||
-            ( strlen(els->active_module_name()) &&
-              strncmp(k->name,els->active_module_name(),
-                     strlen(els->active_module_name())) ) ){
+        if ((strlen(els->active_module_name()) > strlen(k->name)) ||
+            (strlen(els->active_module_name()) &&
+             strncmp(k->name,els->active_module_name(),
+                     strlen(els->active_module_name())))) {
           expanded_name+=els->active_module_name();
           expanded_name+="-";
         }
         expanded_name+= k->name + other.name_.size();
 	other_name = expanded_name.c_str();
       }
-      else{
+      else {
         expanded_name="";
-        if( ( strlen(els->active_module_name()) > strlen(k->name) ) ||
-            ( strlen(els->active_module_name()) &&
-              strncmp(k->name,els->active_module_name(),
-                      strlen(els->active_module_name())) ) ){
+        if ((strlen(els->active_module_name()) > strlen(k->name)) ||
+            (strlen(els->active_module_name()) &&
+             strncmp(k->name,els->active_module_name(),
+                     strlen(els->active_module_name())))) {
           expanded_name+=els->active_module_name();
           expanded_name+="-";
         }
@@ -956,17 +958,17 @@ namespace acommon {
 	other_name = expanded_name.c_str();
       }
       other_k = other.keyinfo(other_name);
-      if( other_k->type == KeyInfoDescript ){
+      if (other_k->type == KeyInfoDescript) {
         continue;
       }
       expanded_alt_name="filter-";
       expanded_alt_name+=other_name;
       PosibErr< const KeyInfo * > pe(other.keyinfo(expanded_alt_name.c_str()));
-      if( !pe.has_err() &&
-          ( pe.data == other_k ) ){
+      if (!pe.has_err() &&
+          (pe.data == other_k)) {
         other_name=expanded_alt_name.c_str();
       }
-      else{
+      else {
         pe.ignore_err();
       }
       if (diff_name && other_k && other_k->otherdata[0] == 'r') continue;

@@ -5,6 +5,7 @@
 // it at http://www.gnu.org/.
 
 #include "indiv_filter.hpp"
+#include "key_info.hpp"
 
 namespace acommon {
 
@@ -75,5 +76,7 @@ namespace acommon {
     return new UrlFilter();
   }
 
-
+  static const KeyInfo url_options[] = {};
+  const KeyInfo * url_options_begin = url_options;
+  const KeyInfo * url_options_end = url_options;
 }

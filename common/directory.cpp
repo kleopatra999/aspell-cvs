@@ -70,15 +70,15 @@ namespace acommon{
   
   
   bool Directory::open(void){
-    if( browsing ){
+    if (browsing) {
   //+1+ Directory is allready opened just call rewind to restart :)
       return rewind();
     }
   #ifndef _WIN32
-    if( ( browsing=opendir(name.c_str()) ) == NULL ){
+    if ((browsing=opendir(name.c_str())) == NULL) {
   #else
   // replace by win(dos) pendant of opendir
-    if( !true ){
+    if (!true) {
   #endif
   //+2+ something went wrong during opening the directory
       return false;
@@ -102,17 +102,17 @@ namespace acommon{
   //FIXME win(dos) again
   #endif
   
-    if( ( content == NULL ) || ( browsing == NULL ) ){
+    if ((content == NULL) || (browsing == NULL)) {
       return false;
     }
-    if( localname[localname.length()-1] != '/' ){
+    if (localname[localname.length()-1] != '/') {
       localname+="/";
     }
   #ifndef _WIN32
-    if( ( directorycontent = readdir( browsing ) ) != NULL ){
+    if ((directorycontent = readdir(browsing)) != NULL) {
   #else
   //FIXME win(dos) again 
-    if( false ){
+    if (false) {
   #endif
   #ifndef SYSTEM_HAS_TELLDIR_SEEKDIR
       contentcounter++;
@@ -120,10 +120,10 @@ namespace acommon{
       localname+=directorycontent->d_name;
       processtype=0;
   #ifndef _WIN32
-      if( stat(localname.c_str(),&filedescription) < 0 ){
+      if (stat(localname.c_str(),&filedescription) < 0) {
   #else
   //FIXME win(dos) again
-      if( false ){
+      if (false) {
   #endif
   // some one might install an warning here that content couldn't be stat'ed
   // right now it is simply ignored
@@ -131,23 +131,23 @@ namespace acommon{
         return true;
       }
   #ifndef _WIN32
-      if( S_ISREG(filedescription.st_mode) ){
+      if (S_ISREG(filedescription.st_mode)) {
   #else
   //FIXME win(dos) again
-      if( false ){
+      if (false) {
   #endif
         processtype|=ORDINARY;    
       }
   #ifndef _WIN32
-      if( S_ISREG(filedescription.st_mode) ){
+      if (S_ISREG(filedescription.st_mode)) {
   #else
   //FIXME win(dos) again
-      if( false ){
+      if (false) {
   #endif
         processtype|=DIRECTORY;    
       }
   #ifndef _WIN32
-      if( S_ISREG(filedescription.st_mode)){
+      if (S_ISREG(filedescription.st_mode)) {
   #else
   //FIXME win(dos) again
       if( false ){
@@ -155,18 +155,18 @@ namespace acommon{
         processtype|=LINK;    
       }
   #ifndef _WIN32
-      if( S_ISREG(filedescription.st_mode) ){
+      if (S_ISREG(filedescription.st_mode)) {
   #else
   //FIXME win(dos) again
-      if( false){
+      if (false) {
   #endif
         processtype|=FIFO;    
       }
   #ifndef _WIN32
-      if( S_ISREG(filedescription.st_mode) ){
+      if (S_ISREG(filedescription.st_mode)) {
   #else
   //win(dos) again
-      if( false ){
+      if (false) {
   #endif
         processtype|=DEVICE;    
       }
@@ -178,9 +178,9 @@ namespace acommon{
   }
   
     
-  void Directory::hold(void){
+  void Directory::hold(void) {
     int localcount=contentcounter;
-    if( !browsing ){
+    if (!browsing) {
       return;
     }
   #ifndef _WIN32
@@ -195,18 +195,18 @@ namespace acommon{
   }
   
   
-  bool Directory::resume(void){
+  bool Directory::resume(void) {
     int localcounter=contentcounter;
-    if(!open()){
+    if (!open()) {
       return false;
     }
   #ifndef _WIN32
   #ifdef SYSTEM_HAS_TELLDIR_SEEKDIR
     seekdir(browsing,contentcounter);
   #else
-    while( localcounter-- && readdir(browsing) ){
+    while (localcounter-- && readdir(browsing)) {
     } 
-    if( ++localcounter ){
+    if (++localcounter) {
       return false;
     }
   #endif 
@@ -217,8 +217,8 @@ namespace acommon{
   }
   
   
-  bool Directory::rewind(void){
-    if( !browsing ){
+  bool Directory::rewind(void) {
+    if (!browsing) {
       return false;
     }
   #ifndef _WIN32
@@ -230,11 +230,11 @@ namespace acommon{
   }
   
   
-  bool Directory::close(void){
+  bool Directory::close(void) {
   #ifndef _WIN32
-    if( browsing && ( closedir(browsing) < 0 ) ){
+    if (browsing && (closedir(browsing) < 0)) {
   #else
-    if( browsing && !false ){
+    if (browsing && !false) {
   #endif
       browsing=NULL;
       return false;
@@ -245,17 +245,11 @@ namespace acommon{
   }
   
   
-  Directory::~Directory(void){
+  Directory::~Directory(void) {
     close();
   }
   
   
-  /*  class PathBrowser {
-      vector<Directory*> tobrowse;
-      vector<Directory> browsebase;
-      int nexttobrowse;
-      int nextbase;
-    public:*/
   PathBrowser::PathBrowser(void)
   : browsebase(),
     unloop()
@@ -263,14 +257,14 @@ namespace acommon{
     nextbase=0;
   }
   
-  void PathBrowser::reset(void){
+  void PathBrowser::reset(void) {
   
     browsebase.resize(0);
     nextbase=0;
     unloop.resize(0);
   }
   
-  void PathBrowser::operator=(const PathBrowser & brother){
+  void PathBrowser::operator=(const PathBrowser & brother) {
   
     reset();
     browsebase=brother.browsebase;
@@ -278,7 +272,7 @@ namespace acommon{
     unloop=brother.unloop;
   }
     
-  void PathBrowser::set_base_path(const String & pathlist){
+  void PathBrowser::set_base_path(const String & pathlist) {
     int actualpath=0;
     String path;
     String unprocessed=pathlist;
@@ -292,17 +286,17 @@ namespace acommon{
 #endif
   
     reset();
-    while( !unprocessed.empty() ){
-      if( ( actualpath = unprocessed.find(pathseperator) ) >= 0 ){
+    while (!unprocessed.empty()) {
+      if ((actualpath=unprocessed.find(pathseperator)) >= 0) {
          (path=unprocessed).erase(actualpath,unprocessed.length()-actualpath);
         unprocessed.erase(0,actualpath+1);
       }
-      else{
+      else {
         path=unprocessed;
         unprocessed.clear();
       }
 #ifndef _WIN32
-      if( ( resolvedlength=readlink(path.c_str(),&resolvelink[0],1024) ) > 0 ){
+      if ((resolvedlength=readlink(path.c_str(),&resolvelink[0],1024)) > 0) {
         resolvelink[resolvedlength]='\0';
         path=&resolvelink[0];
       }
@@ -314,7 +308,7 @@ namespace acommon{
     }
   }    
 
-  void PathBrowser::set_base_path(const StringList & pathlist){
+  void PathBrowser::set_base_path(const StringList & pathlist) {
     int actualpath=0;
     StringListEnumeration listofpathes=pathlist.elements_obj();
     String unprocessed;
@@ -330,10 +324,10 @@ namespace acommon{
 #endif
 
     reset();
-    while( ( un_processed=listofpathes.next() ) != NULL ){
+    while ((un_processed=listofpathes.next()) != NULL) {
       unprocessed=un_processed;
-      while( !unprocessed.empty() ){
-        if( ( actualpath=unprocessed.find(pathseperator) ) >= 0 ){
+      while (!unprocessed.empty()) {
+        if ((actualpath=unprocessed.find(pathseperator)) >= 0) {
            (path=unprocessed).erase(actualpath,unprocessed.length()-actualpath);
           unprocessed.erase(0,actualpath+1);
         }
@@ -341,11 +335,11 @@ namespace acommon{
           path=unprocessed;
           unprocessed.clear();
         }
-        if( path.empty() ){
+        if (path.empty()) {
           continue;
         }
 #ifndef _WIN32
-        if( ( resolvedlength=readlink(path.c_str(),&resolvelink[0],1024) ) > 0 ){
+        if ((resolvedlength=readlink(path.c_str(),&resolvelink[0],1024)) > 0) {
           resolvelink[resolvedlength]='\0';
           path=&resolvelink[0];
         }
@@ -359,7 +353,7 @@ namespace acommon{
   }
   
       
-  bool PathBrowser::expand_filename(String & filename, bool cont){
+  bool PathBrowser::expand_filename(String & filename, bool cont) {
     String content;
     Directory * actual;
     int type=0;
@@ -368,23 +362,23 @@ namespace acommon{
 #else
 #endif
   
-    if( !cont ){
+    if (!cont) {
       nextbase=0;
     }
 #ifndef _WIN32
-    if( filename.length() &&
-       ( filename[0]=='/') &&
-       ( lstat(filename.c_str(),&filedescription) > 0 ) ){
+    if (filename.length() &&
+        (filename[0]=='/') &&
+        (lstat(filename.c_str(),&filedescription) > 0)) {
       return true;
     }
 #else
 //FIXME win(dos) again
 #endif
-    for( ; nextbase < browsebase.size() ; nextbase++ ){
+    for ( ;nextbase < browsebase.size();nextbase++) {
       actual=&browsebase[nextbase];
-      if( actual->resume() ){
-        while( actual->read(type,&content) ){
-          if( (unsigned)content.rfind(filename) == content.length()-filename.length() ){
+      if (actual->resume()) {
+        while (actual->read(type,&content)) {
+          if ((unsigned)content.rfind(filename) == content.length()-filename.length()) {
             filename=content;
             actual->close();
             return true;
@@ -392,7 +386,7 @@ namespace acommon{
         }
         actual->close();
       }
-      else{
+      else {
         fprintf(stderr,"Can't open\n\t`%s'\n\t\tomitted\n",
                 actual->getname().c_str());
       }
@@ -403,7 +397,7 @@ namespace acommon{
   
   
   bool PathBrowser::expand_file_part(regex_t * expression, String & filename, 
-                        bool restart){
+                                     bool restart) {
     String content;
     Directory * actual;
     int type=0;
@@ -414,28 +408,28 @@ namespace acommon{
 #else
 #endif
   
-    if( restart ){
+    if (restart) {
       nextbase=0;
     }
      
-    for( ; nextbase < browsebase.size() ; nextbase++ ){
+    for ( ;nextbase < browsebase.size();nextbase++) {
       actual=&browsebase[nextbase];
-      if( actual->resume() ){
-        while( actual->read(type,&content) ){
+      if (actual->resume()) {
+        while (actual->read(type,&content)) {
 //FIXME if windows has different library functions for
 //      expanding regular expressions;
           startname=(char*)content.c_str();
-          while( ( new_startname=strchr(startname,'/') ) ){
+          while ((new_startname=strchr(startname,'/'))) {
             startname=new_startname+1;
           }
-          if( ! regexec(expression,startname,0,NULL,0) ){
+          if (!regexec(expression,startname,0,NULL,0)) {
             filename=content; 
             return true;
           }
         }
         actual->close();
       }
-      else{
+      else {
         fprintf(stderr,"Can't open\n\t`%s'\n\t\tomitted\n",
                 actual->getname().c_str());
       }
@@ -445,7 +439,7 @@ namespace acommon{
   }
   
   
-  PathBrowser::~PathBrowser(void){
+  PathBrowser::~PathBrowser(void) {
     reset();
   }
 }

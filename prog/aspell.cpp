@@ -53,6 +53,7 @@ using namespace acommon;
 
 void print_ver();
 void print_help();
+void expand_expression(Config * config);
 void config();
 
 void check(bool interactive);
@@ -385,8 +386,16 @@ void config ()
 {
   StackPtr<Config> config(new_config());
   EXIT_ON_ERR(config->read_in_settings(options));
-
-  if (args.size() == 0){
+  if ((args.size() > 0) &&
+      (args[0] == "+e")) {
+    args.pop_front();
+    if (args.size() == 0) {
+      args.push_front("all");
+    }
+    expand_expression(config);
+    args.pop_front();
+  }
+  if (args.size() == 0) {
     config->write_to_stream(COUT);
   }
   else {
@@ -1264,10 +1273,7 @@ void print_help_line(char abrv, char dont_abrv, const char * name,
   printf("  %-27s %s\n", command.c_str(), gettext (desc));
 }
 
-void print_help () {
-  char * expandedoptionname=NULL;
-  char * tempstring=NULL;
-  size_t expandedsize=0;
+void expand_expression(Config * config){
   StringList filtpath;
   StringList optpath;
   PathBrowser optionpath;
@@ -1280,58 +1286,72 @@ void print_help () {
 //FIXME if Win(dos) is different
   regex_t seekfor;
   
-  if ( args.size() != 0 ){
-    if( args[0] == "all" ){
+  if (args.size() != 0) {
+    if (args[0] == "all") {
       args[0]=".*";
     }
-    options->retrieve_list("filter-path",&filtpath);
-    options->retrieve_list("option-path",&optpath);
+    config->retrieve_list("filter-path",&filtpath);
+    config->retrieve_list("option-path",&optpath);
     filterpath=filtpath;
     optionpath=optpath;
-    if( regcomp(&seekfor,args[0].c_str(),REG_NEWLINE|REG_NOSUB) ){
+    if (regcomp(&seekfor,args[0].c_str(),REG_NEWLINE|REG_NOSUB)) {
       make_err(invalid_expression,"help",args[0]);
       return;
     }
-    while( filterpath.expand_file_part(&seekfor,candidate) ){
-      if( ( (locate_ending=candidate.rfind("-filter.so")) !=
-            candidate.length() - 10 ) ) {
-        if( (locate_ending=candidate.rfind("-filter.flt")) !=
-             candidate.length() - 11 ){
+    while (filterpath.expand_file_part(&seekfor,candidate)) {
+      if (((locate_ending=candidate.rfind("-filter.so")) !=
+           candidate.length() - 10)) {
+        if ((locate_ending=candidate.rfind(".flt")) !=
+            candidate.length() - 4) {
           continue;
         }
         else {
-          candidate.erase(locate_ending,11);
+          candidate.erase(locate_ending,4);
           eliminate_path=0;
-          while ( (hold_eliminator=candidate.find('/',eliminate_path) ) < 
-                candidate.length() ) {
+          while ((hold_eliminator=candidate.find('/',eliminate_path)) < 
+                 candidate.length()) {
             eliminate_path=hold_eliminator+1;
           }
           toload=candidate.erase(0,eliminate_path);
+          if (regexec(&seekfor,toload.c_str(),0,NULL,0)) {
+            continue;
+          }
         }
       }
       else {
         candidate.erase(locate_ending,10);
         eliminate_path=0;
-        while ( (hold_eliminator=candidate.find('/',eliminate_path) ) < 
-                candidate.length() ) {
+        while ((hold_eliminator=candidate.find('/',eliminate_path)) < 
+               candidate.length()) {
           eliminate_path=hold_eliminator+1;
         }
-        if ( candidate.find("lib",eliminate_path) != eliminate_path ) {
+        if (candidate.find("lib",eliminate_path) != eliminate_path) {
           continue;
         }
         candidate.erase(0,eliminate_path);
         candidate.erase(0,3);
         locate_ending=candidate.length();
         toload=candidate;
+        if (regexec(&seekfor,toload.c_str(),0,NULL,0)) {
+          continue;
+        }
         candidate+="-filter.opt";
-        if( !optionpath.expand_filename(candidate) ){
+        if (!optionpath.expand_filename(candidate)) {
           continue;
         }
       }
-      options->replace("add-filter",toload.c_str());
+      config->replace("add-filter",toload.c_str());
     }
     regfree(&seekfor);
   }
+}
+
+void print_help () {
+  char * expandedoptionname=NULL;
+  char * tempstring=NULL;
+  size_t expandedsize=0;
+
+  expand_expression(options);
   printf(_(
     "\n"
     "Aspell %s alpha.  Copyright 2000 by Kevin Atkinson.\n"
@@ -1339,20 +1359,20 @@ void print_help () {
     "Usage: aspell [options] <command>\n"
     "\n"
     "<command> is one of:\n"
-    "  -?|help          display this help message\n"
+    "  -?|help [<expr>] display this help message\n"
+    "                    and help for filters matching <expr>if nstalled\n"
     "  -c|check <file>  to check a file\n"
     "  -a|pipe          \"ispell -a\" compatibility mode\n"
     "  -l|list          produce a list of misspelled words from standard input\n"
-    "  help <filter>    displays help for filter <filter> if installed\n"
-    "  help <regex>     displays help for all filters matching <regex>\n"
-    "  help <all>       displays help for all filters installed\n"
-    "  [dump] config    dumps the current configuration to stdout\n"
-    "  config <key>     prints the current value of an option\n"
+    "  [dump] config [-e <expr>]  dumps the current configuration to stdout\n"
+    "  config [+e <expr>] <key>   prints the current value of an option\n"
     "  soundslike       returns the soundslike equivalent for each word entered\n"
     "  filter           passes standard input through filters\n"
     "  -v|version       prints a version line\n"
     "  dump|create|merge master|personal|repl [word list]\n"
     "    dumps, creates or merges a master, personal, or replacement word list.\n"
+    "\n"
+    "  <expr>           regular expression matching filtername(s) or `all'\n"
     "\n"
     "[options] is any of the following:\n"
     "\n"), VERSION);
@@ -1360,40 +1380,40 @@ void print_help () {
   const KeyInfo * k;
   while (k = els.next(), k) {
     if (k->desc == 0) continue;
-    if ( (k->type == KeyInfoDescript) &&
-         !strncmp(k->name,"filter-",7) ){
+    if ((k->type == KeyInfoDescript) &&
+        !strncmp(k->name,"filter-",7)){
       printf(_("\n"
                "  %s Filter: %s\n"
                "\tNOTE: in ambiguous case prefix following options by `filter-'\n"),
                &(k->name)[7],k->desc);
-      if( expandedoptionname != NULL ){
+      if (expandedoptionname != NULL) {
         free(expandedoptionname);
         expandedsize=0;
       }
-      if( !strncmp(k->name,"filter-",7) ){
+      if (!strncmp(k->name,"filter-",7)) {
         expandedoptionname=strdup(&(k->name[7]));
         expandedsize=strlen(k->name)-7;
       }
-      else{
+      else {
         expandedoptionname=strdup(k->name);
         expandedsize=strlen(k->name);
       }
       continue;
     }
-    else if( k->type == KeyInfoDescript ){
-      if( expandedoptionname != NULL ){
+    else if (k->type == KeyInfoDescript) {
+      if (expandedoptionname != NULL) {
         free(expandedoptionname);
         expandedsize=0;
         expandedoptionname=NULL;
       }
     }
-    if( (tempstring=(char*)malloc(expandedsize+strlen(k->name)+2)) == NULL){
+    if ((tempstring=(char*)malloc(expandedsize+strlen(k->name)+2)) == NULL) {
       expandedoptionname=NULL;
       continue;
     }
     tempstring[0]='\0';
-    if( ( strlen(k->name) < expandedsize) ||
-        ( expandedsize && strncmp(k->name,expandedoptionname,expandedsize) ) ){
+    if ((strlen(k->name) < expandedsize) ||
+        (expandedsize && strncmp(k->name,expandedoptionname,expandedsize))) {
       tempstring=strncat(tempstring,expandedoptionname,expandedsize);
       tempstring=strncat(tempstring,"-",1);
     }
@@ -1410,12 +1430,12 @@ void print_help () {
         print_help_line(j->abrv, '\0', j->mode, KeyInfoBool, j->desc, true);
       }
     }
-    if( tempstring != NULL){
+    if (tempstring != NULL) {
       free(tempstring);
       tempstring=NULL;
     }
   }
-  if( expandedoptionname!=NULL ){
+  if (expandedoptionname!=NULL) {
     free(expandedoptionname);
   }
 
