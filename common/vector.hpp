@@ -1,15 +1,16 @@
 // This file is part of The New Aspell
-// Copyright (C) 2001 by Kevin Atkinson under the GNU LGPL license
+// Copyright (C) 2001-2003 by Kevin Atkinson under the GNU LGPL license
 // version 2.0 or 2.1.  You should have received a copy of the LGPL
 // license along with this library if you did not you can find
 // it at http://www.gnu.org/.
 
-#ifndef ACOMMON_VECTOR__HPP
-#define ACOMMON_VECTOR__HPP
+#ifndef ASPELL_VECTOR__HPP
+#define ASPELL_VECTOR__HPP
 
 #include <vector>
+#include <string.h>
 
-namespace acommon 
+namespace acommon
 {
   template <typename T>
   class Vector : public std::vector<T>
@@ -26,15 +27,30 @@ namespace acommon
     void append(const T * begin, unsigned int size) {
       insert(end(), begin, begin+size);
     }
-    T * data() {
-      return &front();
+    int alloc(int s) {
+      int pos = size();
+      resize(pos + s);
+      return pos;
     }
-
-    T * pbegin() {
+    T * data() {
       return &*begin();
     }
-    T * pend() {
+    T * data(int pos) {
+      return &*begin() + pos;
+    }
+    T * data_end() {
       return &*end();
+    }
+    T * pbegin() {return data();}
+    T * pend() {return data_end();}
+
+    template <typename U>
+    U * datap() { 
+      return reinterpret_cast<U * >(&front());
+    }
+    template <typename U>
+    U * datap(int pos) {
+      return reinterpret_cast<U * >(&front() + pos);
     }
   };
 }
