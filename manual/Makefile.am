@@ -31,7 +31,13 @@ manual.dvi: @MAINTAINER_MODE_TRUE@ manual.tex
 	latex manual.tex
 
 manual-html: @MAINTAINER_MODE_TRUE@ manual.dvi
-	cd man-html; rm -f *.html *.css *.png; cd ..
+	if test -d man-html;then\
+	  cd man-html;\
+	  rm -f *.html *.css *.png;\
+	  cd ..;\
+	else \
+	  mkdir man-html;\
+	fi;
 	latex2html \
 	  -split 3 \
           -toc_depth 3 \
@@ -44,8 +50,13 @@ manual-html: @MAINTAINER_MODE_TRUE@ manual.dvi
 	touch manual-html
 
 manual-text: @MAINTAINER_MODE_TRUE@ manual-html html2txt.pl
-	-mkdir man-text
-	cd man-text;  rm -f *.txt; cd ..
+	if test -d man-text;then\
+	  cd man-text;\
+	  rm -f *.txt;\
+	  cd ..;\
+	else \
+	  mkdir man-text;\
+	fi;
 	perl html2txt.pl man
 	touch manual-text
 
@@ -70,7 +81,13 @@ devel.dvi: @MAINTAINER_MODE_TRUE@ devel.tex
 	latex devel.tex
 
 devel-html: @MAINTAINER_MODE_TRUE@ devel.dvi
-	cd dev-html; rm -f *.html *.css *.png; cd ..
+	if test -d dev-html;then\
+	  cd dev-html;\
+	  rm -f *.html *.css *.png;\
+	  cd ..;\
+	else \
+	  mkdir dev-html;\
+	fi;
 	latex2html \
 	  -split 3 \
           -toc_depth 3 \
@@ -83,8 +100,13 @@ devel-html: @MAINTAINER_MODE_TRUE@ devel.dvi
 	touch devel-html
 
 devel-text: @MAINTAINER_MODE_TRUE@ devel-html html2txt.pl
-	-mkdir dev-text
-	cd dev-text;  rm -f *.txt; cd ..
+	if test -d dev-html;then\
+	  cd dev-html;\
+	  rm -f *.txt;\
+	  cd ..;\
+	else \
+	  mkdir dev-html;\
+	fi;
 	perl html2txt.pl dev
 	touch devel-text
 
@@ -94,7 +116,7 @@ devel.ps: @MAINTAINER_MODE_TRUE@ devel.dvi
 #
 #
 
-SUBDIRS = man-html man-text dev-html dev-text
+#SUBDIRS = man-html man-text dev-html dev-text
 
 EXTRA_DIST = ${pkgdoc_DATA} \
              html.sty html2txt.pl edit-man manual2.per man-proc.pl\
