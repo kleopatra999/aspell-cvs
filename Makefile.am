@@ -123,6 +123,10 @@ static_optfiles = modules/filter/url-filter.opt
 
 dynamic_optfiles = 
 
+###
+### To add a new filter follow the instruction that begin with '###'
+###
+
 ### Add the .opt file your filter comes with
 optfiles = \
   modules/filter/email-filter.opt\
@@ -141,7 +145,6 @@ static_optfiles += ${optfiles}
 ### Add your filter sources here,
 ### starting with file containing filter class definition followed by
 ### file containing filter member implementation.
-
 libaspell_la_SOURCES +=\
   modules/filter/email.cpp\
   modules/filter/tex.cpp\
@@ -158,8 +161,6 @@ dynamic_optfiles += ${optfiles}
 filter_LTLIBRARIES = libemail-filter.la libtex-filter.la\
 	             libsgml-filter.la libcontext-filter.la
 
-###
-
 libemail_filter_la_SOURCES = modules/filter/email.cpp
 libemail_filter_la_LIBADD = libaspell.la
 
@@ -172,12 +173,10 @@ libsgml_filter_la_LIBADD = libaspell.la
 libcontext_filter_la_SOURCES  = modules/filter/ccpp-context.hpp modules/filter/ccpp-context.cpp
 libcontext_filter_la_LIBADD = libaspell.la
 
-### Add here the corresponding <yourfilterlibrary>_SOURCES and
+### Before this line add the corresponding <yourfilterlibrary>_SOURCES and
 ### <yourfilterlibrary>_LIBADD lines.  The later at least has to look
 ### like <yourfilterlibrary>_LIBADD = ${top_builddir}/lib/libaspell.la
 ### in order to make your filter build properly
-
-###
 
 endif # COMPILE_IN_FILTERS
 
@@ -185,14 +184,14 @@ noinst_DATA += $(static_optfiles)
 opt_DATA = $(dynamic_optfiles)
 filter_DATA = $(fltfiles)
 
-## settings.h added as a decency so it will get recreated if
-##   the COMPILE_IN_FILTERS option changes
+# settings.h added as a dependency so it will get recreated if
+#   the COMPILE_IN_FILTERS option changes
 gen/static_filters.src.cpp: ${static_optfiles} gen/mk-static-filter.pl gen/settings.h
 	${PERLPROG} gen/mk-static-filter.pl ${static_optfiles}
 
 lib/new_filter.cpp: gen/static_filters.src.cpp
 
-CLEANFILES = gen/static_filters.src/cpp
+CLEANFILES = gen/static_filters.src.cpp
 
 ########################################################################
 #
@@ -216,6 +215,7 @@ gen_mk_dirs_h_SOURCES = gen/mk-dirs_h.cpp
 
 CLEANFILES += gen/dirs.h
 
+
 ########################################################################
 #
 # Scripts
@@ -235,6 +235,7 @@ CLEANFILES += scripts/pspell-config scripts/run-with-aspell
 
 EXTRA_DIST += scripts/mkconfig scripts/spell scripts/ispell \
               scripts/run-with-aspell.create scripts/aspell-import
+
 
 ########################################################################
 #
@@ -261,6 +262,7 @@ auto: @MAINTAINER_MODE_TRUE@ ${mksrc}
 
 EXTRA_DIST += auto/auto auto/mk-src.txt ${mksrc}
 
+
 ########################################################################
 #
 # interfaces
@@ -271,6 +273,7 @@ include_HEADERS = interfaces/cc/aspell.h
 pspell_includedir = ${includedir}/pspell
 
 pspell_include_HEADERS = interfaces/cc/pspell.h
+
 
 
 ########################################################################
