@@ -4,13 +4,13 @@
 ASPELL >=0.51
 
 #This line will be printed when typing `aspell help sgml'
-DESCRIPTION Filters\ for\ encoding,\ filtering\ and\ decoding\ sgml\ characters
+DESCRIPTION Filters for encoding, filtering and decoding sgml characters
 
 STATIC filter
 
 OPTION check
 TYPE list
-DESCRIPTION sgml\ attributes\ to\ always\ check.
+DESCRIPTION sgml attributes to always check.
 DEFAULT alt
 ENDOPTION
 
