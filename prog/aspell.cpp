@@ -15,13 +15,13 @@
 // 
 
 #include <deque>
-
 #include <ctype.h>
-#ifdef HAVE_LOCALE_H
+#include "settings.h"
+
+
+#ifdef USE_LOCALE
 # include <locale.h>
 #endif
-
-#include "settings.h"
 
 #include "aspell.h"
 
