@@ -612,7 +612,7 @@ namespace aspeller_default_readonly_ws {
     typedef vector<Value>   Vector;
     static const bool is_multi = false;
     const Key & key(const Value & v) const {return v.first;}
-    hash<const char *>  hash;
+    acommon::hash<const char *>  hash;
     bool equal(const Key & rhs, const Key & lhs) const {return strcmp(rhs,lhs) == 0;}
     bool is_nonexistent(const Value & v) const {return v.first == 0;}
     void make_nonexistent(Value & v) const {
@@ -758,7 +758,7 @@ namespace aspeller_default_readonly_ws {
       //
       
       advance_file(out, data_head.head_size);
-      std::streampos start = data_head.head_size;
+      long int start = data_head.head_size;
 
       if (use_soundslike)
 	sound_prehash.resize(word_hash.bucket_count());
@@ -854,7 +854,7 @@ namespace aspeller_default_readonly_ws {
     
       vector<u32int> final_hash(sound_prehash.bucket_count(), u32int_max);
 
-      std::streampos start = out.tell();
+      long int start = out.tell();
       
       //
       // Writting soundslike words, creating soundslike Final Hash

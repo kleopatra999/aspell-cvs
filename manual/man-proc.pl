@@ -14,6 +14,8 @@ open IN, "mk-src.tex";
 $mksrc = <IN>;
 $mksrc =~ s/\\subsection/\\subsubsection/g;
 $mksrc =~ s/\\section/\\subsection/g;
+$mksrc =~ s/\$<\$/</g;
+$mksrc =~ s/\$>\$/>/g;
 
 open IN, "lgpl.txt";
 $lgpl = <IN>;
@@ -47,8 +49,6 @@ $doc =~ s/<</\\dlt{}/g;
 $doc =~ s/>>/\\dgt{}/g;
 $doc =~ s/\\textasciitilde{}/\\\~{}/g;
 $doc =~ s/\\textasciicircum{}/\\\^{}/g;
-
-
 
 $doc =~ s/\(\(FDL\)\)/$fdl/g;
 $doc =~ s/\(\(LGPL\)\)/$lgpl/g;
