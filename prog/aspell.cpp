@@ -513,6 +513,7 @@ void pipe()
   bool terse_mode = true;
   bool do_time = options->retrieve_bool("time");
   bool suggest = options->retrieve_bool("suggest");
+  bool include_guesses = options->retrieve_bool("include-guesses");
   clock_t start,finish;
   start = clock();
 
@@ -701,7 +702,8 @@ void pipe()
 	    }
 	  }
 	  delete_aspell_string_enumeration(els);
-          COUT << guesses;
+          if (include_guesses)
+            COUT << guesses;
 	  COUT << "\n";
 	} else {
           if (guesses.empty())
