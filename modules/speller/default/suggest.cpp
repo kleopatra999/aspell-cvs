@@ -349,15 +349,19 @@ namespace aspeller_default_suggest {
     
 	SoundslikeWord sw;	
 	EditDist score;
-	while ( (sw = els->next(score.stopped_at - sw.soundslike)) == true) 
+        unsigned int stopped_at = LARGE_NUM;
+	while ( (sw = els->next(stopped_at)) == true) 
 	{
 	  score = edit_dist_fun(sw.soundslike,
 				original_soundslike, 
 				parms.edit_distance_weights);
 	  //COUT << sw.soundslike << " " 
-	  //	 << (score.stopped_at - sw.soundslike) << "\n";
+	  //     << score << " "
+	  //     << (score.stopped_at - sw.soundslike) << "\n";
 
+	  stopped_at = score.stopped_at - sw.soundslike;
 	  if (score < LARGE_NUM) {
+	    stopped_at = LARGE_NUM;
 	    BasicWordSet::Emul e = data_set->words_w_soundslike(sw);
 	    BasicWordInfo bw;
 	    String word;
@@ -377,13 +381,16 @@ namespace aspeller_default_suggest {
     
 	SoundslikeWord w;
 	EditDist score;
-	while ( (w = els->next(score.stopped_at - w.soundslike)) == true) 
+        unsigned int stopped_at = LARGE_NUM;
+	while ( (w = els->next(stopped_at)) == true) 
 	{
 	  score = edit_dist_fun(w.soundslike,
 				original_soundslike, 
 				parms.edit_distance_weights);
 	  
+	  stopped_at = score.stopped_at - w.soundslike;
 	  if (score < LARGE_NUM) {
+	    stopped_at = LARGE_NUM;
 	    BasicReplacementSet::Emul e = repl_set->repls_w_soundslike(w);
 	    ReplacementList repl;
 	    while (! (repl = e.next()).empty() )

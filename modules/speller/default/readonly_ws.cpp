@@ -165,6 +165,13 @@ namespace aspeller_default_readonly_ws {
   //  ReadOnlyWS
   //
     
+  struct SoundslikeJump
+  {
+    char   sl[4];
+    u32int loc;
+    SoundslikeJump() {memset(this, 0, sizeof(SoundslikeJump));}
+  };
+  
   class ReadOnlyWS : public BasicWordSet
   {
       
@@ -187,23 +194,25 @@ namespace aspeller_default_readonly_ws {
       void make_nonexistent(const Value & v) const {abort();}
     };
     typedef VectorHashTable<WordLookupParms> WordLookup;
-    
+
   private:
       
     char *           block;
     u32int           block_size;
     bool             block_mmaped;
+    const SoundslikeJump * jump1;
+    const SoundslikeJump * jump2;
     WordLookup       word_lookup;
     const char *     word_block;
     u32int           max_word_length;
     bool             use_soundslike;
-    const char *     soundslike_words_begin;
     
     ReadOnlyWS(const ReadOnlyWS&);
     ReadOnlyWS& operator= (const ReadOnlyWS&);
 
     struct ElementsParms;
     struct SoundslikeElements;
+    friend class SoundslikeElements;
     struct SoundslikeWords;
 
   public:
@@ -266,16 +275,16 @@ namespace aspeller_default_readonly_ws {
     // page_size()
     char check_word[64];
     u32int head_size;
-    u32int data_block_size;
-    u32int hash_block_size;
-    u32int total_block_size;
+    u32int block_size;
+    u32int jump1_offset;
+    u32int jump2_offset;
+    u32int word_offset;
+    u32int hash_offset;
 
     u32int word_count;
     u32int word_buckets;
     u32int soundslike_count;
     
-    u32int words_offset;
-
     u32int max_word_length;
 
     u32int lang_name_size;
@@ -357,29 +366,33 @@ namespace aspeller_default_readonly_ws {
       }
     }
 
-    block_size = data_head.total_block_size;
+    block_size = data_head.block_size;
     block = mmap_open(block_size, f, data_head.head_size);
     block_mmaped = block != (char *)MAP_FAILED;
     if (!block_mmaped) {
       block = new char[block_size];
-      f.seek(data_head.head_size, SEEK_SET);
+      f.seek(data_head.head_size);
       f.read(block, block_size);
     }
 
-    word_block       = block;
+    jump1 = reinterpret_cast<const SoundslikeJump *>(block 
+						     + data_head.jump1_offset);
+
+    jump2 = reinterpret_cast<const SoundslikeJump *>(block 
+						     + data_head.jump2_offset);
+
+    word_block       = block + data_head.word_offset;
 
     word_lookup.parms().block_begin = word_block;
     word_lookup.parms().hash .lang     = lang();
     word_lookup.parms().equal.cmp.lang = lang();
     const u32int * begin = reinterpret_cast<const u32int *>
-      (word_block + data_head.data_block_size);
+      (block + data_head.hash_offset);
     word_lookup.vector().set(begin, begin + data_head.word_buckets);
     word_lookup.set_size(data_head.word_count);
     
     max_word_length = data_head.max_word_length;
     
-    soundslike_words_begin = block + data_head.words_offset;
-
     return no_err;
   }
 
@@ -414,6 +427,10 @@ namespace aspeller_default_readonly_ws {
 
   struct ReadOnlyWS::SoundslikeElements : public VirSoundslikeEmul
   {
+    int level;
+    const ReadOnlyWS * obj;
+    const SoundslikeJump * jump1;
+    const SoundslikeJump * jump2;
     const char * cur;
 
     CharVector buf;
@@ -422,27 +439,69 @@ namespace aspeller_default_readonly_ws {
     u16int next_pos() const 
       {return *reinterpret_cast<const u16int *>(cur - 2);}
 
-    SoundslikeElements(const char * c, const Language * l = 0)
-      : cur(c), lang(l) {}
+    SoundslikeElements(const ReadOnlyWS * o, const Language * l = 0)
+      : level(1), obj(o), 
+	jump1(obj->jump1), jump2(obj->jump2), 
+	cur(0), lang(l) {}
 
     SoundslikeWord next(int stopped_at) {
-      while (next_pos() & 0x8000) {
-	if (stopped_at <= *reinterpret_cast<const u16int *>(cur-4)) {
-	  cur += *reinterpret_cast<const u32int *>(cur);
-	} else {
-	  cur += next_pos() & ~0x8000;
-	}
-      }
-
-      if (next_pos() == 0)
-	return SoundslikeWord(0,0);
 
       const char * tmp = cur;
 
-      cur += next_pos();
+      //COUT << level << ":" << stopped_at << "  ";
+      //COUT << jump1->sl << " " << jump2->sl << "\n";
+
+      if (level == 1 && stopped_at < 2) {
+
+	++jump1;
+	return SoundslikeWord(jump1->sl, 0);
+	  
+      } else if (level == 2 && stopped_at < 3) {
+
+	++jump2;
+	if (jump2[-1].sl[1] != jump2[0].sl[1]) {
+	  ++jump1;
+	  level = 1;
+	  return SoundslikeWord(jump1->sl, 0);
+	} else {
+	  return SoundslikeWord(jump2->sl, 0);
+	}
+	
+      } else if (level == 1) {
+
+	level = 2;
+	jump2 = obj->jump2 + jump1->loc;
+	return SoundslikeWord(jump2->sl, 0);
+
+      } else if (level == 2) {
+
+	cur = tmp = obj->word_block + jump2->loc;
+	cur += next_pos(); // next pos uses cur
+	level = 3;
+
+      } else if (next_pos() == 0) {
+
+	cur += 2;
+	level = 2;
+	++jump2;
+	if (jump2[-1].sl[1] != jump2[0].sl[1]) {
+	  level = 1;
+	  ++jump1;
+	  return SoundslikeWord(jump1->sl, 0);
+	} else {
+	  return SoundslikeWord(jump2->sl, 0);
+	}
+
+      } else {
+
+	cur += next_pos();
       
+      }
+
+      //COUT << "T:" << tmp << "\n";
+
       if (!lang) {
-	return SoundslikeWord(tmp, 0);
+	return SoundslikeWord(tmp, tmp);
       } else {
 	buf.clear();
 	to_stripped(*lang, tmp, buf);
@@ -457,11 +516,11 @@ namespace aspeller_default_readonly_ws {
 
     if (use_soundslike) {
       
-      return new SoundslikeElements(soundslike_words_begin);
+      return new SoundslikeElements(this);
 
     } else {
 
-      return new SoundslikeElements(soundslike_words_begin, lang());
+      return new SoundslikeElements(this, lang());
       
     }
   }
@@ -476,7 +535,11 @@ namespace aspeller_default_readonly_ws {
   ReadOnlyWS::VirEmul *
   ReadOnlyWS::words_w_soundslike(SoundslikeWord w) const {
 
-    if (use_soundslike) {
+    if (w.word_list_pointer == 0) {
+
+      return new SoundslikeWords("");
+
+    } else if (use_soundslike) {
     
       u16int sl_size = *reinterpret_cast<const u16int *>(w.soundslike-4);
       
@@ -755,8 +818,6 @@ namespace aspeller_default_readonly_ws {
 
     data_head.word_count   = word_hash->size();
     data_head.word_buckets = word_hash->bucket_count();
-    data_head.hash_block_size
-      = round_up(word_hash->bucket_count() * 4, page_size);
 
     final_hash.insert(final_hash.begin(), 
 		      word_hash->bucket_count(), u32int_max);
@@ -768,21 +829,15 @@ namespace aspeller_default_readonly_ws {
     //  data
     //
 
+    Vector<SoundslikeJump> jump1;
+    Vector<SoundslikeJump> jump2;
     {
       SoundMap::iterator i   = sound_map.begin();
       SoundMap::iterator end = sound_map.end();
-      unsigned int j;
-      
-      // these must be a power of 2
-      static const unsigned int RANGE_START = 1;
-      static const unsigned int RANGE_STOP  = 2;
-      unsigned int jump[RANGE_STOP+1];
 
       data.write16(0); // to avoid nasty special cases
       data.write16(0);
       unsigned int prev_pos = data.size();
-      for (j = 0; j <= RANGE_STOP; ++j)
-	jump[j] = data.size();
       data.write32(0);
       String sl;
       String prev_sl = "";
@@ -803,17 +858,29 @@ namespace aspeller_default_readonly_ws {
 	  data.write16(sl.size());
 	data.write16(0); // place holder for offset to next item
 	
-	data.at16(prev_pos - 2) |= data.size() - prev_pos;
-	prev_pos = data.size();
+	if (strncmp(prev_sl.c_str(), sl.c_str(), 3)) {
 
-	for (j = RANGE_STOP; 
-	     j >= RANGE_START 
-	       && strncmp(prev_sl.c_str(), sl.c_str(), j+1) != 0;
-	     j >>= 1) 
-	{
-	  data.at32(jump[j]) = data.size() - jump[j];
-	  jump[j] = 4;
+	  SoundslikeJump jump;
+	  strncpy(jump.sl, sl.c_str(), 3);
+	  jump.loc = data.size();
+	  jump2.push_back(jump);
+
+	  if (strncmp(prev_sl.c_str(), sl.c_str(), 2)) {
+	    SoundslikeJump jump;
+	    strncpy(jump.sl, sl.c_str(), 2);
+	    jump.loc = jump2.size() - 1;
+	    jump1.push_back(jump);
+	  }
+
+	  data.at16(prev_pos - 2) = 0;
+
+	} else {
+	  
+	  data.at16(prev_pos - 2) = data.size() - prev_pos;
+
 	}
+
+	prev_pos = data.size();
 
 	// Write soundslike
 	if (use_soundslike)
@@ -835,72 +902,54 @@ namespace aspeller_default_readonly_ws {
 	  }
 	  data << '\0';
 	}
-	
-	SoundMap::iterator i1 = i;
-	++i1;
-	for (j = (j == 0) ? (1) : (j << 1);
-	     j <= RANGE_STOP
-	       && j < sl.size()
-	       && i1 != sound_map.end() 
-	       && strncmp(sl.c_str(), i1->first, j+1) == 0;
-	     j <<= 1) 
-	{
-	  while (data.size() % 4 != 0)
-	    data.write('\0');
-
-	  data.write16(j);
-	  data.write16(0x8000);  // place holder for offset to next item
-	  
-	  data.at16(prev_pos - 2) |= data.size() - prev_pos;
-	  prev_pos = data.size();
-	  
-	  jump[j] = data.size();
-	  
-	  data.write32(0); // place holder for jump to next spot;
-	}
 
 	prev_sl = sl;
-
       }
 
       // add special end case
       data.write16(0);
       data.write16(0);
       data.at16(prev_pos - 2) |= data.size() - prev_pos;
-      for (j = RANGE_START; j <= RANGE_STOP; j <<= 1) 
-	data.at32(jump[j]) = data.size() - jump[j];
-      
       data.at32(4) = 0;
-      
+      jump2.push_back(SoundslikeJump());
+      jump1.push_back(SoundslikeJump());
     }
 
     data_head.soundslike_count   = sound_map.size();
 
-    data_head.data_block_size   = round_up(data.size(), page_size);
-    data_head.words_offset = (data.at16(2) & ~0x8000) + 4;
-
-    data_head.total_block_size 
-      = data_head.head_size 
-      + data_head.data_block_size 
-      + data_head.hash_block_size;
-
     FStream OUT;
     OUT.open(base, "wb");
 
+    // Write jump1 table
+    advance_file(OUT, data_head.head_size);
+    data_head.jump1_offset = OUT.tell() - data_head.head_size;
+    OUT.write(jump1.data(), jump1.size() * sizeof(SoundslikeJump));
+
+    // Write jump2 table
+    advance_file(OUT, round_up(OUT.tell(), page_size));
+    data_head.jump2_offset = OUT.tell() - data_head.head_size;
+    OUT.write(jump2.data(), jump2.size() * sizeof(SoundslikeJump));
+
+    // Write data block
+    advance_file(OUT, round_up(OUT.tell(), page_size));
+    data_head.word_offset = OUT.tell() - data_head.head_size;
+    OUT.write(data.data(), data.size());
+
+    // Write hash
+    advance_file(OUT, round_up(OUT.tell(), page_size));
+    data_head.hash_offset = OUT.tell() - data_head.head_size;
+    OUT.write(&final_hash.front(), final_hash.size() * 4);
+    
+    advance_file(OUT, round_up(OUT.tell(), page_size));
+    data_head.block_size = OUT.tell() - data_head.head_size;
+
     // write data head to file
+    OUT.seek(0);
     OUT.write(&data_head, sizeof(DataHead));
     OUT.write(lang.name(), data_head.lang_name_size);
     OUT.write(lang.soundslike_name(), data_head.soundslike_name_size);
     OUT.write(lang.soundslike_version(), data_head.soundslike_version_size);
     OUT.write(mid_chars, data_head.middle_chars_size); 
-
-    // Write data block
-    advance_file(OUT, data_head.head_size);
-    OUT.write(data.data(), data.size());
-
-    // Write hash
-    advance_file(OUT, data_head.head_size + data_head.data_block_size);
-    OUT.write(&final_hash.front(), final_hash.size() * 4);
 
     return no_err;
   }
