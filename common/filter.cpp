@@ -24,7 +24,7 @@ namespace acommon {
     cur = filters_.begin();
     end = filters_.end();
     handle=handled.begin();
-    while (cur != end && filter->order_num() < (*cur)->order_num()){
+    while (cur != end && filter->order_num() > (*cur)->order_num()){
       ++cur;
       ++handle;
     }

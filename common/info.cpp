@@ -239,7 +239,7 @@ fprintf(stderr,"File: %s(%i)\n",__FILE__,__LINE__);
     }
   
     while (*prev != 0 && 
-	   (*prev)->c_struct.order_num > to_add->c_struct.order_num)
+	   (*prev)->c_struct.order_num < to_add->c_struct.order_num)
       prev = &(*prev)->next;
     to_add->next = *prev;
     *prev = to_add;
