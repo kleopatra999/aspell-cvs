@@ -20,7 +20,7 @@ namespace acommon {
   PosibErr<bool> UrlFilter::setup(Config *) 
   {
     name_ = "url";
-    order_num_ = 0.0;
+    order_num_ = 0.99;
     return true;
   }
 
