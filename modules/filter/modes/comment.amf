@@ -58,7 +58,7 @@ ASPELL >=0.51
 #       thus if missing mode will be rejected by Aspell.
 #       keep it as short as possible although line wrapping will be done implicitly
 #       possible abbreviations are `des' and `desc' 
-DESCRIPTION filters any url (default). 
+DESCRIPTION limit checking to \# started commentary parts
 
 
 FILTER context
