@@ -248,11 +248,13 @@ int main (int argc, const char *argv[])
 	while (j != mode_abrvs_end && j->abrv != argv[i][1]) ++j;
 	if (j == mode_abrvs_end) {
 	  o = find_option(argv[i][1]);
-	  if (argv[i][1] == 'v' && argv[i][2] == 'v') 
+	  if (argv[i][1] == 'v' && argv[i][2] == 'v'){ 
 	    // Hack for -vv
 	    parm = argv[i] + 3;
-	  else
+          }
+	  else {
 	    parm = argv[i] + 2;
+          }
 	} else {
 	  other_opt.name = "mode";
 	  other_opt.num_arg = 1;
@@ -312,8 +314,9 @@ int main (int argc, const char *argv[])
     print_help();
   else if (action_str == "version")
     print_ver();
-  else if (action_str == "config")
+  else if (action_str == "config"){
     config();
+  }
   else if (action_str == "dicts")
     dicts();
   else if (action_str == "check")
@@ -380,8 +383,9 @@ void config ()
   StackPtr<Config> config(new_config());
   EXIT_ON_ERR(config->read_in_settings(options));
 
-  if (args.size() == 0)
+  if (args.size() == 0){
     config->write_to_stream(COUT);
+  }
   else {
     EXIT_ON_ERR_SET(config->retrieve(args[0]), String, value);
     COUT << value << "\n";
@@ -547,8 +551,9 @@ void pipe()
     case '+':
       word = trim_wspace(line + 1);
       err = config->replace("mode", word);
-      if (err.get_err())
+      if (err.get_err()){
 	config->replace("mode", "tex");
+      }
       reload_filters(reinterpret_cast<Speller *>(speller));
       checker.del();
       checker = new_checker(speller, print_star);
@@ -583,8 +588,9 @@ void pipe()
 	case 'c':
 	  switch (line[3]) {
 	  case 's':
-	    if (get_word_pair(line + 4, word, word2))
+	    if (get_word_pair(line + 4, word, word2)){
 	      BREAK_ON_ERR(err = config->replace(word, word2));
+            }
 	    break;
 	  case 'r':
 	    word = trim_wspace(line + 4);
@@ -1256,6 +1262,9 @@ void print_help_line(char abrv, char dont_abrv, const char * name,
 }
 
 void print_help () {
+  char * expandedoptionname=NULL;
+  char * tempstring=NULL;
+  size_t expandedsize=0;
   printf(_(
     "\n"
     "Aspell %s alpha.  Copyright 2000 by Kevin Atkinson.\n"
@@ -1281,11 +1290,49 @@ void print_help () {
   const KeyInfo * k;
   while (k = els.next(), k) {
     if (k->desc == 0) continue;
-    const PossibleOption * o = find_option(k->name);
+    if ( (k->type == KeyInfoDescript) &&
+         !strncmp(k->name,"filter-",7) ){
+      printf(_("\n"
+               "  %s Filter: %s\n"
+               "\tNOTE: in ambiguous case prefix following options by `filter-'\n"),
+               &(k->name)[7],k->desc);
+      if( expandedoptionname != NULL ){
+        free(expandedoptionname);
+        expandedsize=0;
+      }
+      if( !strncmp(k->name,"filter-",7) ){
+        expandedoptionname=strdup(&(k->name[7]));
+        expandedsize=strlen(k->name)-7;
+      }
+      else{
+        expandedoptionname=strdup(k->name);
+        expandedsize=strlen(k->name);
+      }
+      continue;
+    }
+    else if( k->type == KeyInfoDescript ){
+      if( expandedoptionname != NULL ){
+        free(expandedoptionname);
+        expandedsize=0;
+        expandedoptionname=NULL;
+      }
+    }
+    if( (tempstring=(char*)malloc(expandedsize+strlen(k->name)+2)) == NULL){
+      expandedoptionname=NULL;
+      continue;
+    }
+    tempstring[0]='\0';
+    if( ( strlen(k->name) < expandedsize) ||
+        ( expandedsize && strncmp(k->name,expandedoptionname,expandedsize) ) ){
+      tempstring=strncat(tempstring,expandedoptionname,expandedsize);
+      tempstring=strncat(tempstring,"-",1);
+    }
+    tempstring=strncat(tempstring,k->name,strlen(k->name));
+    const PossibleOption * o = find_option(tempstring);
     print_help_line(o->abrv, 
 		    strncmp((o+1)->name, "dont-", 5) == 0 ? (o+1)->abrv : '\0',
-		    k->name, k->type, k->desc);
-    if (strcmp(k->name, "mode") == 0) {
+		    tempstring, k->type, k->desc);
+    if (strcmp(tempstring, "mode") == 0) {
       for (const ModeAbrv * j = mode_abrvs;
            j != mode_abrvs_end;
            ++j)
@@ -1293,6 +1340,13 @@ void print_help () {
         print_help_line(j->abrv, '\0', j->mode, KeyInfoBool, j->desc, true);
       }
     }
+    if( tempstring != NULL){
+      free(tempstring);
+      tempstring=NULL;
+    }
+  }
+  if( expandedoptionname!=NULL ){
+    free(expandedoptionname);
   }
 
 }
