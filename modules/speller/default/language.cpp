@@ -66,7 +66,7 @@ namespace aspeller {
     , {"affix-char",          KeyInfoString, "/", "", 0, FOR_CONFIG}
     , {"flag-char",           KeyInfoString, ":", "", 0, FOR_CONFIG}
     , {"repl-table",          KeyInfoString, "none", ""}
-    , {"sug-split-chars",     KeyInfoString, "- ", "", 0, FOR_CONFIG}
+    , {"sug-split-char",      KeyInfoList, "", "", 0, FOR_CONFIG}
     , {"store-as",            KeyInfoString, "", ""}
     , {"try",                 KeyInfoString, "", ""}
     , {"normalize",           KeyInfoBool, "false", "", 0, FOR_CONFIG}
@@ -256,11 +256,13 @@ namespace aspeller {
     // prep phonetic code
     //
 
-    PosibErr<Soundslike *> pe = new_soundslike(data.retrieve("soundslike"),
-                                               iconv,
+    {
+      PosibErr<Soundslike *> pe = new_soundslike(data.retrieve("soundslike"),
+                                                 iconv,
                                                this);
-    if (pe.has_err()) return pe;
-    soundslike_.reset(pe);
+      if (pe.has_err()) return pe;
+      soundslike_.reset(pe.data);
+    }
     soundslike_chars_ = soundslike_->soundslike_chars();
 
     have_soundslike_ = strcmp(soundslike_->name(), "none") != 0;
@@ -268,8 +270,11 @@ namespace aspeller {
     //
     // prep affix code
     //
-
-    affix_.reset(new_affix_mgr(data.retrieve("affix"), iconv, this));
+    {
+      PosibErr<AffixMgr *> pe = new_affix_mgr(data.retrieve("affix"), iconv, this);
+      if (pe.has_err()) return pe;
+      affix_.reset(pe.data);
+    }
 
     //
     // fill repl tables (if any)
@@ -315,21 +320,7 @@ namespace aspeller {
   void Language::set_lang_defaults(Config & config) const
   {
     config.replace_internal("actual-lang", name());
-    StackPtr<KeyInfoEnumeration> els(lang_config_->possible_elements(false));
-    const KeyInfo * k;
-    Conv to_utf8;
-    to_utf8.setup(config, data_encoding_, "utf-8", NormTo);
-    while ((k = els->next()) != 0) {
-      if (k->other_data == FOR_CONFIG 
-	  && lang_config_->have(k->name) && !config.have(k->name))
-      {
-        const KeyInfo * ck = config.keyinfo(k->name);
-        if (ck->flags & KEYINFO_UTF8)
-          config.replace(k->name, to_utf8(lang_config_->retrieve(k->name)));
-        else
-          config.replace(k->name, lang_config_->retrieve(k->name));
-      }
-    }
+    config.lang_config_merge(*lang_config_, FOR_CONFIG, data_encoding_);
   }
 
   WordInfo Language::get_word_info(ParmStr str) const
@@ -463,7 +454,7 @@ namespace aspeller {
     if (!l.is_alpha(*i)) {
       if (*i == '\r')
         return invalid_word_e(l, word, _("The character '\\r' (U+0D) may not appear at the end of a word. " 
-                                         "This probably means means that the file is using MS-DOS EOL instead of Unix EOL. "), *i);
+                                         "This probably means means that the file is using MS-DOS EOL instead of Unix EOL."), *i);
       if (!l.special(*i).end)
         return invalid_word_e(l, word, _("The character '%s' (U+%02X) may not appear at the end of a word."), *i);
     }

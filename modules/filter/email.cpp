@@ -4,14 +4,18 @@
 // license along with this library if you did not you can find
 // it at http://www.gnu.org/.
 
+#include "settings.h"
+
+#include "indiv_filter.hpp"
 #include "convert.hpp"
 #include "config.hpp"
 #include "indiv_filter.hpp"
 #include "mutable_container.hpp"
 #include "copy_ptr-t.hpp"
-#include "loadable-filter-API.hpp"
 
-namespace acommon {
+namespace {
+
+  using namespace acommon;
 
   class EmailFilter : public IndividualFilter 
   {
@@ -31,12 +35,12 @@ namespace acommon {
         for (; i != end && *i != c; ++i);
         return i != end;
       }
-      PosibErr<bool> add(ParmString s) {
+      PosibErr<bool> add(ParmStr s) {
         Value c = *(Value *)conv(s);
         if (!have(c)) data.push_back(c);
         return true;
       }
-      PosibErr<bool> remove(ParmString s) {
+      PosibErr<bool> remove(ParmStr s) {
         Value c = *(Value *)conv(s);
         Vector<Value>::iterator i = data.begin();
         Vector<Value>::iterator end = data.end();
@@ -61,7 +65,7 @@ namespace acommon {
   {
     name_ = "email-filter";
     order_num_ = 0.85;
-    is_quote_char.conv.setup(*opts, "utf-8", "utf-32", NormNone);
+    is_quote_char.conv.setup(*opts, "utf-8", "ucs-4", NormNone);
     opts->retrieve_list("filter-email-quote", &is_quote_char);
     margin = opts->retrieve_int("filter-email-margin");
     reset();
@@ -102,7 +106,11 @@ namespace acommon {
       for (FilterChar * i = line_begin; i != cur; ++i)
 	*i = ' ';
   }
-  
-ACTIVATE_FILTER(acommon,EmailFilter,email);
 }
+
+C_EXPORT 
+IndividualFilter * new_aspell_email_filter() {
+  return new EmailFilter;                                
+}
+
 

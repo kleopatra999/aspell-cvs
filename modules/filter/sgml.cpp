@@ -20,7 +20,7 @@
 // See the config setting docs regarding our config lists: check and skip.
 
 
-#include <stdio.h>
+#include "settings.h"
 
 #include "asc_ctype.hpp"
 #include "config.hpp"
@@ -30,7 +30,6 @@
 #include "copy_ptr-t.hpp"
 #include "clone_ptr-t.hpp"
 #include "filter_char_vector.hpp"
-#include "loadable-filter-API.hpp"
 
 //right now unused option
 //  static const KeyInfo sgml_options[] = {
@@ -38,18 +37,20 @@
 //     N_("sgml file extensions")}
 //  };
 
-namespace acommon {
+namespace {
+
+  using namespace acommon;
 
   class ToLowerMap : public StringMap
   {
   public:
-    PosibErr<bool> add(ParmString to_add) {
+    PosibErr<bool> add(ParmStr to_add) {
       String new_key;
       for (const char * i = to_add; *i; ++i) new_key += asc_tolower(*i);
       return StringMap::add(new_key);
     }
 
-    PosibErr<bool> remove(ParmString to_rem) {
+    PosibErr<bool> remove(ParmStr to_rem) {
       String new_key;
       for (const char * i = to_rem; *i; ++i) new_key += asc_tolower(*i);
       return StringMap::remove(new_key);
@@ -498,11 +499,14 @@ namespace acommon {
     start = buf.pbegin();
     stop  = buf.pend() - 1;
   }
-
-  ACTIVATE_FILTER(acommon,SgmlFilter,sgml);
-  ACTIVATE_DECODER(acommon,SgmlDecoder,sgml);
-  //ACTIVATE_ENCODER(acommon,SgmlEncoder,sgml);
 }
+
+C_EXPORT 
+IndividualFilter * new_aspell_sgml_filter() {return new SgmlFilter;}
+C_EXPORT 
+IndividualFilter * new_aspell_sgml_decoder() {return new SgmlDecoder;}
+//C_EXPORT 
+//IndividualFilter * new_aspell_sgml_encoder() {return new SgmlEncoder;}
 
 /* Example HTML:
 

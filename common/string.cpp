@@ -38,7 +38,7 @@ namespace acommon {
     int res;
     va_list ap;
   loop: {
-      size_t avail = storage_end_ - end_;
+      int avail = storage_end_ - end_;
       if (avail > 1024) return -1;
       va_copy(ap,ap0);
       res = vsnprintf(end_, avail, format, ap);
@@ -75,19 +75,4 @@ namespace acommon {
     }
     return size == 0;
   }
-  String & String::lower() {
-    for ( unsigned int count = 0;
-          count < this->length() ; count ++ ) {
-      (*this)[count] = asc_tolower((*this)[count]);
-    }
-    return *this;
-  }
-  String & String::upper() {
-    for ( unsigned int count = 0;
-          count < this->length() ; count ++ ) {
-      (*this)[count] = asc_toupper((*this)[count]);
-    }
-    return *this;
-  }
-
 }

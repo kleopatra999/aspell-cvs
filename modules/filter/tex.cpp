@@ -16,7 +16,7 @@
 #include "convert.hpp"
 
 #define FILTER_PROGRESS_CONTROL "tex-filter-debug.log"
-#include "loadable-filter-API.hpp"
+#include "filter_debug.hpp"
 #include <stdio.h>
 #include <cstdio>
 #include "filter_char_vector.hpp"
@@ -24,8 +24,9 @@
 #include "string_enumeration.hpp"
 
 
-namespace acommon {
+namespace {
 
+  using namespace acommon;
 
   class TexFilter : public IndividualFilter 
   {
@@ -45,8 +46,8 @@ namespace acommon {
 
     class Commands : public StringMap {
     public:
-      PosibErr<bool> add(ParmString to_add);
-      PosibErr<bool> remove(ParmString to_rem);
+      PosibErr<bool> add(ParmStr to_add);
+      PosibErr<bool> remove(ParmStr to_rem);
     };
     
     Commands commands;
@@ -241,17 +242,19 @@ namespace acommon {
   // TexFilter::Commands
   //
 
-  PosibErr<bool> TexFilter::Commands::add(ParmString value) {
+  PosibErr<bool> TexFilter::Commands::add(ParmStr value) {
     int p1 = 0;
     while (!asc_isspace(value[p1])) {
       if (value[p1] == '\0') 
-	return make_err(bad_value, value,"","a string of o,O,p, or P");
+	return make_err(bad_value, value,"",
+                        _("a string of 'o','O','p',or 'P'"));
       ++p1;
     }
     int p2 = p1 + 1;
     while (asc_isspace(value[p2])) {
       if (value[p2] == '\0') 
-	return make_err(bad_value, value,"","a string of o,O,p, or P");
+	return make_err(bad_value, value,"",
+                        _("a string of 'o','O','p',or 'P'"));
       ++p2;
     }
     String t1; t1.assign(value,p1);
@@ -259,7 +262,7 @@ namespace acommon {
     return StringMap::replace(t1, t2);
   }
   
-  PosibErr<bool> TexFilter::Commands::remove(ParmString value) {
+  PosibErr<bool> TexFilter::Commands::remove(ParmStr value) {
     int p1 = 0;
     while (!asc_isspace(value[p1]) && value[p1] != '\0') ++p1;
     String temp; temp.assign(value,p1);
@@ -352,7 +355,7 @@ namespace acommon {
       keylen=strlen(code[0]);
     }
     while (begin && end && *begin) {
-      while (end && *end && (*end != ':')) {
+      while (end && *end && (*end != ',')) {
         end++;
       }
       if (end  && (begin != end)) {
@@ -478,7 +481,7 @@ namespace acommon {
 
   PosibErr<bool> TexEncoder::setup(Config * config) {
     name_ = "tex-encoder";
-    order_num_ = 0.4;
+    order_num_ = 0.40;
 
     StringList multibytechars;
 
@@ -745,8 +748,11 @@ namespace acommon {
   TexDecoder::~TexDecoder(){
     FDEBUGCLOSE;
   }
-    
-  ACTIVATE_ENCODER(acommon,TexEncoder,tex);
-  ACTIVATE_FILTER(acommon,TexFilter,tex);
-  ACTIVATE_DECODER(acommon,TexDecoder,tex);
 }
+
+C_EXPORT 
+IndividualFilter * new_aspell_tex_filter() {return new TexFilter;}
+C_EXPORT 
+IndividualFilter * new_aspell_tex_decoder() {return new TexDecoder;}
+C_EXPORT 
+IndividualFilter * new_aspell_tex_encoder() {return new TexEncoder;}

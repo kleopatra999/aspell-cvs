@@ -7,17 +7,42 @@
 // Example for a filter implementation usable via extended filter library
 // interface.
 // This was added to Aspell by Christoph Hintermüller
-// For further information see see development manual ccpp-context.h file
-// and loadable-filter-API.hpp
 
-#include <stdio.h>
+#include "settings.h"
+
+#include "can_have_error.hpp"
+#include "config.hpp"
+#include "filter_char.hpp"
+#include "indiv_filter.hpp"
 #include "iostream.hpp"
-#include "string_list.hpp"
+#include "posib_err.hpp"
+#include "string.hpp"
 #include "string_enumeration.hpp"
-#include "context.hpp"
+#include "string_list.hpp"
+#include "vector.hpp"
 
+using namespace acommon;
 
-namespace acommon {
+namespace {
+
+  enum filterstate {hidden=0, visible=1};
+  
+  class ContextFilter : public IndividualFilter {
+    filterstate state;
+    Vector<String> opening;
+    Vector<String> closing;
+    int correspond;
+    String filterversion;
+  
+    PosibErr<bool> hidecode(FilterChar * begin,FilterChar * end);
+  public:
+    ContextFilter(void);
+    virtual void reset(void);
+    void process(FilterChar *& start,FilterChar *& stop);
+    virtual PosibErr<bool> setup(Config * config);
+    virtual ~ContextFilter();
+  };
+
   ContextFilter::ContextFilter(void)
   : opening(),
     closing()
@@ -139,15 +164,15 @@ namespace acommon {
                countdelimit < (signed)closing.size();countdelimit++) {
             for (matchdelim=0; 
                  (current+closing[countdelimit].size() < localstop) &&
-                 (matchdelim < (signed)closing[countdelimit].length());
+                 (matchdelim < (signed)closing[countdelimit].size());
                  matchdelim++){
 //FIXME Warning about comparison of signed and unsigned in following line
               if (current[matchdelim] != closing[countdelimit][matchdelim]) {
                 break;
               }
             }
-            if ((matchdelim == (signed) closing[countdelimit].length()) &&
-                closing[countdelimit].length()) {
+            if ((matchdelim == (signed) closing[countdelimit].size()) &&
+                closing[countdelimit].size()) {
               correspond=countdelimit;
               break;
             }
@@ -155,17 +180,17 @@ namespace acommon {
         }
         if ((countmasking % 2 == 0) && (correspond >= 0) &&
            (correspond < (signed)closing.size()) &&
-           (closing[correspond].length() > 0) &&
-           (current+closing[correspond].length() < localstop)) {
-          for (matchdelim=0;matchdelim < (signed)closing[correspond].length();
+           (closing[correspond].size() > 0) &&
+           (current+closing[correspond].size() < localstop)) {
+          for (matchdelim=0;matchdelim < (signed)closing[correspond].size();
                matchdelim++) {
 //FIXME Warning about comparison of signed and unsigned in following line
             if (current[matchdelim] != closing[correspond][matchdelim]) {
               break;
             }
           }
-          if ((matchdelim == (signed) closing[correspond].length()) &&
-              closing[correspond].length()) {
+          if ((matchdelim == (signed) closing[correspond].size()) &&
+              closing[correspond].size()) {
             beginblind=current;
             endblind=localstop;
             state=hidden;
@@ -181,17 +206,17 @@ namespace acommon {
       }
       countmasking=0;
       for (countdelimit=0;countdelimit < (signed)opening.size();countdelimit++) {
-        for (matchdelim=0;(current+opening[countdelimit].length() < localstop) &&
-                          (matchdelim < (signed)opening[countdelimit].length());
+        for (matchdelim=0;(current+opening[countdelimit].size() < localstop) &&
+                          (matchdelim < (signed)opening[countdelimit].size());
              matchdelim++) {
 //FIXME Warning about comparison of signed and unsigned in following line
           if (current[matchdelim] != opening[countdelimit][matchdelim]) {
             break;
           }
         }
-        if ((matchdelim == (signed) opening[countdelimit].length()) &&
-            opening[countdelimit].length()) {
-          endblind=current+opening[countdelimit].length();
+        if ((matchdelim == (signed) opening[countdelimit].size()) &&
+            opening[countdelimit].size()) {
+          endblind=current+opening[countdelimit].size();
           state=visible;
           hidecode(beginblind,endblind);
           current=endblind-1;
@@ -234,4 +259,9 @@ namespace acommon {
   ContextFilter::~ContextFilter() {
     reset();
   }
+}
+
+C_EXPORT 
+IndividualFilter * new_aspell_context_filter() {
+  return new ContextFilter;                                
 }
