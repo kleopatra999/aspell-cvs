@@ -63,7 +63,6 @@ dnl
 AC_PROG_CXX
 AC_LANG([C++])
 
-AC_PROG_AWK
 AC_DISABLE_STATIC
 AC_LIBTOOL_DLOPEN
 AC_PROG_LIBTOOL
@@ -74,6 +73,7 @@ AC_CHECK_HEADERS(dlfcn.h)
 AC_CHECK_LIB(dl, dlopen)
 AC_CHECK_PROG(SED,sed,sed)
 AC_CHECK_PROGS(TEXT_DUMP,w3m lynx)
+AC_PATH_PROG(PERLPROG,perl)
 DUMP_WIDTH="cols"
 if test "$TEXT_DUMP" == "lynx" ;then 
   DUMP_WIDTH="width"
@@ -351,8 +351,8 @@ AC_CONFIG_FILES([Makefile common/Makefile lib/Makefile data/Makefile m4/Makefile
                  auto/Makefile modules/Makefile 
                  modules/filter/Makefile modules/tokenizer/Makefile
                  modules/speller/Makefile modules/speller/default/Makefile
-		 interfaces/Makefile interfaces/cc/Makefile scripts/Makefile
-                 examples/Makefile examples/loadable/Makefile prog/Makefile
-                 manual/Makefile po/Makefile.in
+		 interfaces/Makefile interfaces/cc/Makefile interfaces/filter/Makefile
+		 scripts/Makefile examples/Makefile examples/loadable/Makefile
+		 prog/Makefile manual/Makefile po/Makefile.in 
 		 ])
 AC_OUTPUT
