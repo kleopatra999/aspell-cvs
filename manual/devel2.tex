@@ -36,6 +36,7 @@
 \usepackage{multirow}
 \usepackage{graphicx}
 \usepackage{enumerate}
+\usepackage{rotating}
 
 \newcommand{\doubledash}{-\hspace{0.1em}-}
 \newcommand{\doubledashb}{-\/-}
@@ -119,7 +120,7 @@ on the right side of the window.
 
 
 \section{Howto submit a patch\label{sec:hosto_submitt_a_patch}}
-Coming or removed soooooooon.
+Coming or removed soon.
 
 
 \section{C++ Standard Library}
@@ -485,10 +486,10 @@ If the filter description contains the following line
 \begin{verbatim}
 ENDFILE
 \end{verbatim}
-than Aspell will assume end of file and ignore all following line.
-The same occurs implicitly if the real end of file is reached.
+than Aspell will assume end of file and ignore all following line. 
+It is not necessary to specify this explicitly on the final line of the file, as Aspell will assume it implicitly at the end of file.
 
-For each filter feature (see section \ref{sec:filter_overview}) the corresponding loadable object provides the option file has to provide the following line:
+For each filter feature (see section \ref{sec:filter_overview}) provided by the corresponding loadable object, the option file has to contain the following line:
 \begin{verbatim}
 STATIC <filtertype>
 \end{verbatim}
@@ -504,7 +505,7 @@ DEFAULT false
 ENDOPTION
 \end{verbatim}
 An option is added by a line containing the keyword \texttt{OPTION} followed by the name of the option.
-If this name is not prefixed by the name of the filter \texttt{Aspell} will implicitly prefix it.
+If this name is not prefixed by the name of the filter \texttt{Aspell} will implicitly do that.
 For the \texttt{DESCRIPTION} of a filter option the same holds as for the filter description.
 The \texttt{TYPE} of the option may be one of \textbf{bool}, \textbf{int}, \textbf{string} or \textbf{list}.
 If the \texttt{TYPE} is omitted \textbf{bool} is assumed. 
@@ -522,7 +523,7 @@ list&&any comma separated list of strings\\\hline
 \caption{The default values Aspell assumes if option description lacks a \texttt{DEFAULT} or \texttt{DEF} line.}
 \label{tab:filter_default_values}
 \end{table}
-The \texttt{ENDOPTION} line may be omitted as it is assumed implicitly if a line containing \texttt{OPTION}, \texttt{STATIC} or \texttt{ENDFILE} keyword occurs or the file ends.
+The \texttt{ENDOPTION} line may be omitted as it is assumed implicitly if a line containing \texttt{OPTION}, \texttt{STATIC} or \texttt{ENDFILE} occurs or the file ends.
 
 \paragraph{\small{}Note:}\small{}%
 The keywords in a filter description file are case insensitive. The above examples use the all uppercase for better distinguishing them from values and comments.
@@ -552,22 +553,22 @@ Including this file gives access to a collection of macros hiding nasty details 
 Table \ref{tab:interface_macros} shows the macros provided by the interface.
 For details upon the entire macros see loadable-filter-API.hpp\,{}.
 An example upon how to use these macros can be found at examples/loadable/ccpp-context.hpp and examples/loadable/ccpp-context.cpp.
-\begin{table}[htb]
-\hspace{-.1\linewidth}
-\begin{minipage}{1.1\linewidth}
-\begin{tabular}{p{.33\textwidth}|p{.05\textwidth}|p{.3\textwidth}|p{.3\textwidth}}
+
+\begin{table}
+\begin{tabular}{@{}p{.32\textwidth}|p{.02\textwidth}|p{.3\textwidth}|p{.3\textwidth}@{}}
 \hline\hline
-Macro&Type&Description&Notes\\\hline\hline
-ACTIVATE\_ENCODER&\multirow{3}{.05\textwidth}[-1cm]{\rotatebox{90}{mandatory}}&makes the entire encoding filter callable by Aspell&\multirow{3}{.3\textwidth}{do not call inside class declaration; these macros define new\_<filtertype> function;}\\\cline{1-1}\cline{3-3}
+Macro&\rotatebox{90}{Type}&Description&Notes\\\hline\hline
+ACTIVATE\_ENCODER&\multirow{3}{.02\textwidth}{\vspace{-2.5cm}\rotatebox{90}{mandatory}}&makes the entire encoding filter callable by Aspell&\multirow{3}{.3\textwidth}{do not call inside class declaration; these macros define new\_<filtertype> function;}\\\cline{1-1}\cline{3-3}
 ACTIVATE\_DECODER&&makes the entire decoding filter callable by Aspell&\\\cline{1-1}\cline{3-3}
 ACTIVATE\_FILTER&&makes the entire filter callable by Aspell&\\\hline\hline
-FDEBUGOPEN&\multirow{3}{.05\textwidth}[-1cm]{\rotatebox{90}{debugging}}&Initialises the macros for debugging a filter and opens the debug file stream&\multirow{3}{.3\textwidth}{These macros are only active if the {FILTER\_PRO\-GRESS\_CON\-TROL} macro is defined and denotes the name of the file debug messages should be sent to.
+FDEBUGOPEN&\multirow{5}{.02\textwidth}{\vspace{-5.5cm}\rotatebox{90}{debugging}}&Initialises the macros for debugging a filter and opens the debug file stream&\multirow{5}{.3\textwidth}{These macros are only active if the {FILTER\_PRO\-GRESS\_CON\-TROL} macro is defined and denotes the name of the file debug messages should be sent to.
 If debugging should go to Aspell standard debugging output \footnote{right now stderr} use empty string constant as filename}\\\cline{1-1}\cline{3-3}
+FDEBUGNOTOPEN&&Same as ``FDEBUGOPEN'' but only if debug file stream was not opened jet&\\\cline{1-1}\cline{3-3}
 FDEBUGCLOSE&&closes the debugging device opened by ``FDEBUGOPEN'' and reverts it to ``stderr'';&\\\cline{1-1}\cline{3-3}
 FDEBUG&&prints the filename and the line number it occurs&\\\cline{1-1}\cline{3-3}
-FDEBUGPRINTF&&special printf for debugging; if more than one argument is passed enclose the argument list by \verb#(# and \verb#)#;&\\\hline\hline
+FDEBUGPRINTF&&special printf for debugging;&\\\hline\hline
 \end{tabular}
-\end{minipage}
+%\end{minipage}
 \caption{Macros provided by loadable-filter-API.hpp}
 \label{tab:interface_macros}
 \end{table}
@@ -599,7 +600,7 @@ Test if filter has been added properly otherwise return to steps \ref{itm:place_
 Reconfigure sources with \verb#enable-static# flag and repeat steps \ref{itm:build_sources}-\ref{itm:test_filter_installed} until your filter builds and runs properly in case of static linkage.
 \item
 Add your source files to \texttt{CVS}, and commit all your changes.
-Or in case you are not allowed to commit to \texttt{CVS} than submit a patch\footnote{how to submit a patch see section\ref{sec:hosto_submitt_a_patch}} containing your changes. 
+Or in case you are not allowed to commit to \texttt{CVS} submit a patch\footnote{how to submit a patch see section\ref{sec:hosto_submitt_a_patch}} containing your changes. 
 \end{enumerate} 
 
  
