@@ -33,6 +33,11 @@
 #endif
 #define DEBUG {fprintf(stderr,"File: %s(%i)\n",__FILE__,__LINE__);}
 
+#ifdef NULL
+#undef NULL
+#endif
+#define NULL 0
+
 namespace acommon
 {
 
@@ -325,7 +330,7 @@ namespace acommon
   public:
     Config * config;
 
-    FilterOptionExpandNotifier(Config * conf):config(conf), optionpath(), filterpath() {
+    FilterOptionExpandNotifier(Config * conf) : optionpath(), filterpath(), config(conf) {
       filter_modules_referencing++;
       do {
         StringList test;
@@ -741,6 +746,7 @@ namespace acommon
         RET_ON_ERR(config->retrieve_list("option-path",&optpath));
         optionpath=optpath;
       }
+      return no_err;
     }
 
     virtual PosibErr<void> item_updated(const KeyInfo * key, ParmString value){

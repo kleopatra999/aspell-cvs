@@ -16,7 +16,7 @@
 #define SYSTERM_DIRCETORY_BRFOWSE_WRAPPER
 
 #include "string.hpp"
-// This file is part of The New Aspell#include "vector.hpp"
+#include "vector.hpp"
 #include "can_have_error.hpp"
 #include "string_list.hpp"
 //FIXME below if Win(dos) is different
@@ -107,8 +107,8 @@ namespace acommon {
 
 
   class PathBrowser {
-    vector< Directory > browsebase;
-    vector< String > unloop;
+    Vector< Directory > browsebase;
+    Vector< String > unloop;
     unsigned int nextbase; 
     String actual_expression;
 
