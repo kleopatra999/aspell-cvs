@@ -15,62 +15,69 @@
 #include "language.hpp"
 #include "split.hpp"
 #include "string.hpp"
+#include "cache-t.hpp"
+#include "getdata.hpp"
 
 namespace aspeller {
 
-  // FIXME: The "c" might conflict with ConfigData Use of taht slot
+  // FIXME: The "c" might conflict with ConfigData Use of that slot
   //   work on a policy to avoid that such resering the first half
   //   for ConfigData's use and the otehr for users.
   static const KeyInfo lang_config_keys[] = {
-    {"charset",             KeyInfoString, "iso8859-1", ""}
-    , {"name",                KeyInfoString, "", ""}
+    {"charset",             KeyInfoString, "iso8859-1", "", ""}
+    , {"name",                KeyInfoString, "", "", ""}
     , {"run-together",        KeyInfoBool,   "", "", "c"}
     , {"run-together-limit",  KeyInfoInt,    "", "", "c"}
-    , {"run-together-middle", KeyInfoString, "", ""}
     , {"run-together-min",    KeyInfoInt,    "", "", "c"}
-    , {"soundslike",          KeyInfoString, "generic", ""}
-    , {"special",             KeyInfoString, "", ""}
+    , {"soundslike",          KeyInfoString, "none", "", ""}
+    , {"special",             KeyInfoString, "", "", ""}
     , {"ignore-accents" ,     KeyInfoBool, "", "", "c"}
-    , {"use-soundslike" ,     KeyInfoBool, "",  ""}
+    , {"use-soundslike" ,     KeyInfoBool, "", "", "c"}
+    , {"use-jump-tables",     KeyInfoBool, "", "", "c"}
     , {"keyboard",            KeyInfoString, "standard", "", "c"} 
+    , {"affix",               KeyInfoString, "none", "", ""}
+    , {"affix-compress",      KeyInfoBool, "false", "", "c"}
+    , {"affix-char",          KeyInfoString, "/", "", "c"}
+    , {"flag-char",           KeyInfoString, ":", "", "c"}
+    , {"repl-table",          KeyInfoString, "none", "", ""}
+    , {"sug-split-chars",     KeyInfoString, "- ", "", "c"}
   };
-  
-  PosibErr<void> Language::setup(ParmString l, Config * config) 
+
+  static GlobalCache<Language> language_cache;
+
+  PosibErr<void> Language::setup(const String & lang, Config * config)
   {
-    //if (!config)      config = new Config(); FIXME
-    assert(config != 0);
-    String lang = l;
-    if (lang.empty()) lang   = config->retrieve("actual-lang");
-
-    String dir1, dir2;
-    fill_data_dir(config, dir1, dir2);
-
     //
     // get_lang_info
     //
-    
-    Config data("aspeller-lang",
-		lang_config_keys, 
-		lang_config_keys + sizeof(lang_config_keys)/sizeof(KeyInfo));
-    String path;
+
+    String dir1,dir2,path;
+
+    fill_data_dir(config, dir1, dir2);
     dir_ = find_file(path,dir1,dir2,lang,".dat");
+
+    lang_config_ = 
+      new Config("speller-lang",
+                 lang_config_keys, 
+                 lang_config_keys + sizeof(lang_config_keys)/sizeof(KeyInfo));
+    Config & data = *lang_config_;
+
     {
       PosibErrBase pe = data.read_in_file(path);
       if (pe.has_err(cant_read_file)) {
 	String mesg = pe.get_err()->mesg;
 	mesg[0] = asc_tolower(mesg[0]);
-	mesg = "This is probably becuase " + mesg;
-	return make_err(unknown_language, l, mesg);
+	mesg = _("This is probably because: ") + mesg;
+	return make_err(unknown_language, lang, mesg);
       } else if (pe.has_err())
 	return pe;
     }
 
     if (!data.have("name"))
-      return make_err(bad_file_format, path, "The required field \"name\" is missing.");
+      return make_err(bad_file_format, path, _("The required field \"name\" is missing."));
 
     name_         = data.retrieve("name");
     charset_      = data.retrieve("charset");
-    mid_chars_    = data.retrieve("run-together-middle");
 
     std::vector<String> special_data = split(data.retrieve("special"));
     for (std::vector<String>::iterator i = special_data.begin();
@@ -82,18 +89,6 @@ namespace aspeller {
 	special_[to_uchar(c)] = 
 	  SpecialChar ((*i)[0] == '*',(*i)[1] == '*',(*i)[2] == '*');
       }
-
-    //
-    //
-    //
-
-    Enumeration<KeyInfoEnumeration> els = data.possible_elements(false);
-    const KeyInfo * k;
-    while ((k = els.next()) != 0) {
-      if (k->otherdata[0] == 'c' 
-	  && data.have(k->name) && !config->have(k->name))
-	config->replace(k->name, data.retrieve(k->name));
-    }
   
     //
     // fill_in_tables
@@ -149,12 +144,6 @@ namespace aspeller {
     max_normalized_ = c;
 
     //
-    // 
-    // 
-
-    normalize_mid_characters(*this,mid_chars_);
-
-    //
     // prep phonetic code
     //
 
@@ -163,8 +152,58 @@ namespace aspeller {
     if (pe.has_err()) return pe;
     soundslike_.reset(pe);
     soundslike_chars_ = soundslike_->soundslike_chars();
+    stripped_chars_   = get_stripped_chars(*this);
+
+    //
+    // prep affix code
+    //
+
+    affix_.reset(new_affix_mgr(data.retrieve("affix"), this));
+
+    //
+    // fill repl tables (if any)
+    //
+
+    String repl = data.retrieve("repl-table");
+    if (repl != "none") {
+
+      String repl_file;
+      FStream REPL;
+      find_file(repl_file, dir1, dir2, repl, "_repl", ".dat");
+      RET_ON_ERR(REPL.open(repl_file, "r"));
+      
+      FixedBuffer<> buf; DataPair d;
+
+      while (getdata_pair(REPL, d, buf), ::to_lower(d.key), d.key != "rep");
+      size_t num_repl = atoi(d.value); // FIXME make this more robust
+      repls_.resize(num_repl);
+
+      for (size_t i = 0; i != num_repl; ++i) {
+        bool res = getdata_pair(REPL, d, buf);
+        assert(res); // FIXME
+        ::to_lower(d.key);
+        assert(d.key == "rep"); // FIXME
+        split(d);
+        repls_[i].substr = buf_.dup(d.key);
+        repls_[i].repl   = buf_.dup(d.value);
+      }
+
+    }
     
     return no_err;
+  }
+
+  void Language::set_lang_defaults(Config & config)
+  {
+    StackPtr<KeyInfoEnumeration> els(lang_config_->possible_elements(false));
+    const KeyInfo * k;
+    while ((k = els->next()) != 0) {
+      if (k->otherdata[0] == 'c' 
+	  && lang_config_->have(k->name) && !config.have(k->name))
+      {
+	config.replace(k->name, lang_config_->retrieve(k->name));
+      }
+    }
   }
 
   bool SensitiveCompare::operator() (const char * word, 
@@ -281,13 +320,13 @@ namespace aspeller {
 
   PosibErr<void> check_if_valid(const Language & l, ParmString word) {
     if (*word == '\0') 
-      return make_err(invalid_word, word, "Empty string.");
+      return make_err(invalid_word, word, _("Empty string."));
     const char * i = word;
     if (l.char_type(*i) != Language::letter) {
       if (!l.special(*i).begin)
 	return invalid_char(word, *i, "beginning");
       else if (l.char_type(*(i+1)) != Language::letter)
-	return make_err(invalid_word, word, "Does not contain any letters.");
+	return make_err(invalid_word, word, _("Does not contain any letters."));
     }
     for (;*(i+1) != '\0'; ++i) { 
       if (l.char_type(*i) != Language::letter) {
@@ -302,27 +341,39 @@ namespace aspeller {
     return no_err;
   }
 
-  void normalize_mid_characters(const Language & l, String & s) 
-  {
-    assert (s.size() < 4);
-    for (unsigned int i = 0; i != s.size(); ++i) 
+  String get_stripped_chars(const Language & lang) {
+    bool chars_set[256] = {0};
+    String     chars_list;
+    for (int i = 0; i != 256; ++i) 
     {
-      s[i] = l.to_lower(s[i]);
+      char c = static_cast<char>(i);
+	if (lang.is_alpha(c) || lang.special(c).any())
+	  chars_set[static_cast<unsigned char>(lang.to_stripped(c))] = true;
     }
-    // now sort it
-    if (s.size() == 3) 
+    for (int i = 0; i != 256; ++i) 
     {
-      if (s[0] < s[1])
-	std::swap(s[0], s[1]);
-      if (s[1] < s[2])
-	std::swap(s[1], s[2]);
-    } 
-    if (s.size() >= 2) 
-    {
-      if (s[0] < s[1])
-	std::swap(s[0], s[1]);
+      if (chars_set[i]) 
+	chars_list += static_cast<char>(i);
     }
-    
+    return chars_list;
   }
 
+
+  PosibErr<Language *> new_language(Config & config, ParmString lang)
+  {
+    if (!lang)
+      return language_cache.get(config.retrieve("actual-lang"), &config);
+    else
+      return language_cache.get(lang, &config);
+  }
+
+}
+
+namespace acommon {
+
+  using aspeller::Language;
+  
+  template
+  void release_cache_data(GlobalCache<Language> *, const Language *);
+  
 }

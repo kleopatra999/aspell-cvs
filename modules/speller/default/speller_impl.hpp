@@ -11,6 +11,7 @@
 #include "data.hpp"
 #include "enumeration.hpp"
 #include "speller.hpp"
+#include "check_list.hpp"
 
 using namespace acommon;
 
@@ -28,7 +29,7 @@ namespace aspeller {
   class Language;
   class SensitiveCompare;
   class Suggest;
-  
+
   class SpellerImpl : public Speller
   {
   public:
@@ -48,7 +49,7 @@ namespace aspeller {
     enum SpecialId {main_id, personal_id, session_id, 
 		    personal_repl_id, none_id};
 
-    typedef Enumeration<VirEnumeration<DataSet *> > WordLists;
+    typedef Enumeration<DataSet *> * WordLists;
 
     WordLists wordlists() const;
     int num_wordlists() const;
@@ -73,11 +74,10 @@ namespace aspeller {
     bool own(const DataSet::Id &) const;
     void own(const DataSet::Id &, bool);
 
-
     PosibErr<const WordList *> personal_word_list  () const;
     PosibErr<const WordList *> session_word_list   () const;
-    PosibErr<const WordList *> main_word_list    () const;
-    
+    PosibErr<const WordList *> main_word_list      () const;
+
     //
     // Language methods
     //
@@ -94,16 +94,14 @@ namespace aspeller {
   
     PosibErr<bool> check(char * word, char * word_end, /* it WILL modify word */
 			 unsigned int run_together_limit,
-			 CompoundInfo::Position pos,
-			 SingleWordInfo * words);
+			 CheckInfo *, GuessInfo *);
 
     PosibErr<bool> check(MutableString word) {
-      WordInfo wi;
+      guess_info.reset(guesses);
       return check(word.begin(), 
 		   word.end(), 
-		   run_together_limit_,
-		   CompoundInfo::Orig,
-		   wi.words);
+		   unconditional_run_together_ ? run_together_limit_ : 0,
+		   check_inf, &guess_info);
     }
     PosibErr<bool> check(ParmString word)
     {
@@ -114,7 +112,18 @@ namespace aspeller {
 
     PosibErr<bool> check(const char * word) {return check(ParmString(word));}
 
-    BasicWordInfo check_simple(ParmString);
+    bool check_affix(ParmString word, CheckInfo & ci, GuessInfo * gi);
+
+    bool check_simple(ParmString, WordEntry &);
+
+    const CheckInfo * check_info() {
+      if (check_inf[0].word)
+        return check_inf;
+      else if (guess_info.num > 0)
+        return guesses + 1;
+      else
+        return 0;
+    }
     
     //
     // High level Word List management methods
@@ -136,6 +145,10 @@ namespace aspeller {
 
     PosibErr<void> store_replacement(const String & mis, const String & cor,
 				     bool memory);
+
+
+    
+
     //
     // Private Stuff (from here to the end of the class)
     //
@@ -144,10 +157,9 @@ namespace aspeller {
     class ConfigNotifier;
 
   private:
-
     friend class ConfigNotifier;
 
-    CopyPtr<Language>          lang_;
+    CachePtr<const Language>   lang_;
     CopyPtr<SensitiveCompare>  sensitive_compare_;
     CopyPtr<DataSetCollection> wls_;
     ClonePtr<Suggest>       suggest_;
@@ -155,7 +167,6 @@ namespace aspeller {
     unsigned int            ignore_count;
     bool                    ignore_repl;
     bool                    unconditional_run_together_;
-    bool                    run_together_specified_;
     unsigned int            run_together_limit_;
     const char *            run_together_middle_;
     unsigned int            run_together_min_;
@@ -170,14 +181,62 @@ namespace aspeller {
     // these are public so that other classes and functions can use them, 
     // DO NOT USE
 
+    const SensitiveCompare & sensitive_compare() const {return *sensitive_compare_;}
+
     const DataSetCollection & data_set_collection() const {return *wls_;}
 
     PosibErr<void> set_check_lang(ParmString lang, ParmString lang_dir);
   
     double distance (const char *, const char *, 
 		     const char *, const char *) const;
+
+    CheckInfo check_inf[8];
+    CheckInfo guesses[8];
+    GuessInfo guess_info;
+
+    struct WSInfo {
+      const BasicWordSet * ws;
+      SensitiveCompare cmp;
+      ConvertWord convert;
+    };
+
+    typedef Vector<WSInfo> WS;
+    WS check_ws, affix_ws, suggest_ws, suggest_affix_ws;
+
+    bool affix_info, affix_compress;
+
+    bool use_soundslike, fast_scan, fast_lookup;
+
   };
 
+  struct LookupInfo {
+    SpellerImpl * sp;
+    enum Mode {Word, Guess, Soundslike, AlwaysTrue} mode;
+    SpellerImpl::WS::const_iterator begin;
+    SpellerImpl::WS::const_iterator end;
+    inline LookupInfo(SpellerImpl * s, Mode m);
+    inline bool lookup (ParmString word, WordEntry & o) const;
+  };
+
+  inline LookupInfo::LookupInfo(SpellerImpl * s, Mode m) : sp(s), mode(m) {
+    switch (m) { 
+    case Word: 
+      begin = sp->affix_ws.begin(); 
+      end = sp->affix_ws.end();
+      return;
+    case Guess: 
+      begin = sp->check_ws.begin(); 
+      end = sp->check_ws.end(); 
+      mode = Word; 
+      return;
+    case Soundslike: 
+      begin = sp->suggest_affix_ws.begin(); 
+      end = sp->suggest_affix_ws.end(); 
+      return;
+    case AlwaysTrue: 
+      return; 
+    }
+  }
 }
 
 #endif

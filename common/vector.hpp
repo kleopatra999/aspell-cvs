@@ -27,30 +27,31 @@ namespace acommon
     void append(const T * begin, unsigned int size) {
       insert(this->end(), begin, begin+size);
     }
+    void append(const T * begin, const T * end) {
+      insert(this->end(), begin, end);
+    }
     int alloc(int s) {
-      int pos = size();
+      int pos = this->size();
       this->resize(pos + s);
       return pos;
     }
-    T * data() {
-      return &*this->begin();
-    }
-    T * data(int pos) {
-      return &*this->begin() + pos;
-    }
-    T * data_end() {
-      return &*this->end();
-    }
-    T * pbegin() {return data();}
-    T * pend() {return data_end();}
+    T * data() {return &*this->begin();}
+    T * data(int pos) {return &*this->begin() + pos;}
+    T * data_end() {return &*this->end();}
+
+    T * pbegin() {return &*this->begin();}
+    T * pend()   {return &*this->end();}
+
+    const T * pbegin() const {return &*this->begin();}
+    const T * pend()   const {return &*this->end();}
 
     template <typename U>
     U * datap() { 
-      return reinterpret_cast<U * >(&front());
+      return reinterpret_cast<U * >(&this->front());
     }
     template <typename U>
     U * datap(int pos) {
-      return reinterpret_cast<U * >(&front() + pos);
+      return reinterpret_cast<U * >(&this->front() + pos);
     }
   };
 }

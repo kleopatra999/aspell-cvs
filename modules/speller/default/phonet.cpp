@@ -65,34 +65,11 @@ namespace aspeller {
   struct PhonetParmsImpl : public PhonetParms {
     std::vector<const char *> rdata;
     std::vector<char>         data;
-    void assign(const PhonetParms * other) {
-      abort();
-      *this = *(const PhonetParmsImpl *)other;
-      this->rules = &rdata.front();
-    }
-    PhonetParmsImpl * clone() const {
-      PhonetParmsImpl * other = new PhonetParmsImpl(*this);
-      return other;
-    }
-    PhonetParmsImpl() {}
-    PhonetParmsImpl(const PhonetParmsImpl & other) 
-      : PhonetParms(other), rdata(other.rdata.size()), data(other.data)
-    {
-      fix_pointers(other);
-    }
-    void fix_pointers(const PhonetParmsImpl & other) {
-      if (other.rdata.empty()) return;
-      rules = &rdata.front();
-      int i = 0;
-      for (;other.rules[i] != rules_end; ++i) {
-	rules[i] = &data.front() + (&other.data.front() - other.rules[i]);
-      }
-      rules[i]   = rules_end;
-      rules[i+1] = rules_end;
-    }
   };
   
   PosibErr<PhonetParms *> load_phonet_rules(const String & file) {
+    FixedBuffer<> buf; DataPair dp;
+
     FStream in;
     RET_ON_ERR(in.open(file, "r"));
 
@@ -101,18 +78,16 @@ namespace aspeller {
     parms->followup        = true;
     parms->collapse_result = false;
 
-    String key;
-    String data;
     int size = 0;
     int num = 0;
     while (true) {
-      if (!getdata_pair(in, key, data)) break;
-      if (key != "followup" && key != "collapse_result" &&
-	  key != "version") {
+      if (!getdata_pair(in, dp, buf)) break;
+      if (dp.key != "followup" && dp.key != "collapse_result" &&
+	  dp.key != "version") {
 	++num;
-	size += key.size() + 1;
-	if (data != "_") {
-	  size += data.size() + 1;
+	size += dp.key.size() + 1;
+	if (dp.value != "_") {
+	  size += dp.value.size() + 1;
 	}
       }
     }
@@ -126,24 +101,24 @@ namespace aspeller {
     in.restart();
 
     while (true) {
-      if (!getdata_pair(in, key, data)) break;
-      if (key == "followup") {
-	parms->followup = to_bool(data);
-      } else if (key == "collapse_result") {
-	parms->collapse_result = to_bool(data);
-      } else if (key == "version") {
-	parms->version = data;
+      if (!getdata_pair(in, dp, buf)) break;
+      if (dp.key == "followup") {
+	parms->followup = to_bool(dp.value);
+      } else if (dp.key == "collapse_result") {
+	parms->collapse_result = to_bool(dp.value);
+      } else if (dp.key == "version") {
+	parms->version = dp.value;
       } else {
-	strncpy(d, key.c_str(), key.size() + 1);
+	strncpy(d, dp.key.str(), dp.key.size() + 1);
 	*r = d;
 	++r;
-	d += key.size() + 1;
-	if (data == "_") {
+	d += dp.key.size() + 1;
+	if (dp.value == "_") {
 	  *r = "";
 	} else {
-	  strncpy(d, data.c_str(), data.size() + 1);
+	  strncpy(d, dp.value.str(), dp.value.size() + 1);
 	  *r = d;
-	  d += data.size() + 1;
+	  d += dp.value.size() + 1;
 	}
 	++r;
       }

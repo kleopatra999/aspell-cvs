@@ -7,15 +7,59 @@
 #ifndef ASPELL_GET_DATA__HPP
 #define ASPELL_GET_DATA__HPP
 
+#include <stddef.h>
+#include <limits.h>
+#include "mutable_string.hpp"
+
 namespace acommon {
 
   class IStream;
   class String;
 
-  bool getdata_pair(IStream & in, 
-		    String & key, 
-		    String & data);
+  // NOTE: getdata_pair WILL NOT unescape a string
 
-  void unescape(String &);
+  struct Buffer {
+    char * data;
+    size_t size;
+    Buffer(char * d = 0, size_t s = 0) : data(d), size(s) {}
+  };
+
+  template <size_t S = 128>
+  struct FixedBuffer : public Buffer
+  {
+    char buf[S];
+    FixedBuffer() : Buffer(buf, S) {}
+  };
+
+  struct DataPair {
+    MutableString key;
+    MutableString value;
+  };
+
+  bool getdata_pair(IStream & in, DataPair & d, const Buffer & buf);
+  static inline bool getdata_pair(IStream & in, DataPair & d, 
+                                  char * buf, size_t len)
+  {
+    return getdata_pair(in, d, Buffer(buf, len));
+  }
+
+  void unescape(char * dest, const char * src);
+  static inline void unescape(char * dest) {unescape(dest, dest);}
+
+  // if limit is not given than dest should have enough space for 
+  // twice the number of characters of src
+  bool escape(char * dest, const char * src, 
+	      size_t limit = INT_MAX, const char * others = 0);
+
+  void to_lower(char *);
+
+  // extract the first whitespace delemited word from d.value and put
+  // it in d.key.  d.value is expected not to have any leading
+  // whitespace. The string is modifed in place so that d.key will be
+  // null terminated.  d.value is modifed to point to any additional
+  // data after key with any leading white space removed.  Returns
+  // false when there are no more words to extract
+  bool split(DataPair & d);
+
 }
 #endif

@@ -1,5 +1,6 @@
 AUTOMAKE_OPTIONS = foreign subdir-objects
-SUBDIRS = . po manual examples
+SUBDIRS = . po manual
+DIST_SUBDIRS = ${SUBDIRS} examples 
 
 # These are needed due to a bug in Automake
 pkgdatadir = @pkgdatadir@
@@ -27,6 +28,7 @@ EXTRA_DIST =
 lib_LTLIBRARIES = libaspell.la libpspell.la
 
 libaspell_la_SOURCES =\
+  common/cache.cpp\
   common/string.cpp\
   common/getdata.cpp\
   common/itemize.cpp\
@@ -67,6 +69,8 @@ libaspell_la_SOURCES =\
   modules/speller/default/language.cpp\
   modules/speller/default/leditdist.cpp\
   modules/speller/default/split.cpp\
+  modules/speller/default/affix.cpp\
+  modules/speller/default/affentry.cpp\
   modules/tokenizer/basic.cpp\
   lib/filter-c.cpp\
   lib/word_list-c.cpp\
@@ -87,13 +91,15 @@ libaspell_la_SOURCES =\
   lib/string_pair_enumeration-c.cpp\
   lib/new_checker.cpp
 
-libaspell_la_LDFLAGS = ${extra_ldflags} -version-info 15:2:0
+libaspell_la_LIBADD =  $(LIBINTL)
+
+libaspell_la_LDFLAGS = ${extra_ldflags} -version-info 15:5:0
 
 libpspell_la_SOURCES = lib/dummy.cpp
 
 libpspell_la_LIBADD = libaspell.la
 
-libpspell_la_LDFLAGS = ${extra_ldflags} -version-info 15:2:0
+libpspell_la_LDFLAGS = ${extra_ldflags} -version-info 15:5:0
 
 EXTRA_DIST += common/*.hpp common/*.h\
               modules/speller/default/*.hpp\
@@ -169,16 +175,20 @@ filter_LTLIBRARIES = libemail-filter.la libtex-filter.la\
 	             libsgml-filter.la libcontext-filter.la
 
 libemail_filter_la_SOURCES = modules/filter/email.cpp
-libemail_filter_la_LIBADD = libaspell.la
+libemail_filter_la_LIBADD = libaspell.la 
+libemail_filter_la_LDFLAGS  = -avoid-version
 
 libtex_filter_la_SOURCES = modules/filter/tex.cpp
 libtex_filter_la_LIBADD = libaspell.la
+libtex_filter_la_LDFLAGS  = -avoid-version
 
 libsgml_filter_la_SOURCES  = modules/filter/sgml.cpp
 libsgml_filter_la_LIBADD = libaspell.la
+libsgml_filter_la_LDFLAGS  = -avoid-version
 
 libcontext_filter_la_SOURCES  = modules/filter/context.hpp modules/filter/context.cpp
 libcontext_filter_la_LIBADD = libaspell.la
+libcontext_filter_la_LDFLAGS  = -avoid-version
 
 ### Before this line add the corresponding <yourfilterlibrary>_SOURCES and
 ### <yourfilterlibrary>_LIBADD lines.  The later at least has to look
@@ -187,7 +197,7 @@ libcontext_filter_la_LIBADD = libaspell.la
 
 endif # COMPILE_IN_FILTERS
 
-noinst_DATA += $(static_optfiles)
+noinst_DATA += $(static_optfiles) gen/filter.pot
 opt_DATA = $(dynamic_optfiles)
 filter_DATA = $(fltfiles)
 
@@ -198,8 +208,12 @@ gen/static_filters.src.cpp: ${static_optfiles} gen/mk-static-filter.pl gen/setti
 
 lib/new_filter.cpp: gen/static_filters.src.cpp
 
+gen/filter.pot: gen/mk-filter-pot.pl ${static_optfiles} ${dynamic_optfiles}
+	${PERLPROG} gen/mk-filter-pot.pl
+
 EXTRA_DIST += ${static_optfiles} ${dynamic_optfiles} ${fltfiles} \
-              gen/mk-static-filter.pl
+              gen/mk-static-filter.pl gen/mk-filter-pot.pl\
+              gen/filter.pot
 
 CLEANFILES = gen/static_filters.src.cpp
 
@@ -295,8 +309,8 @@ pkgdata_DATA = ${top_srcdir}/data/*.dat ${top_srcdir}/data/*.kbd
 EXTRA_DIST += config.rpath  README ${pkgdata_DATA} m4/*.m4 \
               misc/po-filter.c
 
-README: manual/man-text/2_Getting.txt
-	cp manual/man-text/2_Getting.txt README
+README: manual/aspell.texi
+	cd manual; perl mk-readme.pl; mv README ..; cd ..
 
 maintainer-clean-local:
 	@find . \( -name '*.?pp' -o -name '*.h' -o -name '*.opt' \) -print |\

@@ -12,6 +12,8 @@
 #include "string.hpp"
 #include "string_enumeration.hpp"
 #include "word_list.hpp"
+#include "cache.hpp"
+#include "wordinfo.hpp"
 
 using namespace acommon;
 
@@ -23,16 +25,18 @@ namespace acommon {
 
 namespace aspeller {
 
-  class SpellerImpl;
-  class Language;
-
-  class SensitiveCompare;
+  static const bool USE_LOCK = true;
+  static const bool DONT_LOCK = false;
+  static const bool USE_SOUNDSLIKE = true;
+  static const bool NO_SOUNDSLIKE = false;
+  
+  typedef Enumeration<WordEntry *> WordEntryEnumeration;
 
   class DataSet {
     friend class SpellerImpl;
   private:
-    CopyPtr<Language>       lang_;
-    int                     attach_count_;
+    CachePtr<const Language> lang_;
+    int                      attach_count_;
   private:
     PosibErr<void> attach(const Language &);
     void detach();
@@ -57,7 +61,6 @@ namespace aspeller {
     virtual void set_lang_hook(Config *) {}
     
   public:
-    //this is here because dynamic_cast in gcc 2.95.1 took too dam long
     enum BasicType {no_type, basic_word_set, basic_replacement_set, basic_multi_set};
     BasicType basic_type;
 
@@ -94,99 +97,12 @@ namespace aspeller {
 
   class WritableDataSet {
   public:
+    WritableDataSet() {}
     virtual PosibErr<void> merge(ParmString) = 0;
     virtual PosibErr<void> synchronize() = 0;
     virtual PosibErr<void> save_noupdate() = 0;
     virtual PosibErr<void> save_as(ParmString) = 0;
     virtual PosibErr<void> clear() = 0;
-  };
-
-  struct CompoundInfo {
-    unsigned char d;
-    
-    CompoundInfo(unsigned char d0 = 0) : d(d0) {}
-
-    unsigned int mid_char()       const {return d & (1<<0|1<<1);}
-
-    void mid_char(unsigned int c) {
-      assert(c < 4);
-      d |= c;
-    }
-
-    bool mid_required ()       const {return d & 1<<2; }
-    void mid_required (bool c)       { d |= c<<2;}
-    
-    bool beg () const {return d & 1<<3;}
-    void beg (bool c) {d |= c<<3;}
-
-    bool mid () const {return d & 1<<4;}
-    void mid (bool c) {d |= c<<4;}
-
-    bool end () const {return d & 1<<5;}
-    void end (bool c) {d |= c<<5;}
-
-    bool any() const {return d & (1<<3|1<<4|1<<5);}
-
-    const char * read(const char * str, const Language & l);
-    OStream & write(OStream &, const Language & l) const;
-
-    enum Position {Orig, Beg, Mid, End};
-
-    bool compatible(Position pos);
-  };
-
-  CompoundInfo::Position 
-  new_position(CompoundInfo::Position unsplit_word, 
-	       CompoundInfo::Position pos);
-  
-  struct SoundslikeWord {
-    const char * soundslike;
-    const void * word_list_pointer;
-
-    operator bool () const {return soundslike;}
-  
-    SoundslikeWord() : soundslike(0) {}
-    SoundslikeWord(const char * w, const void * p) 
-      : soundslike(w == 0 || w[0] == 0 ? 0 : w), word_list_pointer(p) {}
-  };
-
-  static const unsigned int MaxCompoundLength = 8;
-
-  struct BasicWordInfo {
-    const char * word;
-    CompoundInfo compound;
-    BasicWordInfo(const char * w = 0, CompoundInfo c = 0)
-      : word(w), compound(c) {}
-    //operator const char * () const {return word;}
-    operator bool () const {return word != 0;}
-    void get_word(String & w, const ConvertWord &c) {
-      w = "";
-      c.convert(word, w);
-    }
-     
-    OStream & write(OStream & o, const Language & l,
-		    const ConvertWord &) const;
-  };
-
-  struct SingleWordInfo {
-    const char * word;
-    char middle_char;
-    SingleWordInfo(const char * w = 0, char mc = '\0')
-      : word(w), middle_char(mc) {}
-    void clear() {word = 0;}
-    void set(const char * w, char mc = '\0') {word = w; middle_char = mc;}
-    void append_word(String & word, const Language & l, 
-		     const ConvertWord &) const;
-    operator bool() const {return word != 0;}
-  };
-
-  struct WordInfo {
-    SingleWordInfo words[MaxCompoundLength + 1];
-    void get_word(String & word, const Language & l, 
-		  const ConvertWord &) const;
-    operator bool () const {return words[0].word != 0;}
-    OStream & write(OStream & o, const Language & l, 
-		    const ConvertWord &) const;
   };
 
   struct LocalWordSetInfo 
@@ -200,43 +116,56 @@ namespace aspeller {
   class SoundslikeEnumeration 
   {
   public:
-    virtual SoundslikeWord next(int) = 0;
+    virtual WordEntry * next(int) = 0;
     virtual ~SoundslikeEnumeration() {}
+    SoundslikeEnumeration() {}
+  private:
+    SoundslikeEnumeration(const SoundslikeEnumeration &);
+    void operator=(const SoundslikeEnumeration &);
   };
 
   class BasicWordSet : public LoadableDataSet, public WordList
   {
   public:
-    BasicWordSet() {
+    bool affix_compressed;
+    bool have_soundslike; // only true when there is true phonet data
+    bool fast_scan;  // can effectly scan for all soundslikes (or
+                     // stripped words if have_soundslike is false)
+                     // with an edit distance of 1 or 2
+    bool fast_lookup; // can effectly find all words with a given soundslike
+                      // when the SoundslikeWord is not given
+    
+    BasicWordSet() : affix_compressed(false), have_soundslike(false), 
+                     fast_scan(false), fast_lookup(false) {
       basic_type =  basic_word_set;
     }
     
-    typedef VirEnumeration<BasicWordInfo>   VirEmul;
-    typedef Enumeration<VirEmul>            Emul;
-    typedef const char *                  Value;
-    typedef unsigned int                  Size;
-    typedef SoundslikeWord                SoundslikeValue;
-    typedef SoundslikeEnumeration         VirSoundslikeEmul;
+    typedef WordEntryEnumeration        Enum;
+    typedef const char *                Value;
+    typedef unsigned int                Size;
+
     StringEnumeration * elements() const;
-    virtual VirEmul * detailed_elements() const = 0;
+
+    virtual Enum * detailed_elements() const = 0;
     virtual Size   size()     const = 0;
     virtual bool   empty()    const {return !size();}
   
-    virtual BasicWordInfo lookup (ParmString word, 
-				  const SensitiveCompare &) const = 0;
+    virtual bool lookup (ParmString word, WordEntry &,
+                         const SensitiveCompare &) const = 0;
     
-    // guaranteed to return all words with the soundslike 
-    virtual VirEmul * words_w_soundslike(const char * sondslike) const = 0;
+    virtual bool stripped_lookup(const char * sondslike, WordEntry &) const {return false;}
+
+    // garanteed to be constant time
+    // FIXME: are both functions needed since a WordEntry can easily be created from
+    //   just a word?
+    virtual bool soundslike_lookup(const WordEntry &, WordEntry &) const = 0;
+    virtual bool soundslike_lookup(const char * sondslike, WordEntry &) const = 0;
 
     // the elements returned are only guaranteed to remain valid
     // guaranteed to return all soundslike and all words 
     // however an individual soundslike may appear multiple
     // times in the list....
-    virtual VirSoundslikeEmul * soundslike_elements() const = 0;
-
-    // NOT garanteed to return all words with the soundslike
-    virtual VirEmul * words_w_soundslike(SoundslikeWord soundslike) const = 0;
-
+    virtual SoundslikeEnumeration * soundslike_elements() const = 0;
   };
 
   class WritableWordSet : public BasicWordSet,
@@ -247,43 +176,17 @@ namespace aspeller {
     virtual PosibErr<void> add(ParmString w, ParmString s) = 0;
   };
 
-  struct ReplacementList {
-    typedef VirEnumeration<const char *> VirEmul;
-    typedef Enumeration<VirEmul>         Emul;
-    typedef const char *               Value;
-
-    const char *  misspelled_word;
-    VirEmul    *  elements; // you are responable for freeing this with delete
-    bool empty() const {return elements == 0;}
-
-    ReplacementList()
-      : elements(0) {}
-    ReplacementList(const char * w, VirEmul * els)
-      : misspelled_word(w), elements(els) {}
-  };
-
-  class BasicReplacementSet : public LoadableDataSet
+  class BasicReplacementSet : public BasicWordSet
   {
   public:
     BasicReplacementSet() {
       basic_type = basic_replacement_set;
     }
-    
-    typedef VirEnumeration<ReplacementList> VirEmul;
-    typedef Enumeration<VirEmul>            Emul;
-    typedef const char *                  Value;
-    typedef unsigned int                  Size;
-    typedef SoundslikeWord                SoundslikeValue;
-    typedef SoundslikeEnumeration  VirSoundslikeEmul;
 
-    virtual VirEmul * elements() const = 0;
-    virtual Size   size()     const = 0;
-    virtual bool   empty()    const {return !size();}
-
-    virtual VirEmul * repls_w_soundslike(const char * soundslike) const = 0;
-    virtual VirEmul * repls_w_soundslike(SoundslikeWord soundslike) const = 0;
-    
-    virtual VirSoundslikeEmul * soundslike_elements() const = 0;
+    // FIXME: are both functions needed since a WordEntry can easily be created from
+    //   just a word?
+    virtual bool repl_lookup(const WordEntry &, WordEntry &) const = 0;
+    virtual bool repl_lookup(const char * word, WordEntry &) const = 0;
   };
 
 
@@ -313,17 +216,15 @@ namespace aspeller {
     }
     
     typedef LocalWordSet         Value;
-    typedef VirEnumeration<Value>  VirEmul;
-    typedef Enumeration<VirEmul>   Emul;
+    typedef Enumeration<Value>   Enum;
     typedef unsigned int         Size;
 
     virtual bool   empty()    const {return !size();}
     virtual Size   size()     const = 0;
     virtual StringEnumeration * elements() const {abort();} //FIXME
 
-    virtual VirEmul * detailed_elements() const = 0;
+    virtual Enum * detailed_elements() const = 0;
   };
-
 
   typedef unsigned int DataType;
   static const DataType DT_ReadOnly     = 1<<0;

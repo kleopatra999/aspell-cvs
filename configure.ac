@@ -1,4 +1,4 @@
-AC_INIT(GNU Aspell, 0.51)
+AC_INIT(GNU Aspell, 0.51-cvs)
 AC_CONFIG_SRCDIR(prog/aspell.cpp)
 AC_CANONICAL_SYSTEM
 AM_INIT_AUTOMAKE
@@ -64,6 +64,11 @@ AC_ARG_ENABLE(compile-in-filters,
 dnl
 
 AC_PROG_CXX
+if test "$GXX" == "yes"
+then
+  CXXFLAGS="$CXXFLAGS -fno-exceptions"
+fi
+
 AC_LANG([C++])
 
 AM_PROG_CC_C_O
@@ -80,13 +85,7 @@ AC_CHECK_LIB(dl, dlopen)
 dnl
 
 AC_CHECK_PROG(SED,sed,sed)
-AC_CHECK_PROGS(TEXT_DUMP,w3m lynx)
 AC_PATH_PROG(PERLPROG,perl)
-DUMP_WIDTH="cols"
-if test "$TEXT_DUMP" == "lynx" ;then 
-  DUMP_WIDTH="width"
-fi
-AC_SUBST( DUMP_WIDTH )
 
 dnl
 
@@ -187,6 +186,19 @@ AC_TRY_COMPILE(
   [AC_MSG_RESULT(yes)
    AC_DEFINE(USE_LOCALE, 1, [Defined if Posix locales are supported])],
   [AC_MSG_RESULT(no)] )
+
+AC_MSG_CHECKING(if posix mutexes are supported)
+AC_TRY_COMPILE(
+  [#include <pthread.h>],
+  [pthread_mutex_t lck;
+   pthread_mutex_init(&lck, 0);
+   pthread_mutex_lock(&lck);
+   pthread_mutex_unlock(&lck);
+   pthread_mutex_destroy(&lck);],
+  [AC_MSG_RESULT(yes)
+   AC_DEFINE(USE_POSIX_MUTEX, 1, [Defined if Posix mutexes are supported])],
+  [AC_MSG_RESULT(no)
+   AC_MSG_WARN([Unable to find locking mechanism, Aspell will not be thread safe.])] )
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                                                                 #

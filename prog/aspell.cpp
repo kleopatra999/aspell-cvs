@@ -25,6 +25,7 @@
 
 #include "aspell.h"
 //FIXME if Win(dos) is different
+#include <sys/types.h>
 #include <regex.h>
 
 #include "asc_ctype.hpp"
@@ -67,6 +68,8 @@ void master();
 void personal();
 void repl();
 void soundslike();
+void munch();
+void expand();
 
 void print_error(ParmString msg)
 {
@@ -137,7 +140,9 @@ const PossibleOption possible_options[] = {
   OPTION("dont-backup",      'x' , 0),
   OPTION("run-together",     'C',  0),
   OPTION("dont-run-together",'B',  0),
-
+  OPTION("guess",            'm', 0),
+  OPTION("dont-guess",       'P', 0),
+  
   COMMAND("version",   'v', 0),
   COMMAND("help",      '?', 0),
   COMMAND("config",    '\0', 0),
@@ -145,6 +150,8 @@ const PossibleOption possible_options[] = {
   COMMAND("pipe",      'a', 0),
   COMMAND("filter",    '\0', 0),
   COMMAND("soundslike",'\0', 0),
+  COMMAND("munch",     '\0', 0),
+  COMMAND("expand",    '\0', 0),
   COMMAND("list",      'l', 0),
   COMMAND("dicts",     '\0', 0),
 
@@ -152,8 +159,8 @@ const PossibleOption possible_options[] = {
   COMMAND("create", '\0', 1),
   COMMAND("merge",  '\0', 1),
 
-  ISPELL_COMP('n',0), ISPELL_COMP('P',0), ISPELL_COMP('m',0),
-  ISPELL_COMP('S',0), ISPELL_COMP('w',1), ISPELL_COMP('T',1),
+  ISPELL_COMP('n',0), ISPELL_COMP('S',0), 
+  ISPELL_COMP('w',1), ISPELL_COMP('T',1),
 
   {"",'\0'}, {"",'\0'}
 };
@@ -331,6 +338,10 @@ int main (int argc, const char *argv[])
     filter();
   else if (action_str == "soundslike")
     soundslike();
+  else if (action_str == "munch")
+    munch();
+  else if (action_str == "expand")
+    expand();
   else if (action_str == "dump")
     action = do_dump;
   else if (action_str == "create")
@@ -409,7 +420,7 @@ void config ()
 
 void dicts() 
 {
-  DictInfoList * dlist = get_dict_info_list(options);
+  const DictInfoList * dlist = get_dict_info_list(options);
 
   StackPtr<DictInfoEnumeration> dels(dlist->elements());
 
@@ -501,6 +512,8 @@ void pipe()
 
   bool terse_mode = true;
   bool do_time = options->retrieve_bool("time");
+  bool suggest = options->retrieve_bool("suggest");
+  bool include_guesses = options->retrieve_bool("guess");
   clock_t start,finish;
   start = clock();
 
@@ -513,7 +526,7 @@ void pipe()
   AspellSpeller * speller = to_aspell_speller(ret);
   Config * config = reinterpret_cast<Speller *>(speller)->config();
   if (do_time)
-    COUT << "Time to load word list: " 
+    COUT << _("Time to load word list: ")
          << (clock() - start)/(double)CLOCKS_PER_SEC << "\n";
   bool print_star = true;
   StackPtr<DocumentChecker> checker(new_checker(speller, print_star));
@@ -603,6 +616,8 @@ void pipe()
 	  case 's':
 	    if (get_word_pair(line + 4, word, word2))
 	      BREAK_ON_ERR(err = config->replace(word, word2));
+            if (strcmp(word,"suggest") == 0)
+              suggest = config->retrieve_bool("suggest");
 	    break;
 	  case 'r':
 	    word = trim_wspace(line + 4);
@@ -637,11 +652,30 @@ void pipe()
       while (Token token = checker->next_misspelling()) {
 	word = line + token.offset;
 	word[token.len] = '\0';
+        String guesses, guess;
+        const CheckInfo * ci = reinterpret_cast<Speller *>(speller)->check_info();
+        aspeller::CasePattern casep 
+          = aspeller::case_pattern(reinterpret_cast<aspeller::SpellerImpl *>
+                                   (speller)->lang(), word);
+        while (ci) {
+          guess.clear();
+          if (ci->pre_add && ci->pre_add[0])      guess << ci->pre_add << "+";
+          guess << ci->word;
+          if (ci->pre_strip && ci->pre_strip[0]) guess << "-" << ci->pre_strip;
+          if (ci->suf_strip && ci->suf_strip[0]) guess << "-" << ci->suf_strip;
+          if (ci->suf_add   && ci->suf_add[0])   guess << "+" << ci->suf_add;
+          guesses << ", " 
+                  << aspeller::fix_case(reinterpret_cast<aspeller::SpellerImpl * >(speller)->lang(),
+                                        casep, guess);
+          ci = ci->next;
+        }
 	start = clock();
-        const AspellWordList * suggestions 
-	  = aspell_speller_suggest(speller, word, -1);
+        const AspellWordList * suggestions = 0;
+        if (suggest) 
+          suggestions = aspell_speller_suggest(speller, word, -1);
 	finish = clock();
-	if (!aspell_word_list_empty(suggestions)) {
+	if (suggestions && !aspell_word_list_empty(suggestions)) 
+        {
 	  COUT << "& " << word 
 	       << " " << aspell_word_list_size(suggestions) 
 	       << " " << token.offset + ignore
@@ -668,15 +702,22 @@ void pipe()
 	    }
 	  }
 	  delete_aspell_string_enumeration(els);
+          if (include_guesses)
+            COUT << guesses;
 	  COUT << "\n";
 	} else {
-	  COUT << "# " << word << " " 
-	       << token.offset + ignore
-	       << "\n";
+          if (guesses.empty())
+            COUT << "# " << word << " " 
+                 << token.offset + ignore
+                 << "\n";
+          else
+            COUT << "? " << word << " 0 " 
+                 << token.offset + ignore
+                 << ": " << guesses.c_str() + 2;
 	}
 	if (do_time)
-	  COUT << "Suggestion Time: " 
-	       << (finish-start)/(double)CLOCKS_PER_SEC << "\n";
+          COUT << _("Suggestion Time: ")
+               << (finish-start)/(double)CLOCKS_PER_SEC << "\n";
       }
       COUT << "\n";
     }
@@ -927,77 +968,80 @@ abort_loop:
   }
 }
 
+#define U (unsigned char)
+
 void Mapping::to_aspell() 
 {
   memset(this, 0, sizeof(Mapping));
   primary[Ignore    ] = 'i';
-  reverse['i'] = Ignore;
-  reverse[' '] = Ignore;
-  reverse['\n'] = Ignore;
+  reverse[U'i'] = Ignore;
+  reverse[U' '] = Ignore;
+  reverse[U'\n'] = Ignore;
 
   primary[IgnoreAll ] = 'I';
-  reverse['I'] = IgnoreAll;
+  reverse[U'I'] = IgnoreAll;
 
   primary[Replace   ] = 'r';
-  reverse['r'] = Replace;
+  reverse[U'r'] = Replace;
 
   primary[ReplaceAll] = 'R';
-  reverse['R'] = ReplaceAll;
+  reverse[U'R'] = ReplaceAll;
 
   primary[Add       ] = 'a';
-  reverse['A'] = Add;
-  reverse['a'] = Add;
+  reverse[U'A'] = Add;
+  reverse[U'a'] = Add;
 
   primary[AddLower  ] = 'l';
-  reverse['L'] = AddLower;
-  reverse['l'] = AddLower;
+  reverse[U'L'] = AddLower;
+  reverse[U'l'] = AddLower;
 
   primary[Abort     ] = 'b';
-  reverse['b'] = Abort;
-  reverse['B'] = Abort;
+  reverse[U'b'] = Abort;
+  reverse[U'B'] = Abort;
   reverse[control('c')] = Abort;
 
   primary[Exit      ] = 'x';
-  reverse['x'] = Exit;
-  reverse['X'] = Exit;
+  reverse[U'x'] = Exit;
+  reverse[U'X'] = Exit;
 }
 
 void Mapping::to_ispell() 
 {
   memset(this, 0, sizeof(Mapping));
   primary[Ignore    ] = ' ';
-  reverse[' '] = Ignore;
-  reverse['\n'] = Ignore;
+  reverse[U' '] = Ignore;
+  reverse[U'\n'] = Ignore;
 
   primary[IgnoreAll ] = 'A';
-  reverse['A'] = IgnoreAll;
-  reverse['a'] = IgnoreAll;
+  reverse[U'A'] = IgnoreAll;
+  reverse[U'a'] = IgnoreAll;
 
   primary[Replace   ] = 'R';
-  reverse['R'] = ReplaceAll;
-  reverse['r'] = Replace;
+  reverse[U'R'] = ReplaceAll;
+  reverse[U'r'] = Replace;
 
   primary[ReplaceAll] = 'E';
-  reverse['E'] = ReplaceAll;
-  reverse['e'] = Replace;
+  reverse[U'E'] = ReplaceAll;
+  reverse[U'e'] = Replace;
 
   primary[Add       ] = 'I';
-  reverse['I'] = Add;
-  reverse['i'] = Add;
+  reverse[U'I'] = Add;
+  reverse[U'i'] = Add;
 
   primary[AddLower  ] = 'U';
-  reverse['U'] = AddLower;
-  reverse['u'] = AddLower;
+  reverse[U'U'] = AddLower;
+  reverse[U'u'] = AddLower;
 
   primary[Abort     ] = 'Q';
-  reverse['Q'] = Abort;
-  reverse['q'] = Abort;
+  reverse[U'Q'] = Abort;
+  reverse[U'q'] = Abort;
   reverse[control('c')] = Abort;
 
   primary[Exit      ] = 'X';
-  reverse['X'] = Exit;
-  reverse['x'] = Exit;
+  reverse[U'X'] = Exit;
+  reverse[U'x'] = Exit;
 }
+#undef U
 
 ///////////////////////////
 //
@@ -1008,7 +1052,7 @@ void filter()
 {
   //assert(setvbuf(stdin, 0, _IOLBF, 0) == 0);
   //assert(setvbuf(stdout, 0, _IOLBF, 0) == 0);
-  CERR << "Sorry \"filter\" is currently unimplemented.\n";
+  CERR << _("Sorry \"filter\" is currently unimplemented.\n");
   exit(3);
 }
 
@@ -1060,19 +1104,19 @@ void dump (aspeller::LocalWordSet lws)
   switch (lws.word_set->basic_type) {
   case DataSet::basic_word_set:
     {
-      BasicWordSet  * ws = static_cast<BasicWordSet *>(lws.word_set);
-      BasicWordSet::Emul els = ws->detailed_elements();
-      BasicWordInfo wi;
-      while (wi = els.next(), wi)
-	wi.write(COUT,*(ws->lang()), lws.local_info.convert) << "\n";
+      BasicWordSet * ws = static_cast<BasicWordSet *>(lws.word_set);
+      StackPtr<WordEntryEnumeration> els(ws->detailed_elements());
+      WordEntry * wi;
+      while (wi = els->next(), wi)
+	wi->write(COUT,*(ws->lang()), lws.local_info.convert) << "\n";
     }
     break;
   case DataSet::basic_multi_set:
     {
-      BasicMultiSet::Emul els 
-	= static_cast<BasicMultiSet *>(lws.word_set)->detailed_elements();
+      StackPtr<BasicMultiSet::Enum> els 
+	(static_cast<BasicMultiSet *>(lws.word_set)->detailed_elements());
       LocalWordSet ws;
-      while (ws = els.next(), ws) 
+      while (ws = els->next(), ws) 
 	dump (ws);
     }
     break;
@@ -1128,7 +1172,7 @@ void personal () {
   }
   options->replace("module", "aspeller");
   if (action == do_create || action == do_merge) {
-    CERR << "Sorry \"create/merge personal\" is currently unimplemented.\n";
+    CERR << _("Sorry \"create/merge personal\" is currently unimplemented.\n");
     exit(3);
 
     // FIXME
@@ -1158,12 +1202,12 @@ void personal () {
 
     WritableWordSet * per = new_default_writable_word_set();
     per->load(config->retrieve("personal-path"), config);
-    WritableWordSet::Emul els = per->detailed_elements();
+    StackPtr<WordEntryEnumeration> els(per->detailed_elements());
     LocalWordSetInfo wsi;
     wsi.set(per->lang(), config);
-    BasicWordInfo wi;
-    while (wi = els.next(), wi) {
-      wi.write(COUT,*(per->lang()), wsi.convert);
+    WordEntry * wi;
+    while (wi = els->next(), wi) {
+      wi->write(COUT,*(per->lang()), wsi.convert);
       COUT << "\n";
     }
     delete per;
@@ -1184,7 +1228,7 @@ void repl() {
 
   if (action == do_create || action == do_merge) {
 
-    CERR << "Sorry \"create/merge repl\" is currently unimplemented.\n";
+    CERR << _("Sorry \"create/merge repl\" is currently unimplemented.\n");
     exit(3);
 
     // FIXME
@@ -1211,26 +1255,28 @@ void repl() {
     } catch (bad_cin) {}
 
     EXIT_ON_ERR(speller->personal_repl().synchronize());
+
 #endif
+
   } else if (action == do_dump) {
 
     StackPtr<Config> config(new_basic_config());
     EXIT_ON_ERR(config->read_in_settings());
 
-    WritableReplacementSet * repl = new_default_writable_replacement_set();
-    repl->load(config->retrieve("repl-path"), config);
-    WritableReplacementSet::Emul els = repl->elements();
+     WritableReplacementSet * repl = new_default_writable_replacement_set();
+     repl->load(config->retrieve("repl-path"), config);
+     StackPtr<WordEntryEnumeration> els(repl->detailed_elements());
  
-    ReplacementList rl;
-    while ( !(rl = els.next()).empty() ) {
-      while (!rl.elements->at_end()) {
-	COUT << rl.misspelled_word << ": " << rl.elements->next() << "\n";
-      }
-      delete rl.elements;
-    }
-    delete repl;
+     WordEntry * rl = 0;
+     WordEntry words;
+     while ((rl = els->next())) {
+       repl->repl_lookup(*rl, words);
+       do {
+         COUT << rl->word << ": " << words.word << "\n";
+       } while (words.adv());
+     }
+     delete repl;
   }
-
 }
 
 //////////////////////////
@@ -1240,14 +1286,88 @@ void repl() {
 
 void soundslike() {
   using namespace aspeller;
-
-  Language lang;
-  EXIT_ON_ERR(lang.setup("",options));
+  CachePtr<Language> lang;
+  PosibErr<Language *> res = new_language(*options);
+  if (!res) {print_error(res.get_err()->mesg); exit(1);}
+  lang.reset(res.data);
   String word;
   while (CIN >> word) {
-    COUT << word << '\t' << lang.to_soundslike(word) << "\n";
+    COUT << word << '\t' << lang->to_soundslike(word) << "\n";
   } 
 }
+
+//////////////////////////
+//
+// munch
+//
+
+void munch() 
+{
+  using namespace aspeller;
+  CachePtr<Language> lang;
+  PosibErr<Language *> res = new_language(*options);
+  if (!res) {print_error(res.get_err()->mesg); exit(1);}
+  lang.reset(res.data);
+  String word;
+  CheckList * cl = new_check_list();
+  while (CIN >> word) {
+    lang->affix()->munch(word, cl);
+    COUT << word;
+    for (const aspeller::CheckInfo * ci = check_list_data(cl); ci; ci = ci->next)
+    {
+      COUT << ' ' << ci->word << '/';
+      if (ci->pre_flag != 0) COUT << static_cast<char>(ci->pre_flag);
+      if (ci->suf_flag != 0) COUT << static_cast<char>(ci->suf_flag);
+    }
+    COUT << '\n';
+  }
+  delete_check_list(cl);
+}
+
+//////////////////////////
+//
+// expand
+//
+
+void expand() 
+{
+  int level = 1;
+  if (args.size() != 0)
+    level = atoi(args[0].c_str());
+  
+  using namespace aspeller;
+  CachePtr<Language> lang;
+  PosibErr<Language *> res = new_language(*options);
+  if (!res) {print_error(res.get_err()->mesg); exit(1);}
+  lang.reset(res.data);
+  String word;
+  CheckList * cl = new_check_list();
+  while (CIN >> word) {
+    CharVector buf; buf.append(word.c_str(), word.size() + 1);
+    char * w = buf.data();
+    char * af = strchr(w, '/');
+    af[0] = '\0';
+    lang->affix()->expand(ParmString(w, af-w), ParmString(af + 1), cl);
+    const aspeller::CheckInfo * ci = check_list_data(cl);
+    if (level <= 2) {
+      if (level == 2) 
+        COUT << word << ' ';
+      while (ci) {
+        COUT << ci->word;
+        ci = ci->next;
+        if (ci) COUT << ' ';
+      }
+      COUT << '\n';
+    } else if (level >= 3) {
+      while (ci) {
+        COUT << word << ' ' << ci->word << '\n';
+        ci = ci->next;
+      }
+    }
+  }
+  delete_check_list(cl);
+}
+
 
 ///////////////////////////////////////////////////////////////////////
 
@@ -1279,7 +1399,8 @@ void print_help_line(char abrv, char dont_abrv, const char * name,
     command += "=<str>";
   if (type == KeyInfoInt)
     command += "=<int>";
-  printf("  %-27s %s\n", command.c_str(), gettext (desc));
+  const char * tdesc = gettext(desc);
+  printf("  %-27s %s\n", command.c_str(), tdesc); // FIXME: consider word wrapping
 }
 
 void expand_expression(Config * config){
@@ -1356,14 +1477,10 @@ void expand_expression(Config * config){
 }
 
 void print_help () {
-  char * expandedoptionname=NULL;
-  char * tempstring=NULL;
-  size_t expandedsize=0;
-
   expand_expression(options);
   printf(_(
     "\n"
-    "Aspell %s alpha.  Copyright 2000 by Kevin Atkinson.\n"
+    "Aspell %s alpha.  Copyright 2000-2004 by Kevin Atkinson.\n"
     "\n"
     "Usage: aspell [options] <command>\n"
     "\n"
@@ -1376,6 +1493,8 @@ void print_help () {
     "  [dump] config [-e <expr>]  dumps the current configuration to stdout\n"
     "  config [+e <expr>] <key>   prints the current value of an option\n"
     "  soundslike       returns the sounds like equivalent for each word entered\n"
+    "  munch            generate possible root words and affixes\n"
+    "  expand [1-4]     expands affix flags\n"
     "  filter           passes standard input through filters\n"
     "  -v|version       prints a version line\n"
     "  dump|create|merge master|personal|repl [word list]\n"
@@ -1385,53 +1504,24 @@ void print_help () {
     "\n"
     "[options] is any of the following:\n"
     "\n"), VERSION);
-  Enumeration<KeyInfoEnumeration> els = options->possible_elements();
+  StackPtr<KeyInfoEnumeration> els(options->possible_elements());
   const KeyInfo * k;
-  while (k = els.next(), k) {
+  while (k = els->next(), k) {
     if (k->desc == 0) continue;
-    if ((k->type == KeyInfoDescript) &&
-        !strncmp(k->name,"filter-",7)){
+    if (k->type == KeyInfoDescript && !strncmp(k->name,"filter-",7)) {
       printf(_("\n"
-               "  %s Filter: %s\n"
-               "\tNOTE: in ambiguous case prefix following options by `filter-'\n"),
+               "  %s filter: %s\n"
+               "    NOTE: in ambiguous case prefix following options by `filter-'\n"),
                &(k->name)[7],k->desc);
-      if (expandedoptionname != NULL) {
-        free(expandedoptionname);
-        expandedsize=0;
-      }
-      if (!strncmp(k->name,"filter-",7)) {
-        expandedoptionname=strdup(&(k->name[7]));
-        expandedsize=strlen(k->name)-7;
-      }
-      else {
-        expandedoptionname=strdup(k->name);
-        expandedsize=strlen(k->name);
-      }
       continue;
     }
-    else if (k->type == KeyInfoDescript) {
-      if (expandedoptionname != NULL) {
-        free(expandedoptionname);
-        expandedsize=0;
-        expandedoptionname=NULL;
-      }
-    }
-    if ((tempstring=(char*)malloc(expandedsize+strlen(k->name)+2)) == NULL) {
-      expandedoptionname=NULL;
-      continue;
-    }
-    tempstring[0]='\0';
-    if ((strlen(k->name) < expandedsize) ||
-        (expandedsize && strncmp(k->name,expandedoptionname,expandedsize))) {
-      tempstring=strncat(tempstring,expandedoptionname,expandedsize);
-      tempstring=strncat(tempstring,"-",1);
-    }
-    tempstring=strncat(tempstring,k->name,strlen(k->name));
-    const PossibleOption * o = find_option(tempstring);
+    const PossibleOption * o = find_option(k->name);
+    const char * name = k->name;
+    if (strncmp(name, "filter-", 7) == 0) name += 7;
     print_help_line(o->abrv, 
 		    strncmp((o+1)->name, "dont-", 5) == 0 ? (o+1)->abrv : '\0',
-		    tempstring, k->type, k->desc);
-    if (strcmp(tempstring, "mode") == 0) {
+		    name, k->type, k->desc);
+    if (strcmp(name, "mode") == 0) {
       for (const ModeAbrv * j = mode_abrvs;
            j != mode_abrvs_end;
            ++j)
@@ -1439,14 +1529,6 @@ void print_help () {
         print_help_line(j->abrv, '\0', j->mode, KeyInfoBool, j->desc, true);
       }
     }
-    if (tempstring != NULL) {
-      free(tempstring);
-      tempstring=NULL;
-    }
   }
-  if (expandedoptionname!=NULL) {
-    free(expandedoptionname);
-  }
-
 }
 

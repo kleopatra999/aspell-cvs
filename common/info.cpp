@@ -35,6 +35,7 @@
 #include "vector.hpp"
 #include "stack_ptr.hpp"
 #include "strtonum.hpp"
+#include "lock.hpp"
 
 namespace acommon {
 
@@ -78,12 +79,14 @@ namespace acommon {
     DictInfoList   dict_info_list;
     void clear();
     PosibErr<void> fill(Config *, StringList &);
-    bool has_data() {return module_info_list.head_ != 0;}
+    bool has_data() const {return module_info_list.head_ != 0;}
     void fill_helper_lists(const StringList &);
   };
 
-  struct MDInfoListofLists
+  class MDInfoListofLists
   {
+    Mutex lock;
+
     MDInfoListAll * data;
   
     int       offset;
@@ -91,13 +94,15 @@ namespace acommon {
   
     int valid_pos(int pos) {return offset <= pos && pos < size + offset;}
 
-    MDInfoListofLists();
-    ~MDInfoListofLists();
-
     void clear(Config * c);
     int find(const StringList &);
 
-    PosibErr<MDInfoListAll *> get_lists(Config * c);
+  public:
+
+    MDInfoListofLists();
+    ~MDInfoListofLists();
+
+    PosibErr<const MDInfoListAll *> get_lists(Config * c);
 
     void flush() {} // unimplemented
   };
@@ -211,29 +216,28 @@ namespace acommon {
     
     PosibErr<void> err;
 
-    String key, data;
-    while (getdata_pair(in, key, data)) {
-      if (key == "order-num") {
-	to_add->c_struct.order_num = strtod_c(data.c_str(), NULL);
+    FixedBuffer<> buf; DataPair d;
+    while (getdata_pair(in, d, buf)) {
+      if (d.key == "order-num") {
+	to_add->c_struct.order_num = strtod_c(d.value.str(), NULL);
 	if (!(0 < to_add->c_struct.order_num && 
 	      to_add->c_struct.order_num < 1)) 
 	  {
-	    err.prim_err(bad_value, key, data,
+	    err.prim_err(bad_value, d.key, d.value,
 			 "a number between 0 and 1");
 	    goto RETURN_ERROR;
 	  }
-      } else if (key == "lib-dir") {
-	to_add->lib_dir = data;
+      } else if (d.key == "lib-dir") {
+	to_add->lib_dir = d.value.str();
 	to_add->c_struct.lib_dir = to_add->lib_dir.c_str();
-      } else if (key == "dict-dir" || key == "dict-dirs") {
+      } else if (d.key == "dict-dir" || d.key == "dict-dirs") {
 	to_add->c_struct.dict_dirs = &(to_add->dict_dirs);
-	itemize(data, to_add->dict_dirs);
-      } else if (key == "dict-exts") {
+	itemize(d.value, to_add->dict_dirs);
+      } else if (d.key == "dict-exts") {
 	to_add->c_struct.dict_dirs = &(to_add->dict_exts);
-	itemize(data, to_add->dict_exts);
+	itemize(d.value, to_add->dict_exts);
       } else {
-fprintf(stderr,"File: %s(%i)\n",__FILE__,__LINE__);
-	err.prim_err(unknown_key, key);
+	err.prim_err(unknown_key, d.key);
 	goto RETURN_ERROR;
       }
     }
@@ -444,7 +448,9 @@ fprintf(stderr,"File: %s(%i)\n",__FILE__,__LINE__);
     } else {
       FStream f;
       RET_ON_ERR(f.open(node->info_file, "r"));
-      bool res = getdata_pair(f, main_wl, flags);
+      FixedBuffer<> buf; DataPair dp; // FIXME
+      bool res = getdata_pair(f, dp, buf);
+      main_wl = dp.key; flags = dp.value;
       f.close();
       if (!res)
 	return make_err(bad_file_format,  node->info_file, "");
@@ -551,10 +557,11 @@ fprintf(stderr,"File: %s(%i)\n",__FILE__,__LINE__);
     return -1;
   }
 
-  PosibErr<MDInfoListAll *>
+  PosibErr<const MDInfoListAll *>
   MDInfoListofLists::get_lists(Config * c)
   {
-    Config * config = (Config *)c;
+    LOCK(&lock);
+    Config * config = (Config *)c; // FIXME: WHY?
     int & pos = config->md_info_list_index;
     StringList dirs;
     if (!valid_pos(pos)) {
@@ -617,9 +624,9 @@ fprintf(stderr,"File: %s(%i)\n",__FILE__,__LINE__);
   // ModuleInfo
   //
 
-  ModuleInfoList * get_module_info_list(Config * c)
+  const ModuleInfoList * get_module_info_list(Config * c)
   {
-    MDInfoListAll * la = md_info_list_of_lists.get_lists(c);
+    const MDInfoListAll * la = md_info_list_of_lists.get_lists(c);
     if (la == 0) return 0;
     else return &la->module_info_list;
   }
@@ -666,9 +673,9 @@ fprintf(stderr,"File: %s(%i)\n",__FILE__,__LINE__);
   // DictInfo
   //
 
-  DictInfoList * get_dict_info_list(Config * c)
+  const DictInfoList * get_dict_info_list(Config * c)
   {
-    MDInfoListAll * la = md_info_list_of_lists.get_lists(c);
+    const MDInfoListAll * la = md_info_list_of_lists.get_lists(c);
     if (la == 0) return 0;
     else return &la->dict_info_list;
   }
