@@ -594,7 +594,7 @@ namespace acommon
                 return make_err(cant_extend_options,"add_filter",value);
               }
               begin=(KeyInfo*)help;
-              begin[optsize-1].name=begin[optsize-1].def=begin[optsize].desc=NULL;
+              begin[optsize-1].name=begin[optsize-1].def=begin[optsize-1].desc=NULL;
               if( norealoption ){
                 begin[optsize-1].type=KeyInfoDescript;
                 ((char*)begin[optsize-1].def)=NULL;
