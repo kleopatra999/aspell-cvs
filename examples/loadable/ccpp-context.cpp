@@ -22,7 +22,7 @@
 //#define DEBUG {fprintf(stderr,"%s: %i\n",__FILE__,__LINE__);fflush(stderr);}
 
 namespace acommon{
-  context_filter::context_filter(void)
+  ContextFilter::ContextFilter(void)
   : opening(),
     closing()
   {
@@ -41,17 +41,16 @@ namespace acommon{
     name_=filtername;
   }
     
-  PosibErr<bool> context_filter::setup(Config* config){
+  PosibErr<bool> ContextFilter::setup(Config * config){
     StringList delimiters;
-    StringEnumeration *delimiterpairs;
-    const char* delimiterpair=NULL;
-    char* repair=NULL;
-    char* begin=NULL;
-    char* end=NULL;
+    StringEnumeration * delimiterpairs;
+    const char * delimiterpair=NULL;
+    char * repair=NULL;
+    char * begin=NULL;
+    char * end=NULL;
     String delimter;
-    char replace='\0';
   
-    if(config==NULL){
+    if( config == NULL ){
       fprintf(stderr,"Nothing to be configured\n");
       return true;
     }
@@ -63,32 +62,32 @@ namespace acommon{
     delimiterpairs=delimiters.elements();
     opening.resize(0);
     closing.resize(0);
-    while((delimiterpair=delimiterpairs->next())){
-      if((begin=repair=strdup(delimiterpair))==NULL){
+    while( ( delimiterpair=delimiterpairs->next() ) ){
+      if( ( begin=repair=strdup(delimiterpair) ) == NULL ){
         return false;
       }
       end=repair+strlen(repair);
-      while((*begin!=' ')&&(*begin!='\t')&&(begin!=end)){
+      while( ( *begin != ' ' ) && ( *begin != '\t' ) && ( begin != end ) ){
         begin++;
       }
-      if(begin==repair){
+      if( begin == repair ){
         fprintf(stderr,"no delimiter pair: `%s'\n",repair);
         free(repair);
-//replace someday by make_err
+//FIXME replace someday by make_err
         return false;
       }
-      if(((*begin==' ')||(*begin=='\t'))&&(begin!=end)){
+      if( ( ( *begin == ' ' ) || ( *begin == '\t' ) ) && ( begin != end ) ){
         *begin='\0';
         opening.resize(opening.size()+1);
         opening[opening.size()-1]=repair;
         begin++;
       }
-      while(((*begin==' ')||(*begin=='\t'))&&(begin!=end)){
+      while( ( ( *begin == ' ' ) || ( *begin == '\t' ) ) && ( begin != end ) ){
         begin++;
       }
-      if((*begin!=' ')&&(*begin!='\t')&&(begin!=end)){
+      if( ( *begin != ' ' ) && ( *begin != '\t' ) && ( begin != end ) ){
         closing.resize(closing.size()+1);
-        if ( strcmp(begin,"\\0")!=0 ) {
+        if ( strcmp(begin,"\\0") != 0 ) {
           closing[closing.size()-1]=begin;
         }
         else {
@@ -105,39 +104,40 @@ namespace acommon{
   } 
     
   
-  void context_filter::process(FilterChar*& start,FilterChar*& stop){
-    FilterChar* current=start-1;
-    FilterChar* beginblind=start;
-    FilterChar* endblind=stop;
-    FilterChar* localstop=stop;
+  void ContextFilter::process(FilterChar *& start,FilterChar *& stop){
+    FilterChar * current=start-1;
+    FilterChar * beginblind=start;
+    FilterChar * endblind=stop;
+    FilterChar * localstop=stop;
     int countmasking=0;
     int countdelimit=0;
     int matchdelim=0;
 
-    if((localstop>start+1)&&(*(localstop-1)=='\0')){
+    if( (localstop > start+1 ) && ( *(localstop-1) == '\0' ) ){
       localstop--;
       endblind=localstop;
     }
-    if(state==visible){
+    if( state == visible ){
       beginblind=endblind;
     }
-    while((++current<localstop)&&(*current!='\0')){
-      if(*current=='\\'){
+    while( ( ++current < localstop ) && ( *current != '\0' ) ){
+      if( *current == '\\' ){
         countmasking++;
         continue;
       }
-      if(state==visible){
-        if((countmasking%2==0)&&(correspond>=0)&&
-           (correspond<closing.size())&&
-           (closing[correspond].length()>0)&&
-           (current+closing[correspond].length()<localstop)){
-          for(matchdelim=0;matchdelim<closing[correspond].length();
-              matchdelim++){
-            if(current[matchdelim]!=closing[correspond][matchdelim]){
+      if( state == visible ){
+        if( ( countmasking % 2 == 0 ) && ( correspond >= 0 ) &&
+           ( correspond < (signed) closing.size() )&&
+           ( closing[correspond].length() > 0 )&&
+           ( current+closing[correspond].length() < localstop ) ){
+          for( matchdelim=0 ; matchdelim < (signed) closing[correspond].length() ;
+              matchdelim++ ){
+//FIXME Warning about comparison of signed and unsigned in following line
+            if( current[matchdelim] != closing[correspond][matchdelim] ){
               break;
             }
           }
-          if(matchdelim==closing[correspond].length()){
+          if( matchdelim == (signed) closing[correspond].length() ){
             beginblind=current;
             endblind=localstop;
             state=hidden;
@@ -147,20 +147,21 @@ namespace acommon{
         countmasking=0;
         continue;
       }
-      if(countmasking%2){
+      if( countmasking % 2 ){
         countmasking=0;
         continue;
       }
       countmasking=0;
-      for(countdelimit=0;countdelimit<opening.size();countdelimit++){
-        for(matchdelim=0;(current+opening[countdelimit].length()<localstop)&&
-                         (matchdelim<opening[countdelimit].length());
-            matchdelim++){
-          if(current[matchdelim]!=opening[countdelimit][matchdelim]){
+      for( countdelimit=0; countdelimit < (signed) opening.size(); countdelimit++){
+        for( matchdelim=0; ( current+opening[countdelimit].length() < localstop ) &&
+                           ( matchdelim < (signed) opening[countdelimit].length() );
+             matchdelim++ ){
+//FIXME Warning about comparison of signed and unsigned in following line
+          if( current[matchdelim] != opening[countdelimit][matchdelim] ){
             break;
           }
         }
-        if(matchdelim==opening[countdelimit].length()){
+        if( matchdelim == (signed) opening[countdelimit].length() ){
           endblind=current+opening[countdelimit].length();
           state=visible;
           hidecode(beginblind,endblind);
@@ -171,22 +172,22 @@ namespace acommon{
         }
       }
     }
-    if((state==visible)&&
-       (correspond>=0)&&(correspond<closing.size())&&
-       (closing[correspond]=="")&&(countmasking%2==0)){
+    if( ( state == visible ) &&
+       ( correspond >= 0 ) && ( correspond < (signed) closing.size() ) &&
+       ( closing[correspond] == "" ) && ( countmasking % 2 == 0 ) ){
       state=hidden;
       correspond=-1;
     } 
-    if(beginblind<endblind){
+    if( beginblind < endblind ){
       hidecode(beginblind,endblind);
     }
   }
   
-  PosibErr<bool> context_filter::hidecode(FilterChar* begin,FilterChar* end){
-  //here we go, a more efficient context hiding blinding might be used :)
-    FilterChar* current=begin;
-    while(current<end){
-      if((*current!='\t')&&(*current!='\n')&&(*current!='\r')){
+  PosibErr<bool> ContextFilter::hidecode(FilterChar * begin,FilterChar * end){
+  //FIXME here we go, a more efficient context hiding blinding might be used :)
+    FilterChar * current=begin;
+    while( current < end ){
+      if( ( *current != '\t' ) && ( *current != '\n' ) && ( *current != '\r' ) ){
         *current=' ';
       }
       current++;
@@ -194,12 +195,12 @@ namespace acommon{
     return true;
   }
         
-  void context_filter::reset(void){
+  void ContextFilter::reset(void){
     opening.resize(0);
     closing.resize(0);
     state=hidden;
   }
-  context_filter::~context_filter(){
+  ContextFilter::~ContextFilter(){
     reset();
   }
 }
