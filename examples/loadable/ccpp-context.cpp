@@ -19,7 +19,7 @@
 #ifdef DEBUG
 #undef DEBUG
 #endif
-//#define DEBUG {fprintf(stderr,"%s: %i\n",__FILE__,__LINE__);fflush(stderr);}
+#define DEBUG {fprintf(stderr,"%s: %i\n",__FILE__,__LINE__);}
 
 namespace acommon{
   ContextFilter::ContextFilter(void)
@@ -38,7 +38,6 @@ namespace acommon{
     closing[2]="";
     filterversion=VERSION;
     debugoutput=fopen("mydebugfile.dbg","a");
-    name_=filtername;
   }
     
   PosibErr<bool> ContextFilter::setup(Config * config){
@@ -48,22 +47,34 @@ namespace acommon{
     char * repair=NULL;
     char * begin=NULL;
     char * end=NULL;
-    String delimter;
+    String delimiter;
+    unsigned int countdelim=0;
   
     if( config == NULL ){
       fprintf(stderr,"Nothing to be configured\n");
       return true;
     }
-  
-    NEW_OPTION("delimiters",list,config,&delimiters,\
-               "\"\ \"\;/*\ */\;//\ \\0",\
-               "add/rem\ delimiter(s) ended/separated by ` ';"\
-               ,"context");
+    
+    BOOL_OPTION(config,"visible-first",invertstate,"context","filter");
+    SET_DESCRIPTION("visible-first",\
+                "swaps visible and invisible text;"\
+                "\{starts invisible\}","context");
+    SET_DEFAULT("visible-first","false","context");
+    if(invertstate){
+      state=visible;
+    }
+    LIST_OPTION(config,"delimiters",&delimiters,"context","filter");
+    ADD_DEFAULT("delimiters","\\' \\'","context");
+    ADD_DEFAULT("delimiters","/* */","context");
+    ADD_DEFAULT("delimiters","// \\0","context");
+    SET_DESCRIPTION("delimiters","add/rem delimiter\{s\} separated by ` ';",\
+                    "context");
     delimiterpairs=delimiters.elements();
     opening.resize(0);
     closing.resize(0);
     while( ( delimiterpair=delimiterpairs->next() ) ){
       if( ( begin=repair=strdup(delimiterpair) ) == NULL ){
+        fprintf(stderr,"ifailed to initialise %s filter\n",filter_name());
         return false;
       }
       end=repair+strlen(repair);
@@ -74,6 +85,7 @@ namespace acommon{
         fprintf(stderr,"no delimiter pair: `%s'\n",repair);
         free(repair);
 //FIXME replace someday by make_err
+        fprintf(stderr,"ifailed to initialise %s filter\n",filter_name());
         return false;
       }
       if( ( ( *begin == ' ' ) || ( *begin == '\t' ) ) && ( begin != end ) ){
@@ -100,6 +112,15 @@ namespace acommon{
       }
       free(repair);
     }
+    if (invertstate) {
+      for(countdelim=0;(countdelim < opening.size()) &&
+                       (countdelim < closing.size()); countdelim++) {
+        delimiter=opening[countdelim];
+        opening[countdelim]=closing[countdelim];
+        closing[countdelim]=delimiter;
+      }
+    }
+    fprintf(stderr,"%s filter initialised\n",filter_name());
     return true;
   } 
     
@@ -126,7 +147,26 @@ namespace acommon{
         continue;
       }
       if( state == visible ){
-        if( ( countmasking % 2 == 0 ) && ( correspond >= 0 ) &&
+        if ( ( countmasking % 2 == 0 ) && ( correspond < 0 ) ) {
+          for( countdelimit=0;
+                countdelimit < (signed) closing.size(); countdelimit++){
+            for( matchdelim=0; 
+                 ( current+closing[countdelimit].length() < localstop ) &&
+                 ( matchdelim < (signed) closing[countdelimit].length() );
+                 matchdelim++ ){
+//FIXME Warning about comparison of signed and unsigned in following line
+              if( current[matchdelim] != closing[countdelimit][matchdelim] ){
+                break;
+              }
+            }
+            if ((matchdelim == (signed) closing[countdelimit].length()) &&
+                closing[countdelimit].length()) {
+              correspond=countdelimit;
+              break;
+            }
+          }
+        }
+        if ( ( countmasking % 2 == 0 ) && ( correspond >= 0 ) &&
            ( correspond < (signed) closing.size() )&&
            ( closing[correspond].length() > 0 )&&
            ( current+closing[correspond].length() < localstop ) ){
@@ -137,7 +177,8 @@ namespace acommon{
               break;
             }
           }
-          if( matchdelim == (signed) closing[correspond].length() ){
+          if ((matchdelim == (signed) closing[correspond].length()) &&
+              closing[correspond].length()) {
             beginblind=current;
             endblind=localstop;
             state=hidden;
@@ -161,7 +202,8 @@ namespace acommon{
             break;
           }
         }
-        if( matchdelim == (signed) opening[countdelimit].length() ){
+        if ((matchdelim == (signed) opening[countdelimit].length()) &&
+            opening[countdelimit].length()) {
           endblind=current+opening[countdelimit].length();
           state=visible;
           hidecode(beginblind,endblind);

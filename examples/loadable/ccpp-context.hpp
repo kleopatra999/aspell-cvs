@@ -25,30 +25,30 @@
 //
 // enclose all the above as shown within the acommon namespace or set using to acommon
 
-#include "stdio.h"
 #include "loadable-filter-API.hpp"
 #include "config.hpp"
 #include "posib_err.hpp"
-#include "string.hpp"
-#include "vector.hpp"
 #include "can_have_error.hpp"
 #include "indiv_filter.hpp"
 #include "filter_char.hpp"
+
+#include "string.hpp"
+#include "vector.hpp"
+
+#include "stdio.h"
 
 
 namespace acommon{
 using namespace std;
 
-  extern "C" FILTER_API_EXPORTS bool process(char * begin,char * end);
-  extern "C" FILTER_API_EXPORTS IndividualFilter * new_filter(void);
-  
   typedef enum filterstate_{hidden=0, visible=1}filterstate;
   
-  DESCRIPTION("context",VERSION,\
-              "Filter for hiding delimited contexts from Aspell",\
-              ">=0.51",filtername)
-  
   class FILTER_API_EXPORTS ContextFilter : public IndividualFilter {
+    FILTER("context",filter_name,ContextFilter);
+    SET_DESCRIPTION("context",\
+                    "Filter for hiding delimited contexts from Aspell",\
+                    "context");
+    ASPELL_VERSION("context",">=0.51");
     filterstate state;
     vector<String> opening;
     vector<String> closing;
@@ -59,6 +59,7 @@ using namespace std;
     PosibErr<bool> hidecode(FilterChar * begin,FilterChar * end);
   //  void realprocess(FilterChar* start,FilterChar* stop);
   public:
+//    static IndividualFilter * new_filter(void){};
     ContextFilter(void);
     virtual void reset(void);
     void process(FilterChar *& start,FilterChar *& stop);
@@ -66,30 +67,5 @@ using namespace std;
     virtual ~ContextFilter();
   };
   
-  
-  
-  FILTER_API_EXPORTS bool process(char * begin, char * end){
-    FilterChar * start = new FilterChar[end-begin-1];
-    int strlen=( end-begin );
-    FilterChar * stop=start+strlen;
-    char* current=begin;
-    FilterChar * further=start;
-    IndividualFilter * basfilter=new ContextFilter ();
-
-    for( current=begin; current < end; current++, further++){
-      *further=*current;
-    }
-    basfilter->process(start,stop);
-    further=start;
-    for( current=begin; current < end; current++, further++){
-      *current=further->chr;
-    }
-    delete[] start;
-    return true;
-  }
-  
-    
-  FILTER_API_EXPORTS IndividualFilter * new_filter(void){
-    return new ContextFilter ();
-  }
 }
+ACTIVATE_FILTER(acommon,ContextFilter,"context");
