@@ -11,6 +11,7 @@
 #include "data.hpp"
 #include "enumeration.hpp"
 #include "speller.hpp"
+#include "check_list.hpp"
 
 using namespace acommon;
 
@@ -29,31 +30,6 @@ namespace aspeller {
   class SensitiveCompare;
   class Suggest;
 
-  typedef acommon::CheckInfo CheckInfo;
-
-  static inline void clear_check_info(CheckInfo & ci)
-  {
-    memset(&ci, 0, sizeof(ci));
-  }
-
-  struct GuessInfo 
-  {
-    int num;
-    int max;
-    CheckInfo * last;
-    GuessInfo(int m) : max(m) {}
-    void reset(CheckInfo * ci) { num = 0; last = ci; }
-    CheckInfo * add() {
-      if (num >= max) return 0;
-      num++;
-      last->next = last + 1;
-      last = const_cast<CheckInfo *>(last->next);
-      clear_check_info(*last);
-      last->guess = true;
-      return last;
-    }
-  };
-  
   class SpellerImpl : public Speller
   {
   public:
@@ -144,6 +120,9 @@ namespace aspeller {
       BasicWordInfo w = check_simple(word);
       if (w) ci.word = w.word;
       if (w || !lang_->affix()) return w;
+      // FIXME: Create special list of word lists which have
+      //        affix information to avoid checking for root words
+      //        in the personal dictionary and the like
       return lang_->affix()->affix_check(LookupInfo(this), word, ci, gi);
     }
 

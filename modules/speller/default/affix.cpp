@@ -19,20 +19,11 @@
 #include "errors.hpp"
 #include "getdata.hpp"
 #include "parm_string.hpp"
-#include "speller_impl.hpp" // for CheckInfo,GuessInfo
+#include "check_list.hpp"
 
 using namespace std;
 
 namespace aspeller {
-
-struct CheckList
-{
-  GuessInfo gi;
-  CheckInfo data[64];
-  void reset();
-  CheckList();
-  ~CheckList() {reset();}
-};
 
 CheckList * new_check_list()
 {
@@ -85,7 +76,6 @@ PosibErr<void> AffixMgr::setup(ParmString affpath)
   }
   return parse_file(affpath);
 }
-
 
 AffixMgr::~AffixMgr() 
 {

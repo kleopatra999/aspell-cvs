@@ -38,7 +38,7 @@ namespace aspeller {
   class Language;
 
   class SpellerImpl;
-  typedef acommon::CheckInfo CheckInfo;
+  using acommon::CheckInfo;
   struct GuessInfo;
 
   struct LookupInfo {
@@ -114,7 +114,6 @@ namespace aspeller {
 
   PosibErr<AffixMgr *> new_affix_mgr(ParmString name, 
                                      const Language * lang);
-  
 
 }
 

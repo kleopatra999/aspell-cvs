@@ -12,6 +12,13 @@
 // * data block
 // * hash table
 
+// word info is laid out as follows if affix compression is not used
+// [<compound info>]<word><null>
+// <compound info> is 0 if there is none and thus doubled as the null end
+// if affix compression is used than:
+// [<compund info>][<affix start>]<word><null>[<affixes><null>]
+// <affix start> is 0 if there is no affix info for the current word
+
 #include <map>
 
 using std::pair;
@@ -34,6 +41,7 @@ using std::pair;
 #include "string_buffer.hpp"
 #include "vector.hpp"
 #include "vector_hash-t.hpp"
+#include "check_list.hpp"
 
 #include "iostream.hpp"
 
@@ -205,7 +213,7 @@ namespace aspeller_default_readonly_ws {
 
   ReadOnlyWS::VirEmul * ReadOnlyWS::detailed_elements() const {
     return new MakeVirEnumeration<ElementsParms>
-      (word_lookup.begin(), ElementsParms(block));
+      (word_lookup.begin(), ElementsParms(word_block));
   }
 
   ReadOnlyWS::Size ReadOnlyWS::size() const {
@@ -238,6 +246,8 @@ namespace aspeller_default_readonly_ws {
     u32int soundslike_version_size;
     u32int minimal_specified;
     u32int middle_chars_size;
+
+    u32int affix_info; // none zero if affix information is encoded in table
   };
 
   PosibErr<void> ReadOnlyWS::load(ParmString f0, Config * config, 
@@ -260,7 +270,7 @@ namespace aspeller_default_readonly_ws {
     COUT << "Total Block Size: " << data_head.total_block_size << "\n";
 #endif
 
-    if (strcmp(data_head.check_word, "aspell default speller rowl 1.5") != 0)
+    if (strcmp(data_head.check_word, "aspell default speller rowl 1.6") != 0)
       return make_err(bad_file_format, fn);
 
     char * word = new char[data_head.lang_name_size];
@@ -269,7 +279,7 @@ namespace aspeller_default_readonly_ws {
     PosibErr<void> pe = set_check_lang(word,config);
     if (pe.has_err())
       return pe.with_file(fn);
-    
+
     delete[] word;
 
     word = new char[data_head.soundslike_name_size];
@@ -587,7 +597,7 @@ namespace aspeller_default_readonly_ws {
 
     DataHead data_head;
     memset(&data_head, 0, sizeof(data_head));
-    strcpy(data_head.check_word, "aspell default speller rowl 1.5");
+    strcpy(data_head.check_word, "aspell default speller rowl 1.6");
 
     data_head.lang_name_size          = strlen(lang.name()) + 1;
     data_head.soundslike_name_size    = strlen(lang.soundslike_name()) + 1;
@@ -634,63 +644,84 @@ namespace aspeller_default_readonly_ws {
 	CharVector tstr;
 	tstr.append(w0, s+1);
 	char * w = tstr.data();
-	
-	char * p = strchr(w, ':');
-	if (p == 0) {
-	  p = w + s;
-	} else {
-	  s = p - w;
-	  *p = '\0';
-	  ++p;
+
+        char * p0 = strchr(w, '/');
+	char * p1 = strchr(w, ':');
+
+        if (p0 && p1 && !(p0 < p1))
+          abort(); // FIXME return error
+
+        if (p1) { // compound info, handled first to get "s" right
+          s = p1 - w;
+	  *p1 = '\0';
+	  ++p1;
 	}
 	
+        if (p0) { // affix info
+	  s = p0 - w;
+          *p0 = '\0';
+          ++p0;
+        }
+
+        const char * affixes = p0;
+
 	check_if_valid(lang,w);
+
+        if (affixes) {
+          if (!lang.affix())
+            abort(); // FIXME return error
+          if (is_upper(lang, w))
+            abort(); // FIXME return error
+        }
 
 	// Read in compound info
 	
 	CompoundInfo c;
-	if (*c.read(p, lang) != '\0')
-	  return make_err(invalid_flag, w, p);
+        if (p1 && *c.read(p1, lang) != '\0')
+	  return make_err(invalid_flag, w, p1);
 	
 	// Check if it already has been inserted
 
-	for (j =word_hash->multi_find(w); !j.at_end(); j.adv())
-	  if (strcmp(w, j.deref())==0) break;
+        StackPtr<CheckList> cl(new_check_list());
 
-	// If already insert deal with compound info
+        // Now expand any affix compression
 
-	bool reinsert=false;
+        if (affixes) {
+          lang.affix()->expand(w, affixes, cl);
+        } else {
+          cl->reset();
+          CheckInfo * ci = cl->gi.add();
+          ci->word = strdup(w);
+        }
 
-	if (!j.at_end()) {
-	  CompoundInfo c0(static_cast<unsigned char>(*(j.deref() - 1)));
-	  if (c.any() && !c0.any())
-	    reinsert = true;
-	  else if (!c.any() || !c0.any())
-	    ;
-	  else if (c.d != c0.d)
-	    abort(); // FIXME
-	    //return make_err(conflicting_flags, w, c0, c, lang);
-	}
-	
-	// Finally insert the word into the dictionary
+        // iterate through each expanded word
 
-	if (j.at_end() || reinsert) {
-	  if(s > data_head.max_word_length)
-	    data_head.max_word_length = s;
-	  char * b;
-	  if (c.any()) {
-	    if (s < data_head.minimal_specified)
-	      data_head.minimal_specified = s;
-	    b = buf.alloc(s + 2);
-	    *b = static_cast<char>(c.d);
-	    ++b;
-	  } else {
-	    b = buf.alloc(s + 1);
-	  }
-	  strncpy(b, w, s+1);
-	  word_hash->insert(b);
-	}
-	++z;
+        for (const CheckInfo * ci = check_list_data(cl); ci; ci = ci->next)
+        {
+          const char * w = ci->word;
+          s = strlen(w);
+
+          for (j =word_hash->multi_find(w); !j.at_end(); j.adv())
+            if (strcmp(w, j.deref())==0) {
+              abort(); // FIXME: return error, duplicate
+            }
+          
+          if(s > data_head.max_word_length)
+            data_head.max_word_length = s;
+          char * b;
+          if (c.any()) {
+            if (s < data_head.minimal_specified)
+              data_head.minimal_specified = s;
+            b = buf.alloc(s + 2);
+            *b = static_cast<char>(c.d);
+            ++b;
+          } else {
+            b = buf.alloc(s + 1);
+          }
+          strncpy(b, w, s+1);
+          word_hash->insert(b);
+          ++z;
+        }
       }
       delete els;
     }

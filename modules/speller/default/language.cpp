@@ -326,10 +326,12 @@ namespace aspeller {
     
   }
 
-  PosibErr<Language *> new_language(Config & config)
+  PosibErr<Language *> new_language(Config & config, ParmString lang)
   {
-    return language_cache.get(config.retrieve("actual-lang"),
-                              &config);
+    if (!lang)
+      return language_cache.get(config.retrieve("actual-lang"), &config);
+    else
+      return language_cache.get(lang, &config);
   }
 
 }

@@ -325,7 +325,7 @@ namespace aspeller {
 
   void normalize_mid_characters(const Language & l, String & s);
 
-  PosibErr<Language *> new_language(Config &);
+  PosibErr<Language *> new_language(Config &, ParmString lang = 0);
   
 }
 

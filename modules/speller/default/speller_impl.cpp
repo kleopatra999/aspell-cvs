@@ -170,6 +170,8 @@ namespace aspeller {
     DataSetCollection::ConstIterator i   = wls_->begin();
     DataSetCollection::ConstIterator end = wls_->end();
     for (; i != end; ++i) {
+      // FIXME: Create special list of word lists which should be used to
+      //        check for performance reasons
       if  (i->use_to_check && 
 	   i->data_set->basic_type == DataSet::basic_word_set &&
 	   (w0 = static_cast<const BasicWordSet *>(i->data_set)
