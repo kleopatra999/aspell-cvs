@@ -1,6 +1,6 @@
 noinst_PROGRAMS = example-c list-dicts
 
-INCLUDES = -I${top_srcdir}/interfaces/cc/ -I${top_srcdir}/common
+AM_CPPFLAGS = -I${top_srcdir}/interfaces/cc/ -I${top_srcdir}/common
 
 example_c_SOURCES = example-c.c
 

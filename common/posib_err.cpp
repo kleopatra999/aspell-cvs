@@ -4,10 +4,11 @@
 // license along with this library if you did not you can find
 // it at http://www.gnu.org/.
 
-#include <settings.h> // needed for NLS support
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
+
+#include "settings.h" // needed for NLS support
 
 #include "posib_err.hpp"
 

@@ -105,8 +105,8 @@ AM_CONDITIONAL(COMPILE_IN_FILTERS, test "$enable_compile_in_filters" == "yes")
 dnl GETTEXT
 
 AM_GNU_GETTEXT([external])
-AM_GNU_GETTEXT_VERSION(0.11.5)
-AH_BOTTOM([#include <gettext.h>])
+AM_GNU_GETTEXT_VERSION(0.13)
+AH_BOTTOM([#include "gettext.h"])
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                                                                 #
@@ -368,7 +368,7 @@ AC_TRY_COMPILE(
 #                                                                 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-AC_CONFIG_FILES([Makefile gen/Makefile common/Makefile lib/Makefile data/Makefile m4/Makefile 
+AC_CONFIG_FILES([Makefile gen/Makefile common/Makefile lib/Makefile data/Makefile m4/Makefile
                  auto/Makefile modules/Makefile modules/tokenizer/Makefile
                  modules/speller/Makefile modules/speller/default/Makefile
 		 interfaces/Makefile interfaces/cc/Makefile

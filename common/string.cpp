@@ -52,7 +52,7 @@ namespace acommon {
   }
 
   String & String::no_case() {
-    int countcase=0;
+    unsigned int countcase=0;
     for (countcase = 0; countcase < length(); countcase++) {
       (*this)[countcase] = asc_tolower((*this)[countcase]);
     }
