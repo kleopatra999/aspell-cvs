@@ -59,7 +59,7 @@ AC_ARG_ENABLE(curses-include,
 [  --enable-curses-include=DIR])
 
 AC_ARG_ENABLE(compile-in-filters,
-[  ---enable-compile-in-filters])
+[  --enable-compile-in-filters])
 
 dnl
 

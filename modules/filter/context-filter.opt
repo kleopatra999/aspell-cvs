@@ -10,8 +10,8 @@ STATIC filter
 
 OPTION delimiters
 TYPE list
-DESCRIPTION add/rem delimiter(s) separated by ' ';
-DEFAULT \" \"
+DESCRIPTION add/rem delimiter(s) seperated by spaces
+DEFAULT " "
 DEFAULT /* */
 DEFAULT // \\0
 ENDOPTION

@@ -1,3 +1,11 @@
+sub prep_str($)
+{
+  local $_ = $_[0];
+  s/\\(.)/$1/g;
+  s/([\"\\])/\\$1/g;
+  return $_;
+}
+
 %filters=();
 while ($filename=shift) {
   ( open OPTIONFILE,"<$filename") || 
@@ -16,7 +24,7 @@ while ($filename=shift) {
   $inoption=0;
   while (<OPTIONFILE>) {
     chomp;
-    (($_=~/^#/) || ($_=~/^[ \t]*$/)) && next;
+    (($_=~/^\#/) || ($_=~/^[ \t]*$/)) && next;
     $_=~s/[ \t]+$//;
     $_=~s/^[ \t]+//;
     ($_=~s/^ENDFILE(?:[ \t]+|$)//i) && last;
@@ -42,9 +50,9 @@ while ($filename=shift) {
      (${$option}{"TYPE"}=$_) && next;
     ( $_=~s/^DEF(?:AULT)[ \t]+//i) && (($_=~s/\\(?=[ \t])//g) || 1) &&
      (((${$option}{"DEFAULT"} ne "") && (${$option}{"DEFAULT"}.=",")) ||1) &&
-     (${$option}{"DEFAULT"}.=$_) && next;
+     (${$option}{"DEFAULT"}.=prep_str($_)) && next;
     ( $_=~s/^DES(?:CRIPTION)[ \t]+//i) && (($_=~s/\\(?=[ \t])//g) || 1) &&
-     (${$option}{"DESCRIPTION"}=$_) && next;
+     (${$option}{"DESCRIPTION"}=prep_str($_)) && next;
     ( $_=~s/^ENDOPTION(?:[ \t]+|$)//i) && 
      (($inoption=0)||1) && next;
     ( $_=~s/^STATIC[ \t]+//i) && (($feature=uc $_ ) || 1) &&
@@ -63,7 +71,7 @@ printf STATICFILTERS "/*File generated during static filter build\n".
 while ($filter = shift @allfilters) {
   ( $filters{$filter}{"DECODER"} ne  "0") &&
    (printf STATICFILTERS "\n  IndividualFilter * ".
-                         $filters{$filter}{"DECODER"}."();\n");
+    $filters{$filter}{"DECODER"}."();\n");
   ( $filters{$filter}{"FILTER"} ne "0") &&
    (printf STATICFILTERS "\n  IndividualFilter * ".
                          $filters{$filter}{"FILTER"}."();\n");
@@ -107,7 +115,8 @@ while ($filter = shift @filterhashes) {
     ((lc ${$option}{"TYPE"}) eq "int") && printf STATICFILTERS "KeyInfoInt,";
     ((lc ${$option}{"TYPE"}) eq "string") && printf STATICFILTERS "KeyInfoString,";
     ((lc ${$option}{"TYPE"}) eq "list") && printf STATICFILTERS "KeyInfoList,";
-    printf STATICFILTERS "\"".${$option}{"DEFAULT"}."\",\"".${$option}{"DESCRIPTION"}."\"}";
+    print STATICFILTERS "\"".${$option}{"DEFAULT"}."\",\""
+                            .${$option}{"DESCRIPTION"}."\"}";
   }
   printf STATICFILTERS "\n  };\n";
   printf STATICFILTERS "\n  const KeyInfo * ".${$filter}{"NAME"}."_options_begin = ".

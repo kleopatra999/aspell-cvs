@@ -31,7 +31,7 @@
 #endif
 
 #ifdef FILTER_PROGRESS_CONTROL
-FILE * controllout=stderr;
+static FILE * controllout=stderr;
 #define FDEBUGCLOSE do {\
   if ((controllout != stdout) && (controllout != stderr)) {\
     fclose(controllout);\
