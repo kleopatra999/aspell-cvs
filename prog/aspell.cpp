@@ -60,12 +60,6 @@ void personal();
 void repl();
 void soundslike();
 
-#ifdef WIN32
-# define STDIOBUFSIZE 2
-#else
-# define STDIOBUFSIZE 0
-#endif
-
 #define EXIT_ON_ERR(command) \
   do{PosibErrBase pe(command);\
   if(pe.has_err()){CERR<<"Error: "<< pe.get_err()->mesg << "\n"; exit(1);}\
@@ -460,9 +454,11 @@ DocumentChecker * new_checker(AspellSpeller * speller,
 
 void pipe() 
 {
+#ifndef WIN32
   // set up stdin and stdout to be line buffered
-  assert(setvbuf(stdin, 0, _IOLBF, STDIOBUFSIZE) == 0); 
-  assert(setvbuf(stdout, 0, _IOLBF, STDIOBUFSIZE) == 0);
+  assert(setvbuf(stdin, 0, _IOLBF, 0) == 0); 
+  assert(setvbuf(stdout, 0, _IOLBF, 0) == 0);
+#endif
 
   bool terse_mode = true;
   bool do_time = options->retrieve_bool("time");
@@ -495,6 +491,7 @@ void pipe()
 
   for (;;) {
     buf.clear();
+    fflush(stdout);
     while (c = getchar(), c != '\n' && c != EOF)
       buf.push_back(static_cast<char>(c));
     if (c == '\n')
