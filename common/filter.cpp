@@ -14,7 +14,7 @@
 #include "errors.hpp"
 #undef HAVE_LIBDL // FIXME
 #ifdef HAVE_LIBDL
-#include <dlfcn>
+#include <dlfcn.h>
 #endif
 #include <stdio.h>
 #include <cstdio>
