@@ -4100,6 +4100,18 @@ a C++ program.
 @node ChangeLog
 @appendix ChangeLog
 
+@heading Changes from 0.60.1 to 0.60.1.1 (November ??, 2004)
+
+@itemize @bullet
+@item
+Fix bug involving checking of capitalized word when affix compression
+is used.
+@item
+Compile fixes.
+@item
+Minor manual updates
+@end itemize
+
 @heading Changes from 0.60 to 0.60.1 (November 7, 2004)
 
 @itemize @bullet
