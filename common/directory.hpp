@@ -24,7 +24,7 @@
 #include <sys/types.h>
 #include <dirent.h>
 #else
-/*
+/*FIXME
  * place here all the system includes needed for windows containing similar
  * opaque data structure as DIR data type used by opendir, readdir, rewinddir,
  * closedir and if available by seekdir and telldir;
@@ -53,7 +53,7 @@ namespace acommon {
 //!directory itself
     DIR *browsing;
 #else
-/*
+/*FIXME
  *  place here Member named browsing having data type via which windows remembers which
  *  directory is browsed just now
  *  If System uses this for remembering position in Directory as Unix does does not
@@ -70,24 +70,24 @@ namespace acommon {
 //@{
 //!constructors
     Directory(void);
-    Directory(const Directory& brother);
-    Directory(const String& newname);
+    Directory(const Directory & brother);
+    Directory(const String & newname);
 //@}
 
 //!assignment Operators
-    void operator=(const Directory& brother);
-    void operator=(const String& newname);
+    void operator=(const Directory & brother);
+    void operator=(const String & newname);
 //@}
 
 //@{
 //!Opens the directory for browsing
     bool open(void);
 //!replaces the pathname of the directory to browse before opening it
-    bool open(String& newname);
+    bool open(String & newname);
 //@}
 
 //!Reads the next entry from directory if opened and not at end of directory
-    bool read(int& type,String* content);
+    bool read(int & type, String * content);
 //!Remembers position of directory pointer before closing it
     void hold(void);
 //!restarts reading of directory at the position remembered before via
@@ -100,27 +100,27 @@ namespace acommon {
 //!destructor
     virtual ~Directory(void);
 //!get the name of directory browsed
-    String& getname(void){return name;}
+    String& getname(void){ return name; }
   };
 
 
   class PathBrowser {
-    vector<Directory> browsebase;
-    vector<String> unloop;
-    int nextbase;
+    vector< Directory > browsebase;
+    vector< String > unloop;
+    unsigned int nextbase; 
 
     void reset();
   public:
     PathBrowser(void);
-    PathBrowser(const PathBrowser& brother):browsebase(),unloop(){*this=brother;}
-    PathBrowser(const String& pathlist):browsebase(),unloop(){set_base_path(pathlist);}
-    PathBrowser(const StringList& pathlist):browsebase(),unloop(){set_base_path(pathlist);}
-    void operator=(const PathBrowser& brother);
-    void operator=(const String& pathlist){set_base_path(pathlist);}
-    void operator=(const StringList& pathlist){set_base_path(pathlist);}
-    void set_base_path(const String& pathlist);
-    void set_base_path(const StringList& pathlist);
-    bool expand_filename(String& filename,bool cont=false);
+    PathBrowser(const PathBrowser & brother): browsebase(), unloop() { *this=brother; }
+    PathBrowser(const String & pathlist): browsebase(), unloop() { set_base_path(pathlist); }
+    PathBrowser(const StringList & pathlist): browsebase(), unloop() { set_base_path(pathlist); }
+    void operator=(const PathBrowser & brother);
+    void operator=(const String & pathlist){ set_base_path(pathlist); }
+    void operator=(const StringList & pathlist){ set_base_path(pathlist); }
+    void set_base_path(const String & pathlist);
+    void set_base_path(const StringList & pathlist);
+    bool expand_filename(String & filename ,bool cont=false );
     ~PathBrowser(void);
   };
 }
