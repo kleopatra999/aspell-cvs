@@ -412,6 +412,14 @@ namespace acommon
 bool emptyfile=true;
 
           while (getdata_pair(options,optionkey,optionkeyvalue)) {
+            if (((optionkey == "add-filter") ||
+                 (optionkey == "rem-filter")) &&
+                 (optionkeyvalue == value)) {
+              fprintf(stderr,"warning: specifying filter twice makes no sense\n"
+                             "\tignoring `%s %s'\n",
+                             optionkey.c_str(),optionkeyvalue.c_str());
+              continue;
+            }
             emptyfile=false;
             RET_ON_ERR(config->replace(optionkey.c_str(),optionkeyvalue.c_str()));
           }
