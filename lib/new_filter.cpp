@@ -172,7 +172,7 @@ namespace acommon
   PosibErr<void> setup_filter(Filter & filter, 
 			      Config * config, 
 			      bool use_decoder, 
-				 bool use_filter, bool use_encoder)
+			      bool use_filter, bool use_encoder)
   {
     StringList sl;
     config->retrieve_list("filter", &sl);
@@ -186,7 +186,7 @@ namespace acommon
     int modsize=filter_modules_end-filter_modules_begin;
     ConfigModule * currentfilter=NULL;
 
-    while ( (filter_name = els.next() ) != 0 ){
+    while ((filter_name = els.next()) != 0) {
       filterhandle[0]=filterhandle[1]=filterhandle[2]=NULL;
       addcount=0;
       fprintf(stderr, "Loading %s ... \n", filter_name);
@@ -198,26 +198,28 @@ namespace acommon
   //all filters added. If the filter is contained the corresponding decoder encoder and
   //filter is loaded.
 #ifdef HAVE_LIBDL
-      if( !f ){
+      if (!f)
+      {
         for( currentfilter=(ConfigModule*)filter_modules_begin+standard_filters_size;
             currentfilter < (ConfigModule*)filter_modules_end; currentfilter++){
-          if( strcmp(currentfilter->name,filter_name) == 0 ){
+          if (strcmp(currentfilter->name,filter_name) == 0) {
             break;
           }
         }
-        if( currentfilter >= filter_modules_end ){
+        if (currentfilter >= filter_modules_end) {
           return make_err(other_error);
         }
-        if( ( ( filterhandle[0]=dlopen(currentfilter->load,RTLD_NOW) ) == NULL ) ||
-            ( ( filterhandle[1]=dlopen(currentfilter->load,RTLD_NOW) ) == NULL ) ||
-            ( ( filterhandle[2]=dlopen(currentfilter->load,RTLD_NOW) ) == NULL ) ){
-          if( filterhandle[0] ){
+        if (((filterhandle[0]=dlopen(currentfilter->load,RTLD_NOW)) == NULL) ||
+            ((filterhandle[1]=dlopen(currentfilter->load,RTLD_NOW)) == NULL) ||
+            ((filterhandle[2]=dlopen(currentfilter->load,RTLD_NOW)) == NULL))
+	{
+          if (filterhandle[0]) {
             dlclose(filterhandle[0]);
           }
-          if( filterhandle[1] ){
+          if (filterhandle[1]) {
             dlclose(filterhandle[1]);
           }
-          if( filterhandle[2] ){
+          if (filterhandle[2]) {
             dlclose(filterhandle[2]);
           }
           return make_err(cant_dlopen_file,"filter setup",filter_name,dlerror());
@@ -225,17 +227,17 @@ namespace acommon
         dynamicfilter.decoder=NULL;
         dynamicfilter.encoder=NULL;
         dynamicfilter.filter=NULL;
-        if( !( ( (void*)dynamicfilter.decoder)=dlsym(filterhandle[0],"new_decoder") ) &&
-            !( ( (void*)dynamicfilter.encoder)=dlsym(filterhandle[1],"new_encoder") ) &&
-            !( ( (void*)dynamicfilter.filter)=dlsym(filterhandle[2],"new_filter") ) ){
+        if (!( ((void*)dynamicfilter.decoder)=dlsym(filterhandle[0],"new_decoder")) &&
+	    !( ((void*)dynamicfilter.encoder)=dlsym(filterhandle[1],"new_encoder")) &&
+	    !( ((void*)dynamicfilter.filter)=dlsym(filterhandle[2],"new_filter")) ) 
+	{
           dlclose(filterhandle[0]);
           dlclose(filterhandle[1]);
           dlclose(filterhandle[2]);
           return make_err(empty_filter,"filter setup",filter_name);
         }
         f=&dynamicfilter;
-      }
-      else{
+      } else {
         addcount=1;
       }
 #else
@@ -249,17 +251,16 @@ namespace acommon
         if ( !keep ){
           ifilter.release();
 #ifdef HAVE_LIBDL
-          if( filterhandle[0] != NULL ){
+          if (filterhandle[0] != NULL) {
             dlclose(filterhandle[0]);
           }
 #endif
-        }
-        else{
+        } else {
           filter.add_filter(ifilter.release(),filterhandle[0]);
         }
       } 
 #ifdef HAVE_LIBDL
-      else if( filterhandle[0] != NULL ){
+      else if (filterhandle[0] != NULL) {
         dlclose(filterhandle[0]);
       }
 #endif
