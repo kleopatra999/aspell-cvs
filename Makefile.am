@@ -131,7 +131,8 @@ dynamic_optfiles =
 optfiles = \
   modules/filter/email-filter.opt\
   modules/filter/tex-filter.opt\
-  modules/filter/sgml-filter.opt
+  modules/filter/sgml-filter.opt\
+  modules/filter/context-filter.opt
 
 ### If your filter sources contain ALIAS line add .flt file
 ### corresponding to entire alias name
@@ -149,8 +150,8 @@ libaspell_la_SOURCES +=\
   modules/filter/email.cpp\
   modules/filter/tex.cpp\
   modules/filter/sgml.cpp\
-  modules/filter/ccpp-context.hpp\
-  modules/filter/ccpp-context.cpp
+  modules/filter/context.hpp\
+  modules/filter/context.cpp
 
 else # not COMPILE_IN_FILTERS
 
@@ -170,7 +171,7 @@ libtex_filter_la_LIBADD = libaspell.la
 libsgml_filter_la_SOURCES  = modules/filter/sgml.cpp
 libsgml_filter_la_LIBADD = libaspell.la
 
-libcontext_filter_la_SOURCES  = modules/filter/ccpp-context.hpp modules/filter/ccpp-context.cpp
+libcontext_filter_la_SOURCES  = modules/filter/context.hpp modules/filter/context.cpp
 libcontext_filter_la_LIBADD = libaspell.la
 
 ### Before this line add the corresponding <yourfilterlibrary>_SOURCES and
