@@ -354,10 +354,6 @@ namespace aspeller_default_suggest {
 	  score = edit_dist_fun(sw.soundslike,
 				original_soundslike, 
 				parms.edit_distance_weights);
-	  //COUT << sw.soundslike << " " 
-	  //     << score << " "
-	  //     << (score.stopped_at - sw.soundslike) << "\n";
-
 	  stopped_at = score.stopped_at - sw.soundslike;
 	  if (score < LARGE_NUM) {
 	    stopped_at = LARGE_NUM;
@@ -547,7 +543,7 @@ namespace aspeller_default_suggest {
 	if (max < i->score) max = i->score;
       }
       threshold = max;
-      while (i != scored_near_misses.end() && i->score <= threshold) 
+      for (;i != scored_near_misses.end() && i->score <= threshold; ++i)
 	i->score = threshold + 1;
 
       scored_near_misses.sort();
