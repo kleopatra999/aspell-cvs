@@ -181,9 +181,9 @@ libcontext_filter_la_LIBADD = libaspell.la
 
 endif # COMPILE_IN_FILTERS
 
-noinst_DATA += ${static_optfiles}
-opt_DATA = ${dynamic_optfiles}
-filter_DATA = ${fltfiles}
+noinst_DATA += $(static_optfiles)
+opt_DATA = $(dynamic_optfiles)
+filter_DATA = $(fltfiles)
 
 ## settings.h added as a decency so it will get recreated if
 ##   the COMPILE_IN_FILTERS option changes

@@ -9,10 +9,10 @@ touch auto
 cd ..
 
 cd manual
-test -e man-html && mkdir man-html
-test -e man-text && mkdir man-text
-test -e dev-html && mkdir dev-html
-test -e dev-text && mkdir dev-text
+test -e man-html || mkdir man-html
+test -e man-text || mkdir man-text
+test -e dev-html || mkdir dev-html
+test -e dev-text || mkdir dev-text
 cd ..
 
 autopoint -f || exit 1
