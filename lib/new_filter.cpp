@@ -166,7 +166,8 @@ namespace acommon
 //The direct interface usually when new_filter ... functions are coded
 //manually
     FilterHandle & operator= (void * h) {
-      assert(handle == NULL);
+//FIXME only true for first filter but not for multible filters 
+//      assert(handle == NULL);
       handle=h; return *this;
     }
   private:
@@ -190,6 +191,9 @@ namespace acommon
     ConfigModule * currentfilter=NULL;
 
     while ((filter_name = els.next()) != 0) {
+//FIXME Hm seems as would url filter be allways loaded first 
+//      although beeing removed and added agaon at end of filter list 
+//      Help needed or adding item_removed to notifier ?
       filterhandle[0]=filterhandle[1]=filterhandle[2]=(void*)NULL;
       addcount=0;
       fprintf(stderr, "Loading %s ... \n", filter_name);
@@ -760,6 +764,7 @@ namespace acommon
       }
       return no_err;
     }
+//FIXME Add item_removed member to clear away filter options 
   };
 
   void activate_dynamic_filteroptions(Config * config){

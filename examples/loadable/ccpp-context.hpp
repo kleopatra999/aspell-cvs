@@ -25,6 +25,7 @@
 //
 // enclose all the above as shown within the acommon namespace or set using to acommon
 
+#define FILTER_PROGRESS_CONTROL ""
 #include "loadable-filter-API.hpp"
 #include "config.hpp"
 #include "posib_err.hpp"

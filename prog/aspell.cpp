@@ -11,7 +11,7 @@
 //       C++ interface is currently incomplete.  The C interface is
 //       used in some places because without the strings will not get
 //       converted properly when the encoding is not the same as the
-//       internal encoding used by aspell.
+//       internal encoding used by Aspell.
 // 
 
 #include <deque>
@@ -222,7 +222,7 @@ int main (int argc, const char *argv[])
   const char           * parm;
 
   //
-  // process command line options by setting the oprepreate options
+  // process command line options by setting the appropriate options
   // in "options" and/or pushing non-options onto "argv"
   //
   PossibleOption other_opt = OPTION("",'\0',0);
@@ -310,7 +310,7 @@ int main (int argc, const char *argv[])
   }
 
   //
-  // perform the requisted action
+  // perform the requested action
   //
   String action_str = args.front();
   args.pop_front();

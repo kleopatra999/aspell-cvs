@@ -17,6 +17,7 @@
 #include "posib_err.hpp"
 #include "config.hpp"
 #include "indiv_filter.hpp"
+#include "stdio.h"
 
 #if defined(__CYGWIN__) || defined (_WIN32)
 #define FILTER_API_EXPORTS __declspec(dllexport)
@@ -24,6 +25,24 @@
 #else
 #define FILTER_API_EXPORTS
 #define FILTER_API_IMPORTS
+#endif
+
+#ifdef FILTER_PROGRESS_CONTROL
+FILE * controllout=stderr;
+#define FDEBUGCLOSE {\
+  if ((controllout != stdout) && (controllout != stderr)) {\
+    fclose(controllout);\
+    controllout=stderr;\
+  }\
+};
+#define FDEBUGOPEN {\
+  FDEBUGCLOSE \
+  if ((controllout=fopen(FILTER_PROGRESS_CONTROL,"w")) == NULL) {\
+    controllout=stderr;\
+  }\
+  fprintf(controllout,"Debug Destination %s\n",FILTER_PROGRESS_CONTROL);\
+}
+#define FDEBUG {fprintf(controllout,"File: %s(%i)\n",__FILE__,__LINE__);}
 #endif
 
 /* The following macros hide some details about option retrievement in aspell.
