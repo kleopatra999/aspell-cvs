@@ -401,7 +401,7 @@ mode, 93 in
 \layout Standard
 
 If you have any other information you would like to add to this chart please
- contact me at kevina at users sourceforge net.
+ contact me at kevina@gnu.org.
 \layout Subsection
 
 Comparison to Ispell
@@ -819,31 +819,11 @@ Win32 Notes
 
 Due to limited time and my general dislike for Microsoft Windows, Win32
  is not an officially supported platform for Aspell.
- However, with a little effort, it should be possible for someone with experienc
-e with the Cgiwin development environment to create an Aspell binary and
- library (dll) using gcc.
- The library in theory should be able to be used by any Win32 compiler if
- it is compiled right, but this theory has never been tested.
-\layout Standard
-
-If you have experience with using Cgiwin or a Unix like environment and
- are willing to maintain an Aspell binary and/or library I would be willing
- to work with you to get Aspell to compile.
- If you are seriously interested please post to aspell-devel@gnu.org after
- you have given it an initial try.
- However, if, after reading this section, you do not know how to start then
- you most likely do not have the necessary experience to be able to get
- Aspell to compile.
- Please do not bother me with questions such as 
-\begin_inset Quotes eld
-\end_inset 
-
-I would like to use Aspell on Win32 but I have no idea what to do.
-\begin_inset Quotes erd
-\end_inset 
-
-, as I am not willing to teach you the basics of working with a Unix like
- environment.
+ However, it is possible for someone with experience with the Cgiwin development
+ environment to create an Aspell binary and library (dll) using gcc as others
+ have done so.
+ The library, in theory, should be able to be used by any Win32 compiler
+ if it is compiled right, but this theory has never been tested.
 \layout Standard
 
 Aspell requires Gcc 2.95 (or better) and the Cgiwin development environment
@@ -851,10 +831,15 @@ Aspell requires Gcc 2.95 (or better) and the Cgiwin development environment
  Both the Cgiwin or the Mingw version of Gcc should work.
  The Mingw version of Aspell will have slightly less functionality, but
  none of which is noticeable to the end user.
- Microsoft Visual C++, however, will not work as the compiler is far to
- buggy as far as C++ compliance goes.
- You are more than welcome to try but be warned that others in the past
- have tried and given up.
+ Microsoft Visual C++, however, will not work with the released version
+ of Aspell as the compiler is far to buggy as far as C++ compliance goes.
+ However, there is a patch available which should allow Aspell to compile
+ using Microsoft Visual C++ which you can find at 
+\begin_inset LatexCommand \url{ftp://ftp.gnu.org/gnu/aspell}
+
+\end_inset 
+
+.
 \layout Standard
 
 In order to get the nice full screen interface with Mingw when spell checking
@@ -924,6 +909,26 @@ prefix
 \end_inset 
 
 .
+\layout Standard
+
+If you have experience with using Cgiwin or a Unix like environment and
+ are willing to maintain an Aspell binary and/or library I would be willing
+ to work with you to get Aspell to compile.
+ If you are seriously interested please post to aspell-devel@gnu.org after
+ you have given it an initial try.
+ However, if, after reading this section, you do not know how to start then
+ you most likely do not have the necessary experience to be able to get
+ Aspell to compile.
+ Please do not bother me with questions such as 
+\begin_inset Quotes eld
+\end_inset 
+
+I would like to use Aspell on Win32 but I have no idea what to do.
+\begin_inset Quotes erd
+\end_inset 
+
+, as I am not willing to teach you the basics of working with a Unix like
+ environment.
 \layout Section
 
 Using aspell-import
@@ -5699,19 +5704,29 @@ appendix
 Changelog
 \layout Section*
 
-Changes from 0.50.2 to 0.50.3 (Nov ??, 2002)
+Changes from 0.50.2 to 0.50.3 (Nov 23, 2002)
 \layout Itemize
 
 Hopefully fixed the ispell alignment error problem when Aspell is used with
  ispell.el.
 \layout Itemize
 
-[Fixed a problem with NFS mounted home directories]
+Fixed a problem with personal dictionaries on NFS mounted home directories.
 \layout Itemize
 
 Compiled libaspell-common directory into libaspell for now to avoid forcing
- applications to relink with ever new Aspell version due to the use of the
- libtool '-release' flag.
+ applications to relink when ever a new Aspell version is out which was
+ due to the use of the libtool '-release' flag.
+\layout Itemize
+
+Fixed Makefiles so that aspell can be built outside the source tree (i.e.
+ with VPATH).
+\layout Itemize
+
+Updated the section on compiling with Win32.
+\layout Itemize
+
+Updated to Autoconf 2.56.
 \layout Section*
 
 Changes from 0.50.1 to 0.50.2 (Sep 28, 2002)
