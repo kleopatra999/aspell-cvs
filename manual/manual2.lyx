@@ -3605,8 +3605,7 @@ aspell.h
 \end_inset 
 
 , but this is not recommended.
- This version of Aspell uses the CVS version of libtool however released
- versions of libtool should also work.
+ 
 \layout Standard
 
 When your application first starts you should get a new configuration class
@@ -3750,12 +3749,13 @@ machine unsigned 32
 \end_inset 
 
 .
- <word> is expected to be a cast from either const u16int * or const u32int*
+ <word> is expected to be a cast from either const uint16_t * or const uint32_t*
  respectfully.
- U16int and u32int are generally unsigned short and unsigned int respectfully.
+ uint16_t and uint32_t are generally unsigned short and unsigned int respectfull
+y.
  <size> is the length of the string or -1 if the sting is null terminated.
- If the string is a cast from const u16int * or const u32int * then size
- is the amount of space in bytes the string takes up after being casted
+ If the string is a cast from const uint16_t * or const uint32_t * then
+ size is the amount of space in bytes the string takes up after being casted
  to const char * and not the true size of the string.
  Aspell_speller_check will return 0 is it is not found and non-zero otherwise.
 \layout Standard
@@ -5835,6 +5835,9 @@ appendix
 \layout Chapter
 
 Changelog
+\layout Section*
+
+Changes from 0.50.4.1 to 0.50.5
 \layout Section*
 
 Changes from 0.50.4 to 0.50.4.1 (Oct 11, 2003)
