@@ -96,69 +96,50 @@ using namespace std;//needed for vector
   }
 
   PosibErr<bool> FilterMode::addModeExtension(const String & ext, String toMagic) {
-fprintf(stderr,"mag: \"%s\" ext \"%s\"\n",toMagic.c_str(),ext.c_str());
 
     bool extOnly = false;
     
-DEBUG
     if (    ( toMagic == "" )
          || ( toMagic == "<nomagic>" )
          || ( toMagic == "<empty>" ) ) {
-DEBUG
       extOnly = true;
     }
     else {
-DEBUG
 
       PosibErr<bool> pe = FilterMode::MagicString::testMagic(NULL,toMagic,_name);
 
       if ( pe.has_err() ) {
-DEBUG
         return PosibErrBase(pe);
       }
-DEBUG
     } 
-DEBUG
 
     vector<MagicString>::iterator it;
 
     for ( it = magicKeys.begin() ; it != magicKeys.end() ; it++ ) {
-DEBUG
       if (    (    extOnly
                 && ( it->magic() == "" ) )
            || ( it->magic() == toMagic ) ) {
-DEBUG
         (*it) += ext;
         return true;
       }
-DEBUG
     }
-DEBUG
     if ( it != magicKeys.end() ) {
-DEBUG
       return false;
     }
-DEBUG
     if ( extOnly ) {
-DEBUG
       magicKeys.push_back(MagicString(_name));
     }
     else {
-DEBUG
       magicKeys.push_back(MagicString(toMagic,_name));
     }
     for ( it = magicKeys.begin() ; it != magicKeys.end() ; it++ ) {
-DEBUG
       if (    (    extOnly
                 && ( it->magic() == "" ) )
            || ( it->magic() == toMagic ) ) {
-DEBUG
         (*it) += ext;
         return true;
       }
-DEBUG
     }
-DEBUG
     return make_err(mode_extend_expand,_name.c_str());
   }
 
@@ -1066,14 +1047,12 @@ fine_next_line:
 
             PosibErr<bool> pe;
 
-fprintf(stderr,"extension \"%s\"\n",ext.c_str());
             if ( remove ) { 
               pe = collect.remModeExtension(ext,magic);
             }
             else {
               pe = collect.addModeExtension(ext,magic);
             }
-fprintf(stderr,"extension \"%s\"\n",ext.c_str());
             if ( pe.has_err() ) {
               fclose(in);
               regfree(&seekfor);
