@@ -561,7 +561,7 @@ namespace aspeller {
   //
 
   SpellerImpl::SpellerImpl() 
-    : Speller(0) /* FIXME */, ignore_repl(true)
+    : Speller(0) /* FIXME */, ignore_repl(true), guess_info(7)
   {}
 
   PosibErr<void> SpellerImpl::setup(Config * c) {

@@ -15,6 +15,7 @@ using namespace acommon;
 
 namespace acommon {
   class Config;
+  struct CheckInfo;
 }
 
 namespace aspeller {

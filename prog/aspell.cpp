@@ -68,6 +68,8 @@ void master();
 void personal();
 void repl();
 void soundslike();
+void munch();
+void expand();
 
 void print_error(ParmString msg)
 {
@@ -146,6 +148,8 @@ const PossibleOption possible_options[] = {
   COMMAND("pipe",      'a', 0),
   COMMAND("filter",    '\0', 0),
   COMMAND("soundslike",'\0', 0),
+  COMMAND("munch",     '\0', 0),
+  COMMAND("expand",    '\0', 0),
   COMMAND("list",      'l', 0),
   COMMAND("dicts",     '\0', 0),
 
@@ -332,6 +336,10 @@ int main (int argc, const char *argv[])
     filter();
   else if (action_str == "soundslike")
     soundslike();
+  else if (action_str == "munch")
+    munch();
+  else if (action_str == "expand")
+    expand();
   else if (action_str == "dump")
     action = do_dump;
   else if (action_str == "create")
@@ -639,19 +647,25 @@ void pipe()
       line += ignore;
       checker->process(line, strlen(line));
       while (Token token = checker->next_misspelling()) {
-        String guesses;
-        const CheckInfo * ci = reinterpret_cast<Speller * >(speller)->check_info();
-        while (ci) {
-          guesses << ", ";
-          if (ci->pre_add && ci->pre_add[0])      guesses << ci->pre_add << "+";
-          guesses << ci->root;
-          if (ci->pre_strip && ci->pre_strip[0]) guesses << "-" << ci->pre_strip;
-          if (ci->suf_strip && ci->suf_strip[0]) guesses << "-" << ci->suf_strip;
-          if (ci->suf_add   && ci->suf_add[0])   guesses << "+" << ci->suf_add;
-          ci = ci->next;
-        }
 	word = line + token.offset;
 	word[token.len] = '\0';
+        String guesses, guess;
+        const CheckInfo * ci = reinterpret_cast<Speller *>(speller)->check_info();
+        aspeller::CasePattern casep 
+          = aspeller::case_pattern(reinterpret_cast<aspeller::SpellerImpl *>
+                                   (speller)->lang(), word);
+        while (ci) {
+          guess.clear();
+          if (ci->pre_add && ci->pre_add[0])      guess << ci->pre_add << "+";
+          guess << ci->word;
+          if (ci->pre_strip && ci->pre_strip[0]) guess << "-" << ci->pre_strip;
+          if (ci->suf_strip && ci->suf_strip[0]) guess << "-" << ci->suf_strip;
+          if (ci->suf_add   && ci->suf_add[0])   guess << "+" << ci->suf_add;
+          guesses << ", " 
+                  << aspeller::fix_case(reinterpret_cast<aspeller::SpellerImpl * >(speller)->lang(),
+                                        casep, guess);
+          ci = ci->next;
+        }
 	start = clock();
         const AspellWordList * suggestions = 0;
         if (suggest) 
@@ -1272,6 +1286,67 @@ void soundslike() {
     COUT << word << '\t' << lang->to_soundslike(word) << "\n";
   } 
 }
+
+//////////////////////////
+//
+// munch
+//
+
+void munch() 
+{
+  using namespace aspeller;
+  CachePtr<Language> lang;
+  PosibErr<Language *> res = new_language(*options);
+  if (!res) {print_error(res.get_err()->mesg); exit(1);}
+  lang.reset(res.data);
+  String word;
+  CheckList * cl = new_check_list();
+  while (CIN >> word) {
+    lang->affix()->munch(word, cl);
+    COUT << word;
+    for (const aspeller::CheckInfo * ci = check_list_data(cl); ci; ci = ci->next)
+    {
+      COUT << ' ' << ci->word << '/';
+      if (ci->pre_flag != 0) COUT << static_cast<char>(ci->pre_flag);
+      if (ci->suf_flag != 0) COUT << static_cast<char>(ci->suf_flag);
+    }
+    COUT << '\n';
+  }
+  delete_check_list(cl);
+}
+
+//////////////////////////
+//
+// expand
+//
+
+void expand() 
+{
+  using namespace aspeller;
+  CachePtr<Language> lang;
+  PosibErr<Language *> res = new_language(*options);
+  if (!res) {print_error(res.get_err()->mesg); exit(1);}
+  lang.reset(res.data);
+  String word;
+  CheckList * cl = new_check_list();
+  while (CIN >> word) {
+    const char * w = word.c_str();
+    const char * af = strchr(w, '/');
+    if (af) {
+      const_cast<char *>(af)[0] = '\0';
+      lang->affix()->expand(ParmString(w, af-w), ParmString(af + 1), cl);
+      for (const aspeller::CheckInfo * ci = check_list_data(cl); ci; ci = ci->next)
+      {
+        COUT << ci->word << ' ';
+      }
+    } else {
+      COUT << word;
+    }
+    COUT << '\n';
+  }
+  delete_check_list(cl);
+}
+
 
 ///////////////////////////////////////////////////////////////////////
 

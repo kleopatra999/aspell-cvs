@@ -22,15 +22,18 @@ using namespace std;
 
 namespace aspeller {
 
-  inline BasicWordInfo LookupInfo::lookup (ParmString word) {
-    return sp->check_simple(word);
-  }
-
-
 char * mystrdup(const char * s);                   // duplicate string
 char * myrevstrdup(const char * s);
 
-PfxEntry::PfxEntry(AffixMgr* pmgr, affentry* dp)
+inline BasicWordInfo LookupInfo::lookup (ParmString word) {
+  if (sp)
+    return sp->check_simple(word);
+  else
+    return mystrdup(word); //FIXME, this now needs to be free some how
+}
+
+
+PfxEntry::PfxEntry(AffixMgr* pmgr, AffEntry* dp)
 {
   // register affix manager
   pmyMgr = pmgr;
@@ -53,128 +56,131 @@ PfxEntry::PfxEntry(AffixMgr* pmgr, affentry* dp)
 
 PfxEntry::~PfxEntry()
 {
-    achar = '\0';
-    if (appnd) free(appnd);
-    if (strip)free(strip);
-    pmyMgr = NULL;
-    appnd = NULL;
-    strip = NULL;    
+  achar = '\0';
+  if (appnd) free(appnd);
+  if (strip)free(strip);
+  pmyMgr = NULL;
+  appnd = NULL;
+  strip = NULL;    
 }
 
 // add prefix to this word assuming conditions hold
-char * PfxEntry::add(const char * word, int len)
+char * PfxEntry::add(ParmString word) const
 {
-    int			cond;
-    char	        tword[MAXWORDLEN+1];
+  int			cond;
+  char	        tword[MAXWORDLEN+1];
 
-     /* make sure all conditions match */
-     if ((len > stripl) && (len >= numconds)) {
-            unsigned char * cp = (unsigned char *) word;
-            for (cond = 0;  cond < numconds;  cond++) {
-	       if ((conds[*cp++] & (1 << cond)) == 0)
-	          break;
-            }
-            if (cond >= numconds) {
-	      /* we have a match so add prefix */
-              int tlen = 0;
-              if (appndl) {
-	          strcpy(tword,appnd);
-                  tlen += appndl;
-               } 
-               char * pp = tword + tlen;
-               strcpy(pp, (word + stripl));
-               return mystrdup(tword);
-	    }
-     }
-     return NULL;    
+  /* make sure all conditions match */
+  if ((word.size() > stripl) && (word.size() >= numconds)) {
+    const unsigned char * cp = (const unsigned char *) word.str();
+    for (cond = 0;  cond < numconds;  cond++) {
+      if ((conds[*cp++] & (1 << cond)) == 0)
+        break;
+    }
+    if (cond >= numconds) {
+      /* we have a match so add prefix */
+      int tlen = 0;
+      if (appndl) {
+        strcpy(tword,appnd);
+        tlen += appndl;
+      } 
+      char * pp = tword + tlen;
+      strcpy(pp, (word + stripl));
+      return mystrdup(tword);
+    }
+  }
+  return NULL;    
 }
 
 // check if this prefix entry matches 
 BasicWordInfo PfxEntry::check(LookupInfo linf, ParmString word,
                               CheckInfo & ci, GuessInfo * gi) const
 {
-    int			cond;	// condition number being examined
-    int	                tmpl;   // length of tmpword
-    BasicWordInfo       wordinfo;     // hash entry of root word or NULL
-    unsigned char *	cp;		
-    char	        tmpword[MAXWORDLEN+1];
+  int			cond;	// condition number being examined
+  int	                tmpl;   // length of tmpword
+  BasicWordInfo       wordinfo;     // hash entry of root word or NULL
+  unsigned char *	cp;		
+  char	        tmpword[MAXWORDLEN+1];
 
 
-    // on entry prefix is 0 length or already matches the beginning of the word.
-    // So if the remaining root word has positive length
-    // and if there are enough chars in root word and added back strip chars
-    // to meet the number of characters conditions, then test it
+  // on entry prefix is 0 length or already matches the beginning of the word.
+  // So if the remaining root word has positive length
+  // and if there are enough chars in root word and added back strip chars
+  // to meet the number of characters conditions, then test it
 
-     tmpl = word.size() - appndl;
+  tmpl = word.size() - appndl;
 
-     if ((tmpl > 0) &&  (tmpl + stripl >= numconds)) {
+  if ((tmpl > 0) &&  (tmpl + stripl >= numconds)) {
 
-	    // generate new root word by removing prefix and adding
-	    // back any characters that would have been stripped
+    // generate new root word by removing prefix and adding
+    // back any characters that would have been stripped
 
-	    if (stripl) strcpy (tmpword, strip);
-	    strcpy ((tmpword + stripl), (word + appndl));
+    if (stripl) strcpy (tmpword, strip);
+    strcpy ((tmpword + stripl), (word + appndl));
 
-            // now make sure all of the conditions on characters
-            // are met.  Please see the appendix at the end of
-            // this file for more info on exactly what is being
-            // tested
+    // now make sure all of the conditions on characters
+    // are met.  Please see the appendix at the end of
+    // this file for more info on exactly what is being
+    // tested
 
-	    cp = (unsigned char *)tmpword;
-	    for (cond = 0;  cond < numconds;  cond++) {
-		if ((conds[*cp++] & (1 << cond)) == 0) break;
-	    }
+    cp = (unsigned char *)tmpword;
+    for (cond = 0;  cond < numconds;  cond++) {
+      if ((conds[*cp++] & (1 << cond)) == 0) break;
+    }
 
-            // if all conditions are met then check if resulting
-            // root word in the dictionary
+    // if all conditions are met then check if resulting
+    // root word in the dictionary
 
-	    if (cond >= numconds) {
-              CheckInfo * lci = 0;
-              tmpl += stripl;
-              if ((wordinfo = linf.lookup(tmpword))) {
-                if (TESTAFF(wordinfo.affixes, achar))
-                  lci = &ci;
-                else if (gi)
-                  lci = &gi->add();
-              }
+    if (cond >= numconds) {
+      CheckInfo * lci = 0;
+      tmpl += stripl;
+      if ((wordinfo = linf.lookup(tmpword))) {
+
+        if (TESTAFF(wordinfo.affixes, achar))
+          lci = &ci;
+        else if (gi)
+          lci = gi->add();
+
+      } else {
               
-              // prefix matched but no root word was found 
-              // if XPRODUCT is allowed, try again but now 
-              // ross checked combined with a suffix
+        // prefix matched but no root word was found 
+        // if XPRODUCT is allowed, try again but now 
+        // ross checked combined with a suffix
+                
+        if (gi)
+          lci = gi->last;
+                
+        if (!wordinfo && (xpflg & XPRODUCT)) {
+          wordinfo = pmyMgr->suffix_check(linf, ParmString(tmpword, tmpl), 
+                                          ci, gi,
+                                          XPRODUCT, (AffEntry *)this);
+          if (wordinfo)
+            lci = &ci;
+          else if (gi->last != lci) {
+            while (lci = const_cast<CheckInfo *>(lci->next), lci) {
+              lci->pre_flag = achar;
+              lci->pre_add = appnd;
+              lci->pre_strip = strip;
+            }
+          }
+        }
+      }
               
-              if (gi)
-                lci = gi->last;
-              
-              if (!wordinfo && (xpflg & XPRODUCT)) {
-                wordinfo = pmyMgr->suffix_check(linf, ParmString(tmpword, tmpl), 
-                                                ci, gi,
-                                                XPRODUCT, (AffEntry *)this);
-                if (wordinfo)
-                  lci = &ci;
-                else if (gi->last != lci) {
-                  while (lci = const_cast<CheckInfo *>(lci->next), lci) {
-                    lci->pre_flag = achar;
-                    lci->pre_add = appnd;
-                    lci->pre_strip = strip;
-                  }
-                }
-              }
-              
-              if (lci) {
-                lci->root = wordinfo.word;
-                lci->pre_flag = achar;
-                lci->pre_add = appnd;
-                lci->pre_strip = strip;
-              }
-              if (lci ==&ci) return wordinfo;
-	    }
-     }
-     return BasicWordInfo();
+      if (lci) {
+        lci->word = wordinfo.word;
+        lci->pre_flag = achar;
+        lci->pre_add = appnd;
+        lci->pre_strip = strip;
+      }
+      if (lci ==&ci) return wordinfo;
+    }
+  }
+  return BasicWordInfo();
 }
 
 
 
-SfxEntry::SfxEntry(AffixMgr * pmgr, affentry* dp)
+SfxEntry::SfxEntry(AffixMgr * pmgr, AffEntry* dp)
 {
   // register affix manager
   pmyMgr = pmgr;
@@ -197,46 +203,46 @@ SfxEntry::SfxEntry(AffixMgr * pmgr, affentry* dp)
 
 SfxEntry::~SfxEntry()
 {
-    achar = '\0';
-    if (appnd) free(appnd);
-    if (rappnd) free(rappnd);
-    if (strip) free(strip);
-    pmyMgr = NULL;
-    appnd = NULL;
-    strip = NULL;    
+  achar = '\0';
+  if (appnd) free(appnd);
+  if (rappnd) free(rappnd);
+  if (strip) free(strip);
+  pmyMgr = NULL;
+  appnd = NULL;
+  strip = NULL;    
 }
 
 
 
 // add suffix to this word assuming conditions hold
-char * SfxEntry::add(const char * word, int len)
+char * SfxEntry::add(ParmString word) const
 {
-    int			cond;
-    char	        tword[MAXWORDLEN+1];
+  int			cond;
+  char	        tword[MAXWORDLEN+1];
 
-     /* make sure all conditions match */
-     if ((len > stripl) && (len >= numconds)) {
-            unsigned char * cp = (unsigned char *) (word + len);
-            for (cond = numconds; --cond >=0; ) {
-	       if ((conds[*--cp] & (1 << cond)) == 0)
-	          break;
-            }
-            if (cond < 0) {
-	      /* we have a match so add suffix */
-              strcpy(tword,word);
-              int tlen = len;
-              if (stripl) {
-		 tlen -= stripl;
-              }
-              char * pp = (tword + tlen);
-              if (appndl) {
-	          strcpy(pp,appnd);
-                  tlen += appndl;
-	      } else *pp = '\0';
-               return mystrdup(tword);
-	    }
-     }
-     return NULL;
+  /* make sure all conditions match */
+  if ((word.size() > stripl) && (word.size() >= numconds)) {
+    const unsigned char * cp = (const unsigned char *) (word + word.size());
+    for (cond = numconds; --cond >=0; ) {
+      if ((conds[*--cp] & (1 << cond)) == 0)
+        break;
+    }
+    if (cond < 0) {
+      /* we have a match so add suffix */
+      strcpy(tword,word);
+      int tlen = word.size();
+      if (stripl) {
+        tlen -= stripl;
+      }
+      char * pp = (tword + tlen);
+      if (appndl) {
+        strcpy(pp,appnd);
+        tlen += appndl;
+      } else *pp = '\0';
+      return mystrdup(tword);
+    }
+  }
+  return NULL;
 }
 
 // see if this suffix is present in the word 
@@ -244,76 +250,76 @@ BasicWordInfo SfxEntry::check(LookupInfo linf, ParmString word,
                               CheckInfo & ci, GuessInfo * gi,
                               int optflags, AffEntry* ppfx)
 {
-    int	                tmpl;		 // length of tmpword 
-    int			cond;		 // condition beng examined
-    BasicWordInfo       wordinfo;         // hash entry pointer
-    unsigned char *	cp;
-    char	        tmpword[MAXWORDLEN+1];
-    PfxEntry* ep = (PfxEntry *) ppfx;
+  int	                tmpl;		 // length of tmpword 
+  int			cond;		 // condition beng examined
+  BasicWordInfo       wordinfo;         // hash entry pointer
+  unsigned char *	cp;
+  char	        tmpword[MAXWORDLEN+1];
+  PfxEntry* ep = (PfxEntry *) ppfx;
 
 
-    // if this suffix is being cross checked with a prefix
-    // but it does not support cross products skip it
+  // if this suffix is being cross checked with a prefix
+  // but it does not support cross products skip it
 
-    if ((optflags & XPRODUCT) != 0 &&  (xpflg & XPRODUCT) == 0)
-        return NULL;
+  if ((optflags & XPRODUCT) != 0 &&  (xpflg & XPRODUCT) == 0)
+    return NULL;
 
-    // upon entry suffix is 0 length or already matches the end of the word.
-    // So if the remaining root word has positive length
-    // and if there are enough chars in root word and added back strip chars
-    // to meet the number of characters conditions, then test it
+  // upon entry suffix is 0 length or already matches the end of the word.
+  // So if the remaining root word has positive length
+  // and if there are enough chars in root word and added back strip chars
+  // to meet the number of characters conditions, then test it
 
-    tmpl = word.size() - appndl;
+  tmpl = word.size() - appndl;
 
-    if ((tmpl > 0)  &&  (tmpl + stripl >= numconds)) {
+  if ((tmpl > 0)  &&  (tmpl + stripl >= numconds)) {
 
-	    // generate new root word by removing suffix and adding
-	    // back any characters that would have been stripped or
-	    // or null terminating the shorter string
+    // generate new root word by removing suffix and adding
+    // back any characters that would have been stripped or
+    // or null terminating the shorter string
 
-	    strcpy (tmpword, word);
-	    cp = (unsigned char *)(tmpword + tmpl);
-	    if (stripl) {
-		strcpy ((char *)cp, strip);
-		tmpl += stripl;
-		cp = (unsigned char *)(tmpword + tmpl);
-	    } else *cp = '\0';
+    strcpy (tmpword, word);
+    cp = (unsigned char *)(tmpword + tmpl);
+    if (stripl) {
+      strcpy ((char *)cp, strip);
+      tmpl += stripl;
+      cp = (unsigned char *)(tmpword + tmpl);
+    } else *cp = '\0';
 
-            // now make sure all of the conditions on characters
-            // are met.  Please see the appendix at the end of
-            // this file for more info on exactly what is being
-            // tested
+    // now make sure all of the conditions on characters
+    // are met.  Please see the appendix at the end of
+    // this file for more info on exactly what is being
+    // tested
 
-	    for (cond = numconds;  --cond >= 0; ) {
-		if ((conds[*--cp] & (1 << cond)) == 0) break;
-	    }
-
-            // if all conditions are met then check if resulting
-            // root word in the dictionary
-
-	    if (cond < 0) {
-              CheckInfo * lci = 0;
-              tmpl += stripl;
-              if ((wordinfo = linf.lookup(tmpword))) {
-                if (TESTAFF(wordinfo.affixes, achar) && 
-			 ((optflags & XPRODUCT) == 0 || 
-			  TESTAFF(wordinfo.affixes, ep->achar)))
-                  lci = &ci;
-                else if (gi)
-                  lci = &gi->add();
-              }
-              
-              if (lci) {
-                lci->root = wordinfo.word;
-                lci->suf_flag = achar;
-                lci->suf_add = appnd;
-                lci->suf_strip = strip;
-              }
-              if (lci == &ci) return wordinfo;
-              
-	    }
+    for (cond = numconds;  --cond >= 0; ) {
+      if ((conds[*--cp] & (1 << cond)) == 0) break;
     }
-    return BasicWordInfo();
+
+    // if all conditions are met then check if resulting
+    // root word in the dictionary
+
+    if (cond < 0) {
+      CheckInfo * lci = 0;
+      tmpl += stripl;
+      if ((wordinfo = linf.lookup(tmpword))) {
+        if (TESTAFF(wordinfo.affixes, achar) && 
+            ((optflags & XPRODUCT) == 0 || 
+             TESTAFF(wordinfo.affixes, ep->achar)))
+          lci = &ci;
+        else if (gi)
+          lci = gi->add();
+
+        if (lci) {
+          lci->word = wordinfo.word;
+          lci->suf_flag = achar;
+          lci->suf_add = appnd;
+          lci->suf_strip = strip;
+        }
+        
+        if (lci == &ci) return wordinfo;
+      }
+    }
+  }
+  return BasicWordInfo();
 }
 
 
@@ -334,7 +340,7 @@ prefix or suffix or a combination.
 
 The structure affentry is defined as follows:
 
-struct affentry
+struct AffEntry
 {
    unsigned char achar;   // char used to represent the affix
    char * strip;          // string to strip before adding affix

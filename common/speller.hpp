@@ -35,17 +35,17 @@ namespace acommon {
   class DocumentChecker;
 
   struct CheckInfo {
-    const char * root;
-    int guess;
-    int compound;
+    const CheckInfo * next;
+    const char * word; // generally the root
     const char * pre_strip;
     const char * pre_add;
-    int pre_flag;
     const char * suf_strip;
     const char * suf_add;
-    int middle_char;
+    int pre_flag;
     int suf_flag;
-    const CheckInfo * next;
+    int guess;
+    int compound;
+    int middle_char;
   };
 
   class Speller : public CanHaveError

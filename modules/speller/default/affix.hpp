@@ -37,24 +37,6 @@ namespace aspeller {
 
   class Language;
 
-  // FIXME: element by using AffEntry only
-  struct affentry
-  {
-    char * strip;
-    char * appnd;
-    short  stripl;
-    short  appndl;
-    short  numconds;
-    short  xpflg;
-    char   achar;
-    char   conds[SETSIZE];
-  };
-
-//   struct replentry {
-//     char * pattern;
-//     char * replacement;
-//   };
-
   class SpellerImpl;
   typedef acommon::CheckInfo CheckInfo;
   struct GuessInfo;
@@ -65,9 +47,13 @@ namespace aspeller {
     LookupInfo(SpellerImpl * s) : sp(s) {}
   };
 
-  class AffEntry
+  struct CheckList;
+  CheckList * new_check_list();
+  void delete_check_list(CheckList *);
+  CheckInfo * check_list_data(CheckList *);
+
+  struct AffEntry
   {
-  public:
     char *       appnd;
     char *       strip;
     short        appndl;
@@ -77,14 +63,18 @@ namespace aspeller {
     char         achar;
     char         conds[SETSIZE];
   };
+  struct PfxEntry;
+  struct SfxEntry;
 
   class AffixMgr
   {
 
-    AffEntry *          pStart[SETSIZE];
-    AffEntry *          sStart[SETSIZE];
-    AffEntry *          pFlag[SETSIZE];
-    AffEntry *          sFlag[SETSIZE];
+    const Language * lang;
+
+    PfxEntry *          pStart[SETSIZE];
+    SfxEntry *          sStart[SETSIZE];
+    PfxEntry *          pFlag[SETSIZE];
+    SfxEntry *          sFlag[SETSIZE];
 
     String              encoding;
     String              compound;
@@ -94,7 +84,7 @@ namespace aspeller {
 
   public:
  
-    AffixMgr() {}
+    AffixMgr(const Language * l) : lang(l) {}
     ~AffixMgr();
 
     PosibErr<void> setup(ParmString affpath);
@@ -103,8 +93,11 @@ namespace aspeller {
     BasicWordInfo       prefix_check(LookupInfo, ParmString, CheckInfo &, GuessInfo *) const;
     BasicWordInfo       suffix_check(LookupInfo, ParmString, CheckInfo &, GuessInfo *,
 				     int sfxopts, AffEntry* ppfx) const;
-    int                 expand_rootword(struct guessword * wlst, int maxn,
-                                        const char * ts, int wl, const char * ap, int al) const;
+
+
+    void                munch(ParmString word, CheckList *) const;
+    void                expand(ParmString word, ParmString affixes,
+                               CheckList *) const;
 
     char *              get_encoding();
              
@@ -112,18 +105,13 @@ namespace aspeller {
     PosibErr<void> parse_file(const char * affpath);
     PosibErr<void> parse_affix(String & line, const char at, FStream & af);
 
-    void encodeit(struct affentry * ptr, char * cs);
-    PosibErr<void> build_pfxlist(AffEntry* pfxptr);
-    PosibErr<void> build_sfxlist(AffEntry* sfxptr);
+    void encodeit(AffEntry * ptr, char * cs);
+    PosibErr<void> build_pfxlist(PfxEntry* pfxptr);
+    PosibErr<void> build_sfxlist(SfxEntry* sfxptr);
     PosibErr<void> process_pfx_order();
     PosibErr<void> process_sfx_order();
   };
 
-  struct guessword {
-    char * word;
-    bool allow;
-  };
-  
   PosibErr<AffixMgr *> new_affix_mgr(ParmString name, 
                                      const Language * lang);
   
