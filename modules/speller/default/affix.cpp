@@ -75,9 +75,6 @@ bool   isSubset(const char * s1, const char * s2); // is affix s1 is a "subset" 
 
 PosibErr<void> AffixMgr::setup(ParmString affpath)
 {
-  
-  printf("In AffixMgr!\n");
-
   // register hash manager and load affix data from aff file
   cpdmin = 3;  // default value
   for (int i=0; i < SETSIZE; i++) {
@@ -269,7 +266,8 @@ PosibErr<void> AffixMgr::build_sfxlist(SfxEntry* sfxptr)
 {
   SfxEntry * ptr;
   SfxEntry * pptr;
-  SfxEntry * ep = (SfxEntry *) sfxptr;
+  SfxEntry * ep = sfxptr;
+  sfxptr->rappnd = myrevstrdup(sfxptr->appnd);
 
   /* get the right starting point */
   const char * key = ep->key();
@@ -764,17 +762,13 @@ bool isSubset(const char * s1, const char * s2)
   return false;
 }
 
-
-// FIXME: Avoid pointless copying of AffEntry
-
 PosibErr<void> AffixMgr::parse_affix(String & data, 
                                      const char at, FStream & af)
 {
   int numents = 0;      // number of affentry structures to parse
   char achar='\0';      // affix char identifier
-  short ff=0;
-  AffEntry * ptr= NULL;
-  AffEntry * nptr= NULL;
+  short xpflg=0;
+  StackPtr<AffEntry> nptr;
 
   const char * tp = data.c_str();
   const char * nl = data.c_str();
@@ -791,15 +785,12 @@ PosibErr<void> AffixMgr::parse_affix(String & data,
       case 0: { np++; achar = *piece; break; }
 
         // piece 3 - is cross product indicator 
-      case 1: { np++; if (*piece == 'Y') ff = XPRODUCT; break; }
+      case 1: { np++; if (*piece == 'Y') xpflg = XPRODUCT; break; }
 
         // piece 4 - is number of affentries
       case 2: { 
         np++;
         numents = atoi(piece); 
-        ptr = (AffEntry *) malloc(numents * sizeof(AffEntry));
-        ptr->xpflg = ff;
-        ptr->achar = achar;
         break;
       }
 
@@ -811,15 +802,11 @@ PosibErr<void> AffixMgr::parse_affix(String & data,
   }
   // check to make sure we parsed enough pieces
   if (np != 3) {
-    free(ptr);
     String msg;
     msg << "affix " << achar << "header has insufficient data in line" << nl;
     return make_err(bad_file_format, affix_file, msg);
   }
  
-  // store away ptr to first affentry
-  nptr = ptr;
-
   String key;
   // now parse numents affentries for this affix
   for (int j=0; j < numents; j++) {
@@ -828,7 +815,12 @@ PosibErr<void> AffixMgr::parse_affix(String & data,
     i = 0;
     np = 0;
 
-    if (nptr != ptr) nptr->xpflg = ptr->xpflg;
+    if (at == 'P')
+      nptr.reset(new PfxEntry(this));
+    else
+      nptr.reset(new SfxEntry(this));
+
+    nptr->xpflg = xpflg;
       
     // split line into pieces
     while ((piece=mystrsep(&tp,' '))) {
@@ -846,7 +838,7 @@ PosibErr<void> AffixMgr::parse_affix(String & data,
             return make_err(bad_file_format, affix_file, msg);
 
           }
-          if (nptr != ptr) nptr->achar = ptr->achar;
+          nptr->achar = achar;
           break;
         }
 
@@ -883,32 +875,26 @@ PosibErr<void> AffixMgr::parse_affix(String & data,
         }
         i++;
       }
+
+
       free(piece);
     }
     // check to make sure we parsed enough pieces
     if (np != 4) {
-      free(ptr);
       String msg;
       msg << "affix "<< achar << "is corrupt near line " << nl;
       return make_err(bad_file_format, affix_file, msg);
     }
-    nptr++;
+
+    // now create SfxEntry or PfxEntry objects and use links to
+    // build an ordered (sorted by affix string) list
+    if (at == 'P')
+      build_pfxlist(static_cast<PfxEntry *>(nptr.release()));
+    else
+      build_sfxlist(static_cast<SfxEntry *>(nptr.release())); 
+
   }
          
-  // now create SfxEntry or PfxEntry objects and use links to
-  // build an ordered (sorted by affix string) list
-  nptr = ptr;
-  for (int k = 0; k < numents; k++) {
-    if (at == 'P') {
-      PfxEntry * pfxptr = new PfxEntry(this,nptr);
-      build_pfxlist(pfxptr);
-    } else {
-      SfxEntry * sfxptr = new SfxEntry(this,nptr);
-      build_sfxlist(sfxptr); 
-    }
-    nptr++;
-  }      
-  free(ptr);
   return no_err;
 }
 
@@ -916,10 +902,9 @@ PosibErr<void> AffixMgr::parse_affix(String & data,
 PosibErr<AffixMgr *> new_affix_mgr(ParmString name, 
                                    const Language * lang)
 {
-  CERR << "NEW AFFIX MGR\n";
   if (name == "none")
     return 0;
-  CERR << "USING AFFIX FILE\n";
+  CERR << "NEW AFFIX MGR\n";
   String file;
   file += lang->data_dir();
   file += '/';

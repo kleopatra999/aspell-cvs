@@ -26,7 +26,7 @@ struct PfxEntry : public AffEntry
   PfxEntry * next_eq;
   PfxEntry * next_ne;
   PfxEntry * flag_next;
-  PfxEntry(AffixMgr * pmgr, AffEntry * dp);
+  PfxEntry(AffixMgr * pmgr) : pmyMgr(pmgr) {}
   ~PfxEntry();
 
   BasicWordInfo      check(LookupInfo, ParmString, CheckInfo &, GuessInfo *) const;
@@ -42,14 +42,14 @@ struct PfxEntry : public AffEntry
 struct SfxEntry : public AffEntry
 {
   AffixMgr*    pmyMgr;
-  char *       rappnd;
+  char *       rappnd; // this is set in AffixMgr::build_sfxlist
   
   SfxEntry *   next;
   SfxEntry *   next_eq;
   SfxEntry *   next_ne;
   SfxEntry *   flag_next;
 
-  SfxEntry(AffixMgr* pmgr, AffEntry* dp);
+  SfxEntry(AffixMgr* pmgr) : pmyMgr(pmgr) {}
   ~SfxEntry();
 
   BasicWordInfo      check(LookupInfo, ParmString, CheckInfo &, GuessInfo *,

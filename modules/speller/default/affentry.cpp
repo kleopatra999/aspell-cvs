@@ -29,28 +29,7 @@ inline BasicWordInfo LookupInfo::lookup (ParmString word) {
   if (sp)
     return sp->check_simple(word);
   else
-    return mystrdup(word); //FIXME, this now needs to be free some how
-}
-
-
-PfxEntry::PfxEntry(AffixMgr* pmgr, AffEntry* dp)
-{
-  // register affix manager
-  pmyMgr = pmgr;
-
-  // set up its intial values
-  achar = dp->achar;         // char flag 
-  strip = dp->strip;         // string to strip
-  appnd = dp->appnd;         // string to append
-  stripl = dp->stripl;       // length of strip string
-  appndl = dp->appndl;       // length of append string
-  numconds = dp->numconds;   // number of conditions to match
-  xpflg = dp->xpflg;         // cross product flag
-  // then copy over all of the conditions
-  memcpy(&conds[0],&dp->conds[0],SETSIZE*sizeof(conds[0]));
-  next = NULL;
-  next_ne = NULL;
-  next_eq = NULL;
+    return mystrdup(word); //FIXME, make sure this is freed
 }
 
 
@@ -177,29 +156,6 @@ BasicWordInfo PfxEntry::check(LookupInfo linf, ParmString word,
   }
   return BasicWordInfo();
 }
-
-
-
-SfxEntry::SfxEntry(AffixMgr * pmgr, AffEntry* dp)
-{
-  // register affix manager
-  pmyMgr = pmgr;
-
-  // set up its intial values
-  achar = dp->achar;         // char flag 
-  strip = dp->strip;         // string to strip
-  appnd = dp->appnd;         // string to append
-  stripl = dp->stripl;       // length of strip string
-  appndl = dp->appndl;       // length of append string
-  numconds = dp->numconds;   // number of conditions to match
-  xpflg = dp->xpflg;         // cross product flag
-
-  // then copy over all of the conditions
-  memcpy(&conds[0],&dp->conds[0],SETSIZE*sizeof(conds[0]));
-
-  rappnd = myrevstrdup(appnd);
-}
-
 
 SfxEntry::~SfxEntry()
 {
