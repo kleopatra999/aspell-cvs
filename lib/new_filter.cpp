@@ -154,9 +154,6 @@ namespace acommon
 
     filter.clear();
     while ((filter_name = els.next()) != 0) {
-//FIXME Hm seems as would url filter be allways loaded first 
-//      although beeing removed and added agaon at end of filter list 
-//      Help needed or adding item_removed to notifier ?
       filterhandle[0]=filterhandle[1]=filterhandle[2]=(void*)NULL;
       addcount=0;
       fprintf(stderr, "Loading %s ... \n", filter_name);
@@ -387,6 +384,7 @@ namespace acommon
     String expand="filter-";
     int norealoption=0;
 
+
     if ((namelength == 6) &&
         !strncmp(key->name,"filter",6)){
       fprintf(stderr,"Expanding for %s ... \n",value.str());
@@ -410,8 +408,15 @@ namespace acommon
             return make_err(no_such_filter, "add-filter", value);
           }
           RET_ON_ERR(options.open(filtername,"r"));
+
+bool emptyfile=true;
+
           while (getdata_pair(options,optionkey,optionkeyvalue)) {
-            RET_ON_ERR(config->replace(optionkey,optionkeyvalue));
+            emptyfile=false;
+            RET_ON_ERR(config->replace(optionkey.c_str(),optionkeyvalue.c_str()));
+          }
+          if (emptyfile) {
+            return make_err(empty_filter,"filter setup",filtername);
           }
           config->replace("rem-filter",value);
           return no_err;
@@ -604,7 +609,7 @@ namespace acommon
             continue;
           }
           if (optionkey.no_case() == "static") {
-            fprintf(stderr,"Filter %s consists of %s\n",value.str(),
+            fprintf(stderr,"Filter %s consists of `%s'\n",value.str(),
                     optionkeyvalue.c_str());
             activeoption=0;
             continue;
