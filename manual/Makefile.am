@@ -1,3 +1,4 @@
+export SED=@SED@
 
 pkgdoc_DATA = manual.dvi manual.tex manual2.lyx manual.aux\
               devel.dvi  devel.tex devel2.lyx devel.aux
