@@ -87,11 +87,13 @@ namespace acommon {
     if (*cur == 0) {
       return false;
     } else {
-      if (prev == 0) {
-        prev = &first;
+      if (prev != 0) {
+        *prev = (*cur)->next;
+        delete *cur;
+      } else {
+        delete first;
+        first = 0;
       }
-      *prev = (*cur)->next;
-      delete *cur;
       return true;
     }
   }

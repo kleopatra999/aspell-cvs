@@ -22,24 +22,24 @@ namespace acommon
     Vector(unsigned int s, const T & val) : std::vector<T>(s, val) {}
 
     void append(T t) {
-      push_back(t);
+      this->push_back(t);
     }
     void append(const T * begin, unsigned int size) {
-      insert(end(), begin, begin+size);
+      insert(this->end(), begin, begin+size);
     }
     int alloc(int s) {
       int pos = size();
-      resize(pos + s);
+      this->resize(pos + s);
       return pos;
     }
     T * data() {
-      return &*begin();
+      return &*this->begin();
     }
     T * data(int pos) {
-      return &*begin() + pos;
+      return &*this->begin() + pos;
     }
     T * data_end() {
-      return &*end();
+      return &*this->end();
     }
     T * pbegin() {return data();}
     T * pend() {return data_end();}
