@@ -38,15 +38,21 @@ FILE * controllout=stderr;
     controllout=stderr;\
   }
 
+#define FDEBUGNOTOPEN \
+  if ((controllout == stdout) || (controllout == stderr)) {\
+    FDEBUGOPEN \
+  }
+
 #define FDEBUGOPEN \
   FDEBUGCLOSE \
   if ((controllout=fopen(FILTER_PROGRESS_CONTROL,"w")) == NULL) {\
     controllout=stderr;\
   }\
+  setbuf(controllout,NULL);\
   fprintf(controllout,"Debug Destination %s\n",FILTER_PROGRESS_CONTROL);
 
 #define FDEBUG fprintf(controllout,"File: %s(%i)\n",__FILE__,__LINE__);
-#define FDEBUGPRINTF(a) fprintf(controllout,(a));
+#define FDEBUGPRINTF(a) fprintf(controllout,a);
 #endif // FILTER_PROGRESS_CONTROL
 
 /* ACTIVATE_ENCODER, ACTIVATE_FILTER, ACTIVATE_DECODER:
