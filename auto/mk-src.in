@@ -196,6 +196,7 @@ enum: key info type
 	int
 	bool
 	list
+	descript
 
 struct: key info
 	desc => The Key Info object is used for holding information
@@ -492,6 +493,8 @@ errors:
 		invalid option modifier
 			mesg => %where: "%filter" %line Option modifier unknown.
 			parms => line
+		cant describe filter
+			mesg => %where: "%filter" error setting filter description.
 
 }
 group: speller

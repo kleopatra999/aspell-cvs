@@ -1,3 +1,4 @@
+export SED=@SED@
 noinst_DATA = auto
 
 mksrc_modules = \
