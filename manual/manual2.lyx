@@ -74,7 +74,7 @@
 
 \layout Title
 
-GNU Aspell 0.50.4.1
+GNU Aspell 0.50.5
 \layout Date
 
 February 10, 2004
@@ -813,7 +813,8 @@ Sun WorkShop 6 Compiler Notes
 
 Thanks to Flemming Frandsen Aspell should be able to compile with the Sun
  WorkShop 6 Compiler.
- However, you may still have some problems linking
+ However, you may still have some problems.
+ See the README file in the suncc/ directory for more detail.
 \layout Subsection
 
 Win32 Notes
@@ -834,7 +835,7 @@ The latest version of the native Aspell/Win32 port can be found at
 Building
 \layout Standard
 
-There are two basically different ways of building ASpell using GCC for
+There are two basically different ways of building Aspell using GCC for
  Win32: You can either use the Cygwin compiler, which will produce binaries
  that depend on the posix layer in cygwin1.dll.
  The other way is using MinGW GCC, those binaries use the native C runtime
@@ -897,12 +898,8 @@ t) to the correct compiler prefix.
 \layout Standard
 
 Other compilers may work.
- There is a patch for MS Visual C++ 6.0 available at 
-\begin_inset LatexCommand \url{ftp://ftp.gnu.org/gnu/aspell}
-
-\end_inset 
-
-, but it needs a lot of changes to the Aspell sources.
+ There is a patch for MS Visual C++ 6.0 available in the win32/ directory,
+ but it needs a lot of changes to the Aspell sources.
  It has also been reported that the Intel C++ compiler can be used for compilati
 on.
 \layout Subsubsection
@@ -5809,7 +5806,7 @@ Please note that the soundslike equivalent is a rough approximation of how
  For more details about exactly how each step is performed please see the
  file
 \series bold 
- suggest.cc
+ suggest.cpp
 \series default 
 .
  For more information on the metaphone algorithm please see the data file
@@ -5836,7 +5833,7 @@ appendix
 Changelog
 \layout Section*
 
-Changes from 0.50.4.1 to 0.50.5
+Changes from 0.50.4.1 to 0.50.5 (February 10, 2003)
 \layout Itemize
 
 Reworked url filter which fixed several bugs and now accepts "bla.bla/kdkdl"
@@ -5852,7 +5849,7 @@ Fixed bug in which the url filter was coming before all other filters when
 Small bug fix in SGML filter.
 \layout Itemize
 
-Added cp125?.dat charsets.
+Added code page charsets, ie cp125?.dat.
 \layout Itemize
 
 Added natural (split) keyboard data file as 
@@ -5877,6 +5874,13 @@ Compile fixes for Sun WorkShop 6 compiler, but there may still be some problems,
 \layout Itemize
 
 Included patch to help compile with Microsoft Visual C++ 6.
+\layout Itemize
+
+Minor manual fixes.
+\layout Itemize
+
+Updated the TODO section to reflect the current progress with the next major
+ version of Aspell (0.51).
 \layout Itemize
 
 Updated to Autoconf 2.59, Automake 1.82, and Libtool 1.5.2.
@@ -7287,42 +7291,17 @@ Words in bold indicate how you should refer to the item when discussing
  it with me or others.
 \layout Section
 
-Things that need to be done
-\begin_inset LatexCommand \label{todo}
-
-\end_inset 
-
-
+Things that will be done by Aspell 0.51
 \layout Standard
 
-These items need to be done before I consider Aspell finished.
- Unfortunately, I do not have the time to do all so if you are interested
- in helping me with one of these tasks please email me.
- Good C++ skills are needed for most of these tasks involving coding.
+These items are already done, or close to it, in the develpment version
+ of Aspell.
 \layout Itemize
 
 Convert manual from LyX/LaTeX to Texinfo.
 \layout Itemize
 
-Clean up copyright notices and bring the Aspell package up to GNU Standards.
-\layout Itemize
-
 Add gettext support to Aspell.
-\layout Itemize
-
-Allow Aspell to check documents which are in UTF-8.
- The main thing to be done is to get Aspell to display UTF-8 correctly.
- This will involve being able to get the length of UTF-8 strings and display
- UTF-8 using the curses library.
-\layout Itemize
-
-Make Aspell Thread safe.
- Even though Aspell itself is not multi-threaded I would like it to be thread
- safe so that it can be used by multi-threaded programs.
- There are several areas of Aspell that that are potently thread unsafe
- (such as accessing a global pool) and several several classes which have
- the potential of being used by more than one thread (such as the personal
- dictionary).
 \layout Itemize
 
 Allow filters to be loaded at run-time.
@@ -7333,7 +7312,7 @@ Integrate Kevin Hendricks affix compression code into Aspell.
  His code is already in use in OpenOffice as part of the lingucomponent
  component.
  More information can be found at 
-\begin_inset LatexCommand \url{http://whiteboard.openoffice.org/lingucomponent/dictionary.html}
+\begin_inset LatexCommand \url{http://lingucomponent.openoffice.org/}
 
 \end_inset 
 
@@ -7341,17 +7320,68 @@ Integrate Kevin Hendricks affix compression code into Aspell.
  The latest version of his code is also available there.
 \layout Itemize
 
-Create a C++ interface for Aspell, possibly on top of the C one.
+Make Aspell Thread safe.
+ Even though Aspell itself is not multi-threaded I would like it to be thread
+ safe so that it can be used by multi-threaded programs.
+ There are several areas of Aspell that that are potently thread unsafe
+ (such as accessing a global pool) and several several classes which have
+ the potential of being used by more than one thread (such as the personal
+ dictionary).
+
+\shape italic 
+ [In Progress]
 \layout Itemize
 
 Enhance ispell.el so that it will work better with the new Aspell.
+ 
+\shape italic 
+[In Progress]
 \layout Section
 
-Good ideas that are worth implementing
+Things that need to be done
+\begin_inset LatexCommand \label{todo}
+
+\end_inset 
+
+
 \layout Standard
 
-These items all sound like good ideas however I am not sure when I will
- get to implementing then if ever.
+These items need to be done before I consider Aspell finished.
+ If you are interested in helping me with one of these tasks please email
+ me.
+ Good C++ skills are needed for most of these tasks involving coding.
+ I hope to have these all done by Aspell 0.51.
+ 
+\layout Itemize
+
+Clean up copyright notices and bring the Aspell package up to GNU Standards.
+\layout Itemize
+
+Allow Aspell to check documents which are in UTF-8.
+ I don't know the proper way to use Unicode characters with the curses library,
+ and I can't seam to find any concrete documentation on how to do it.
+ If you have experience in this area I would really appreciate it if you
+ could enlighten me.
+\layout Itemize
+
+Come up with a 
+\series bold 
+nroff mode
+\series default 
+ for spell checking.
+ I know nothing about nroff.
+ I would gladly write the filter if someone would be willing to work with
+ me in developing one.
+ All I really need to know is what to skip.
+\layout Section
+
+Things I would like to get done
+\layout Standard
+
+I would like to get these done.
+ However, I may still consider Aspell finished with out.
+ They will probably eventually get implemented.
+ However, I could still use help with them.
 \layout Itemize
 
 Use Lawrence Philips' new Double Metaphone algorithm.
@@ -7361,6 +7391,46 @@ Use Lawrence Philips' new Double Metaphone algorithm.
 \end_inset 
 
 .
+ The main task involved here is converting the algorithm into table form.
+ This will take some time but their is no real programming experience is
+ required.
+ If you want to help with Aspell but don't have any real programming experience,
+ this would be a great place to start.
+\layout Itemize
+
+Create a C++ interface for Aspell, possibly on top of the C one.
+\layout Itemize
+
+Write a GUI for the aspell utility.
+ Ideally it should be able to do everything the Aspell utility can do and
+ not just be able spell check a document.
+\layout Itemize
+
+Better support for compound words.
+ If you speak a language which has a lot of compound of run-together words
+ I would appreciate hearing back from you.
+ The current support for 
+\emph on 
+conditional
+\emph default 
+ compound words will disappear in Aspell 0.51 since no one seams to be using
+ it.
+ Support for 
+\emph on 
+unconditional
+\emph default 
+ compound words will still be available.
+ However, several people have informed me that they need more.
+ I attempted to provide that, but it wasn't powerful enough, and hence unused.
+ Thus, I am going to start from scratch, but I need to know exactly what
+ is involved in correct compound formation.
+\layout Section
+
+Good ideas that are worth implementing
+\layout Standard
+
+These items all sound like good ideas however I am not sure when I will
+ get to implementing then if ever.
 \layout Itemize
 
 Come up with a plug-in for 
@@ -7372,13 +7442,6 @@ the gnome text editor.
 
 Change languages (and thus dictionaries) based on the information in the
  actual document.
-\layout Itemize
-
-Come up with a 
-\series bold 
-nroff mode
-\series default 
- for spell checking.
 \layout Itemize
 
 Come up with a mode that will skip words based on the symbols that (almost)

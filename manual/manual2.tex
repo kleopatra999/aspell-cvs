@@ -78,13 +78,13 @@
 \makeatother
 \begin{document}
 
-\title{GNU Aspell 0.50.4.1}
+\title{GNU Aspell 0.50.5}
 
 
-\date{October 11, 2003}
+\date{February 10, 2004}
 
 
-\author{Copyright (c) 2000-2003\\
+\author{Copyright (c) 2000-2004\\
 Kevin Atkinson\\
 kevina@gnu.org}
 
@@ -193,8 +193,8 @@ multiple spellings for a word which can mask some spelling errors.
 \subsubsection{Things that, currently, only Ispell have}
 
 \begin{itemize}
-\item Support for affix compression (However this should change soon once
-Kevin Hendricks is integrated)
+\item Support for affix compression (However this will change with Aspell
+0.51)
 \item Lower memory footprint
 \item Perhaps better support for spell checking (La)\TeX{} files.
 \item Support for spell checking Nroff files.
@@ -281,13 +281,6 @@ into your binary directory which is usually /usr/local/bin so that
 programs that expect ispell or spell command will work correctly.
 
 
-\subsection{General Problems}
-
-Aspell does not use a released version of GNU Libtool. If you have
-a need to modify configure.ac or any of the Makefile.am's you should
-install the CVS version of libtool.
-
-
 \subsection{Curses Notes}
 
 If you are having problems compiling termios.cc than the most likely
@@ -367,6 +360,13 @@ designed to work with the snapshot will no longer work with the official
 release. 
 
 
+\subsection{Sun WorkShop 6 Compiler Notes}
+
+Thanks to Flemming Frandsen Aspell should be able to compile with
+the Sun WorkShop 6 Compiler. However, you may still have some problems.
+See the README file in the suncc/ directory for more detail.
+
+
 \subsection{Win32 Notes}
 
 
@@ -378,7 +378,7 @@ The latest version of the native Aspell/Win32 port can be found at
 
 \subsubsection{Building}
 
-There are two basically different ways of building ASpell using GCC
+There are two basically different ways of building Aspell using GCC
 for Win32: You can either use the Cygwin compiler, which will produce
 binaries that depend on the posix layer in cygwin1.dll. The other
 way is using MinGW GCC, those binaries use the native C runtime from
@@ -424,9 +424,9 @@ version depends on setting the \char`\"{}TARGET\char`\"{} variable
 in the Makefile (or environment) to the correct compiler prefix.
 
 Other compilers may work. There is a patch for MS Visual C++ 6.0 available
-at \url{ftp://ftp.gnu.org/gnu/aspell}, but it needs a lot of changes
-to the Aspell sources. It has also been reported that the Intel C++
-compiler can be used for compilation.
+in the win32/ directory, but it needs a lot of changes to the Aspell
+sources. It has also been reported that the Intel C++ compiler can
+be used for compilation.
 
 
 \subsubsection{(PD)Curses}
@@ -2312,7 +2312,7 @@ because of this.
 Please note that the soundslike equivalent is a rough approximation
 of how the words sounds. It is not the phoneme of the word by any
 means. For more details about exactly how each step is performed please
-see the file \textbf{suggest.cc}. For more information on the metaphone
+see the file \textbf{suggest.cpp}. For more information on the metaphone
 algorithm please see the data file \textbf{english\_phonet.dat}.
 
 \appendix
@@ -2321,8 +2321,28 @@ algorithm please see the data file \textbf{english\_phonet.dat}.
 \chapter{Changelog}
 
 
-\section*{Changes from 0.50.4.1 to 0.50.5}
+\section*{Changes from 0.50.4.1 to 0.50.5 (February 10, 2003)}
 
+\begin{itemize}
+\item Reworked url filter which fixed several bugs and now accepts \char`\"{}bla.bla/kdkdl\char`\"{}
+as a url.
+\item Fixed bug in which the url filter was coming before all other filters
+when it was suppose to come after. This solved a number of problems
+where the url filter was interfering with other filters.
+\item Small bug fix in SGML filter.
+\item Added code page charsets, ie cp125?.dat.
+\item Added natural (split) keyboard data file as {}``split.kbd''
+\item Compile fixes for the upcoming Gcc 3.4
+\item Removed Solaris link hack as it was causing more problems than it
+fixes.
+\item Compile fixes for Sun WorkShop 6 compiler, but there may still be
+some problems, especially with linking.
+\item Included patch to help compile with Microsoft Visual C++ 6.
+\item Minor manual fixes.
+\item Updated the TODO section to reflect the current progress with the
+next major version of Aspell (0.51).
+\item Updated to Autoconf 2.59, Automake 1.82, and Libtool 1.5.2.
+\end{itemize}
 
 \section*{Changes from 0.50.4 to 0.50.4.1 (Oct 11, 2003)}
 
@@ -2990,36 +3010,76 @@ Words in bold indicate how you should refer to the item when discussing
 it with me or others.
 
 
-\section{Things that need to be done\label{todo}}
+\section{Things that will be done by Aspell 0.51}
 
-These items need to be done before I consider Aspell finished. Unfortunately,
-I do not have the time to do all so if you are interested in helping
-me with one of these tasks please email me. Good C++ skills are needed
-for most of these tasks involving coding.
+These items are already done, or close to it, in the develpment version
+of Aspell.
 
 \begin{itemize}
 \item Convert manual from \LyX{}/\LaTeX{} to Texinfo.
-\item Clean up copyright notices and bring the Aspell package up to GNU
-Standards.
 \item Add gettext support to Aspell.
-\item Allow Aspell to check documents which are in UTF-8. The main thing
-to be done is to get Aspell to display UTF-8 correctly. This will
-involve being able to get the length of UTF-8 strings and display
-UTF-8 using the curses library.
+\item Allow filters to be loaded at run-time. At the moment all filters
+must be complied in.
+\item Integrate Kevin Hendricks affix compression code into Aspell. His
+code is already in use in OpenOffice as part of the lingucomponent
+component. More information can be found at \url{http://lingucomponent.openoffice.org/}.
+The latest version of his code is also available there.
 \item Make Aspell Thread safe. Even though Aspell itself is not multi-threaded
 I would like it to be thread safe so that it can be used by multi-threaded
 programs. There are several areas of Aspell that that are potently
 thread unsafe (such as accessing a global pool) and several several
 classes which have the potential of being used by more than one thread
-(such as the personal dictionary).
-\item Allow filters to be loaded at run-time. At the moment all filters
-must be complied in.
-\item Integrate Kevin Hendricks affix compression code into Aspell. His
-code is already in use in OpenOffice as part of the lingucomponent
-component. More information can be found at \url{http://whiteboard.openoffice.org/lingucomponent/dictionary.html}.
-The latest version of his code is also available there.
-\item Create a C++ interface for Aspell, possibly on top of the C one.
+(such as the personal dictionary). \textit{{[}In Progress{]}}
 \item Enhance ispell.el so that it will work better with the new Aspell.
+\textit{{[}In Progress{]}}
+\end{itemize}
+
+\section{Things that need to be done\label{todo}}
+
+These items need to be done before I consider Aspell finished. If
+you are interested in helping me with one of these tasks please email
+me. Good C++ skills are needed for most of these tasks involving coding.
+I hope to have these all done by Aspell 0.51. 
+
+\begin{itemize}
+\item Clean up copyright notices and bring the Aspell package up to GNU
+Standards.
+\item Allow Aspell to check documents which are in UTF-8. I don't know the
+proper way to use Unicode characters with the curses library, and
+I can't seam to find any concrete documentation on how to do it. If
+you have experience in this area I would really appreciate it if you
+could enlighten me.
+\item Come up with a \textbf{nroff mode} for spell checking. I know nothing
+about nroff. I would gladly write the filter if someone would be willing
+to work with me in developing one. All I really need to know is what
+to skip.
+\end{itemize}
+
+\section{Things I would like to get done}
+
+I would like to get these done. However, I may still consider Aspell
+finished with out. They will probably eventually get implemented.
+However, I could still use help with them.
+
+\begin{itemize}
+\item Use Lawrence Philips' new Double Metaphone algorithm. See \url{http://aspell.sourceforge.net/metaphone/}.
+The main task involved here is converting the algorithm into table
+form. This will take some time but their is no real programming experience
+is required. If you want to help with Aspell but don't have any real
+programming experience, this would be a great place to start.
+\item Create a C++ interface for Aspell, possibly on top of the C one.
+\item Write a GUI for the aspell utility. Ideally it should be able to do
+everything the Aspell utility can do and not just be able spell check
+a document.
+\item Better support for compound words. If you speak a language which has
+a lot of compound of run-together words I would appreciate hearing
+back from you. The current support for \emph{conditional} compound
+words will disappear in Aspell 0.51 since no one seams to be using
+it. Support for \emph{unconditional} compound words will still be
+available. However, several people have informed me that they need
+more. I attempted to provide that, but it wasn't powerful enough,
+and hence unused. Thus, I am going to start from scratch, but I need
+to know exactly what is involved in correct compound formation.
 \end{itemize}
 
 \section{Good ideas that are worth implementing}
@@ -3028,11 +3088,9 @@ These items all sound like good ideas however I am not sure when I
 will get to implementing then if ever.
 
 \begin{itemize}
-\item Use Lawrence Philips' new Double Metaphone algorithm. See \url{http://aspell.sourceforge.net/metaphone/}.
 \item Come up with a plug-in for \textbf{gEdit} the gnome text editor.
 \item Change languages (and thus dictionaries) based on the information
 in the actual document.
-\item Come up with a \textbf{nroff mode} for spell checking.
 \item Come up with a mode that will skip words based on the symbols that
 (almost) always surround the word. (\textbf{Word skipping by context})
 \item Create two \textbf{server modes} for Aspell. One that uses the \textbf{DICT}
