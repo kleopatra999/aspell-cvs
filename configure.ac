@@ -63,7 +63,9 @@ dnl
 AC_PROG_CXX
 AC_LANG([C++])
 
+AC_PROG_AWK
 AC_DISABLE_STATIC
+AC_LIBTOOL_DLOPEN
 AC_PROG_LIBTOOL
 
 dnl DL stuff
@@ -342,8 +344,8 @@ AC_CONFIG_FILES([Makefile common/Makefile lib/Makefile data/Makefile m4/Makefile
                  modules/filter/Makefile modules/tokenizer/Makefile
                  modules/speller/Makefile modules/speller/default/Makefile
 		 interfaces/Makefile interfaces/cc/Makefile scripts/Makefile
-                 examples/Makefile prog/Makefile manual/Makefile
-		 manual/man-html/Makefile manual/man-text/Makefile
+                 examples/Makefile examples/loadable/Makefile prog/Makefile
+                 manual/Makefile manual/man-html/Makefile manual/man-text/Makefile
 		 manual/dev-html/Makefile manual/dev-text/Makefile
 		 po/Makefile.in
 		 ])

@@ -37,6 +37,7 @@ namespace acommon {
 
   struct ConfigModule {
     const char * name;
+    const char * load;
     const KeyInfo * begin;
     const KeyInfo * end;
   };

@@ -93,6 +93,7 @@ namespace acommon {
     return new LoadableFilter ();
   }
 
+  static KeyInfo *actualoptions=NULL;
   static const KeyInfo loadable_options[] = {
     {"loadable-name", KeyInfoString, "",
      N_("Name of external filter to load")}

@@ -1,10 +1,11 @@
+SUBDIRS = loadable
 CCLD=$(CXX)
 noinst_PROGRAMS = example-c list-dicts
 
 filterdir = "$(libdir)/aspell"
 filter_PROGRAMS = po-filter.la
 
-INCLUDES = -I${top_srcdir}/interfaces/cc/
+INCLUDES = -I${top_srcdir}/interfaces/cc/ -I${top_srcdir}/common
 
 
 example_c_SOURCES = example-c.c

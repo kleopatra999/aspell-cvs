@@ -54,6 +54,8 @@ namespace acommon {
     void write (char c);
     void write (ParmString);
     void write (const void *, unsigned int);
+
+    String & no_case(); // FIXME: find a better way
   };
 
   inline String operator+ (ParmString rhs, ParmString lhs)

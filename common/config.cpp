@@ -257,9 +257,12 @@ namespace acommon {
 			     const ConfigModule * i, 
 			     const ConfigModule * end) 
   {
+    ParmString newkey=strchr(key,'-')+1;
+
     while (i != end) {
-      if (strcmp(key, i->name) == 0) 
+      if (strcmp(key, i->name) == 0){ 
 	return i;
+      }
       ++i;
     }
     return i;
@@ -281,26 +284,40 @@ namespace acommon {
   {
     typedef PosibErr<const KeyInfo *> Ret;
     const KeyInfo * i;
+    ParmString localkey = key;
   
-    i = acommon::find(key, kmi.main_begin, kmi.main_end);
+    i = acommon::find(localkey, kmi.main_begin, kmi.main_end);
     if (i != kmi.main_end) return Ret(i);
   
-    i = acommon::find(key, kmi.extra_begin, kmi.extra_end);
+    i = acommon::find(localkey, kmi.extra_begin, kmi.extra_end);
     if (i != kmi.extra_end) return Ret(i);
   
-    const char * h = strchr(key, '-');
+    const char * h = strchr(localkey, '-');
+
+    if ((h !=0)&&(strncmp(key,"filter",h-localkey)==0)){
+      localkey=h+1;
+      h=strchr(localkey,'-');
+    }
 
     if (h == 0) 
       return Ret().prim_err(unknown_key, key);
 
-    String k(key,h-key);
-    const ConfigModule * j = acommon::find(k, 
-					   kmi.modules_begin, 
-					   kmi.modules_end);
+    const ConfigModule * j = kmi.modules_end;
+    while ((h != NULL) && (j == kmi.modules_end)) {
+      String k(localkey, h-localkey);
+      j = acommon::find(k, kmi.modules_begin,
+			kmi.modules_end);
+      if (j == kmi.modules_end){
+        h=strchr(h+1, '-');
+      }
+    }
     if (j == kmi.modules_end)
       return Ret().prim_err(unknown_key, key);
   
-    i = acommon::find(key, j->begin, j->end);
+    i = acommon::find(localkey, j->begin, j->end);
+    if (i != j->end) return Ret(i);
+
+    i = acommon::find(h+1, j->begin, j->end);
     if (i != j->end) return Ret(i);
   
     return Ret().prim_err(unknown_key, key);
@@ -922,6 +939,10 @@ namespace acommon {
        N_("encoding to expect data to be in")}
     , {"filter",   KeyInfoList  , "url",
        N_("add or removes a filter")}
+    , {"filter-path", KeyInfoList, FILTER_DIR,
+       N_("path(es) aspell looks for filters (.so/.dll/.flt);")}
+    , {"option-path", KeyInfoList, FILTER_OPT_DIR,
+       N_("path(es) aspell looks for options descriptions;")}
     , {"mode",     KeyInfoString, "url",             mode_string }
     , {"extra-dicts", KeyInfoList, "",
        N_("extra dictionaries to use")}

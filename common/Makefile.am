@@ -11,6 +11,8 @@ dirs.h: mk-dirs_h
 	./mk-dirs_h ${prefix} DICT_DIR ${pkglibdir}  >> dirs.h
 	./mk-dirs_h ${prefix} DATA_DIR ${pkgdatadir} >> dirs.h
 	./mk-dirs_h ${prefix} CONF_DIR ${sysconfdir} >> dirs.h
+	./mk-dirs_h ${prefix} FILTER_DIR ${pkglibdir} >> dirs.h
+	./mk-dirs_h ${prefix} FILTER_OPT_DIR ${pkgdatadir} >> dirs.h
 
 mk_dirs_h_SOURCES = mk-dirs_h.cpp
 
@@ -33,6 +35,6 @@ libaspell_common_la_SOURCES = \
   can_have_error.cpp \
   convert.cpp tokenizer.cpp \
   speller.cpp document_checker.cpp filter.cpp \
-  strtonum.cpp
+  strtonum.cpp directory.cpp
 
 EXTRA_DIST = *.hpp gettext.h

@@ -1,0 +1,81 @@
+#  This file is part of The New Aspell
+#  Copyright (C) 2002 by Christoph Hintermüller under the GNU LGPL license
+#  version 2.0 or 2.1.  You should have received a copy of the LGPL
+#  license along with this library if you did not you can find
+#  it at http://www.gnu.org/.
+# 
+#Aspell Example Option file designed and added by Christoph Hintermüller
+#This file gives a short introduction into the elements needed by 
+#Aspell filter module to properly resolve the corresponding filter options
+#The keywords are kept in all uppercase for better Distinguishing them from
+#their contents.
+#In general there is no need keeping them all uppercase, as the loadability part
+#is case insensitive.
+
+#First non blank non comment line indicates which version(s) of Aspell the filter
+#described here is designed for.
+#the entire version number may be prefixed by `>' `>=' ``=' `<=' `<'
+#eg. `>=0.51' indicates that the filter will cooperate with all Aspell versions
+#greater and equal to version 0.51
+#if none of these prefix is given `=' is assumed
+ASPELL >=0.51
+
+#this is the description Aspell help displays when listing all options and known
+#filters
+#Keep this short but descriptive
+#!!This is not yet supported so do not use it if you do Aspell will issue an error!!
+DESCRIPTION This\ is\ a\ filter\ for\ C/C++\ context\ filtering
+
+#STARTS an new Option description block
+#it's value is the name of the option which is recognized by the filter
+#see the Config::retrieve functions for more
+OPTION test
+
+#type of option 
+#if omitted defaults to bool
+#possible values are bool, int, string, list
+TYPE String
+
+#this is the description Aspell displays for help action
+#Keep this short but descriptive
+#(short DES)
+DESCRIPTION help\ for\ test
+
+#here comes the default value if necessary
+#if omitted set to
+#bool -> true
+#int -> 0
+#string -> ""
+#list -> <empty>
+#(short DEF)
+DEFAULT test
+
+#if the parameter needs further data will be truncated if longer than MAX_OTHER_DATA
+#right now hardcoded to 15+1 or 16 might be changed in future
+#if omitted or no value set to "" if necessary
+#(short OTHER)
+OTHERDATA nothing\ yet
+
+#this is just for those who like to end options explicitly and for tracking errors
+#it is called implicitly when OPTION is called at end of file
+#option modifiers like TYPE, DES, DEF,OTHER will cause an error if 
+#no option has been defined yet or if located after ENDOPTION and before next OPTION
+ENDOPTION
+
+#the next option goes with the default values as described above
+OPTION next
+DESCRIPTION help\ for\ next
+
+
+OPTION newoption
+DESCRIPTION help\ for\ newoption
+
+#Use this if file contains options which are not yet supported or only by development
+#code. occurs implicitly at real end of file
+#Tells Aspell to assume end of file
+ENDFILE
+
+#this is ignored due to ENDFILE
+OPTION sensless
+DESCRIPTION help\ for\ sensless
+

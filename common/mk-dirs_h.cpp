@@ -6,10 +6,16 @@
 
 #include <cstring>
 #include <iostream>
+#include <stdio.h>
+#include <cstdio>
 
 int main(int argc, const char *argv[])
 {
   using namespace std;
+  if(argc!=4){
+    fprintf(stderr,"USAGE: %s <prefix> <key> <value>\n",argv[0]);fflush(NULL);
+    return 1;
+  }
   const char * prefix = argv[1];
   const char * key    = argv[2];
   const char * value  = argv[3];

@@ -19,6 +19,8 @@ namespace acommon {
   class Speller;
   class IndividualFilter;
   class StringList;
+  class Notifier;
+  struct ConfigModule;
 
   class Filter : public CanHaveError {
   public:
@@ -26,7 +28,7 @@ namespace acommon {
     void clear();
     void reset();
     void process(FilterChar * & start, FilterChar * & stop);
-    void add_filter(IndividualFilter * filter);
+    void add_filter(IndividualFilter * filter,void* handles=NULL);
     // setup the filter where the string list is the list of 
     // filters to use.
     Filter();
@@ -34,6 +36,8 @@ namespace acommon {
   private:
     typedef Vector<IndividualFilter *> Filters;
     Filters filters_;
+    typedef Vector<void*> Handled;
+    Handled handled;
   };
 
   void set_mode_from_extension(Config * config,
@@ -43,6 +47,7 @@ namespace acommon {
 			      bool use_decoder, 
 			      bool use_filter, 
 			      bool use_encoder);
+  void activate_dynamic_filteroptions(Config *c);
 
 }
 
