@@ -70,10 +70,10 @@ AC_ARG_ENABLE(regex,
 dnl
 
 AC_PROG_CXX
-#if test "$GXX" == "yes"
-#then
-#  CXXFLAGS="$CXXFLAGS -fno-exceptions"
-#fi
+if test "$GXX" == "yes" && expr match + "$CXXFLAGS" + ".*-O" > /dev/null
+then
+  CXXFLAGS="$CXXFLAGS -fno-exceptions"
+fi
 
 AC_LANG([C++])
 

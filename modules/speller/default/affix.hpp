@@ -44,11 +44,6 @@ namespace aspeller {
   using acommon::CheckInfo;
   struct GuessInfo;
 
-  struct CheckList;
-  CheckList * new_check_list();
-  void delete_check_list(CheckList *);
-  CheckInfo * check_list_data(CheckList *);
-
   struct LookupInfo;
   struct AffEntry;
   struct PfxEntry;
@@ -60,6 +55,8 @@ namespace aspeller {
     const unsigned char * aff;
     WordAff * next;
   };
+
+  enum CheckAffixRes {InvalidAffix, InapplicableAffix, ValidAffix};
 
   class AffixMgr
   {
@@ -77,14 +74,13 @@ namespace aspeller {
     //const char *        compound;
     //int                 cpdmin;
 
-    ObjStack strings;
-    void *   data_;
+    ObjStack data_buf;
 
     const char * affix_file;
 
   public:
  
-    AffixMgr(const Language * l) : lang(l), data_(0) {}
+    AffixMgr(const Language * l);
     ~AffixMgr();
 
     unsigned int max_strip() const {return max_strip_;}
@@ -96,12 +92,14 @@ namespace aspeller {
     bool suffix_check(const LookupInfo &, ParmString, CheckInfo &, GuessInfo *,
                       int sfxopts, AffEntry* ppfx) const;
 
-    void munch(ParmString word, CheckList *) const;
+    void munch(ParmString word, GuessInfo *) const;
 
     // None of the expand methods reset the objstack
 
     WordAff * expand(ParmString word, ParmString aff, 
                      ObjStack &, int limit = INT_MAX) const;
+
+    CheckAffixRes check_affix(ParmString word, char aff) const;
 
     WordAff * expand_prefix(ParmString word, ParmString aff, 
                             ObjStack & buf) const 
@@ -110,12 +108,12 @@ namespace aspeller {
     }
     WordAff * expand_suffix(ParmString word, const unsigned char * new_aff,
                             ObjStack &, int limit = INT_MAX,
-                            unsigned char * new_aff = 0, WordAff * * * l = 0) const;
+                            unsigned char * new_aff = 0, WordAff * * * l = 0,
+                            ParmString orig_word = 0) const;
     
   private:
     PosibErr<void> parse_file(const char * affpath, Conv &);
 
-    void encodeit(AffEntry * ptr, const char * cs);
     PosibErr<void> build_pfxlist(PfxEntry* pfxptr);
     PosibErr<void> build_sfxlist(SfxEntry* sfxptr);
     PosibErr<void> process_pfx_order();

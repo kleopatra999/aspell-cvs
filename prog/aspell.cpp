@@ -76,6 +76,7 @@ void filter();
 void list();
 void dicts();
 
+void clean();
 void master();
 void personal();
 void repl();
@@ -145,13 +146,14 @@ struct PossibleOption {
 #define ISPELL_COMP(abrv,num)         {"",abrv,num,false}
 
 const PossibleOption possible_options[] = {
-  OPTION("master",           'd',  1),
-  OPTION("personal",         'p',  1),
-  OPTION("ignore",            'W', 1),
-  OPTION("backup",           'b' , 0),
-  OPTION("dont-backup",      'x' , 0),
-  OPTION("run-together",     'C',  0),
-  OPTION("dont-run-together",'B',  0),
+  OPTION("master",           'd', 1),
+  OPTION("personal",         'p', 1),
+  OPTION("ignore",           'W', 1),
+  OPTION("lang",             'l', 1),
+  OPTION("backup",           'b', 0),
+  OPTION("dont-backup",      'x', 0),
+  OPTION("run-together",     'C', 0),
+  OPTION("dont-run-together",'B', 0),
   OPTION("guess",            'm', 0),
   OPTION("dont-guess",       'P', 0),
   
@@ -167,8 +169,9 @@ const PossibleOption possible_options[] = {
   COMMAND("munch",     '\0', 0),
   COMMAND("expand",    '\0', 0),
   COMMAND("combine",   '\0', 0),
-  COMMAND("list",      'l', 0),
+  COMMAND("list",      '\0', 0),
   COMMAND("dicts",     '\0', 0),
+  COMMAND("clean",     '\0', 0),
 
   COMMAND("dump",   '\0', 1),
   COMMAND("create", '\0', 1),
@@ -396,6 +399,8 @@ int main (int argc, const char *argv[])
     action = do_create;
   else if (action_str == "merge")
     action = do_merge;
+  else if (action_str == "clean")
+    clean();
   else {
     print_error(_("Unknown Action: %s"),  action_str);
     return 1;
@@ -565,18 +570,32 @@ void print_elements(const AspellWordList * wl) {
   COUT.printf("%u: %s\n", count, line.c_str());
 }
 
+struct StatusFunInf 
+{
+  aspeller::SpellerImpl * real_speller;
+  bool verbose;
+};
+
 void status_fun(void * d, Token, int correct)
 {
-  if (*static_cast<bool *>(d) && correct)
-    COUT.put("*\n");
+  StatusFunInf * p = static_cast<StatusFunInf *>(d);
+  if (p->verbose && correct) {
+    const CheckInfo * ci = p->real_speller->check_info();
+    if (ci->compound)
+      COUT.put("-\n");
+    else if (ci->pre_flag || ci->suf_flag)
+      COUT.printf("+ %s\n", ci->word.str());
+    else
+      COUT.put("*\n");
+  }
 }
 
 DocumentChecker * new_checker(AspellSpeller * speller, 
-			      bool & print_star) 
+			      StatusFunInf & status_fun_inf) 
 {
   EXIT_ON_ERR_SET(new_document_checker(reinterpret_cast<Speller *>(speller)),
 		  StackPtr<DocumentChecker>, checker);
-  checker->set_status_fun(status_fun, &print_star);
+  checker->set_status_fun(status_fun, &status_fun_inf);
   return checker.release();
 }
 
@@ -617,8 +636,11 @@ void pipe()
   if (do_time)
     COUT << _("Time to load word list: ")
          << (clock() - start)/(double)CLOCKS_PER_SEC << "\n";
-  bool print_star = true;
-  StackPtr<DocumentChecker> checker(new_checker(speller, print_star));
+  StatusFunInf status_fun_inf;
+  status_fun_inf.real_speller = real_speller;
+  bool & print_star = status_fun_inf.verbose;
+  print_star = true;
+  StackPtr<DocumentChecker> checker(new_checker(speller, status_fun_inf));
   int c;
   const char * w;
   CharVector buf;
@@ -672,13 +694,13 @@ void pipe()
 	config->replace("mode", "tex");
       reload_filters(real_speller);
       checker.del();
-      checker = new_checker(speller, print_star);
+      checker = new_checker(speller, status_fun_inf);
       break;
     case '-':
       config->remove("filter");
       reload_filters(real_speller);
       checker.del();
-      checker = new_checker(speller, print_star);
+      checker = new_checker(speller, status_fun_inf);
       break;
     case '~':
       break;
@@ -1266,21 +1288,16 @@ void print_ver () {
 // module
 //
 
-///////////////////////////
-//
-// master
-//
-
-class IstreamVirEnumeration : public StringEnumeration {
+class IstreamEnumeration : public StringEnumeration {
   FStream * in;
   String data;
 public:
-  IstreamVirEnumeration(FStream & i) : in(&i) {}
-  IstreamVirEnumeration * clone() const {
-    return new IstreamVirEnumeration(*this);
+  IstreamEnumeration(FStream & i) : in(&i) {}
+  IstreamEnumeration * clone() const {
+    return new IstreamEnumeration(*this);
   }
   void assign (const StringEnumeration * other) {
-    *this = *static_cast<const IstreamVirEnumeration *>(other);
+    *this = *static_cast<const IstreamEnumeration *>(other);
   }
   Value next() {
     if (!in->getline(data)) return 0;
@@ -1289,14 +1306,63 @@ public:
   bool at_end() const {return *in;}
 };
 
-void dump (aspeller::LocalDict lws, Convert * conv) 
+///////////////////////////
+//
+// clean
+//
+
+void clean()
 {
   using namespace aspeller;
 
-  switch (lws.dict->basic_type) {
+  bool strict = args.size() != 0 && args[0] == "strict";
+  
+  StackPtr<Config> config(new_basic_config());
+  EXIT_ON_ERR(config->read_in_settings(options));
+
+  CachePtr<Language> lang;
+  find_language(*config);
+  PosibErr<Language *> res = new_language(*config);
+  if (res.has_err()) {print_error(res.get_err()->mesg); exit(1);}
+  lang.reset(res.data);
+  IstreamEnumeration in(CIN);
+  WordListIterator wl_itr(&in, lang, &CERR);
+  config->replace("validate-words", "true");
+  config->replace("validate-affixes", "true");
+  if (!strict)
+    config->replace("clean-words", "true");
+  config->replace("clean-affixes", "true");
+  config->replace("skip-invalid-words", "true");
+  wl_itr.init(*config);
+  Conv oconv, oconv2;
+  if (config->have("encoding")) {
+    EXIT_ON_ERR(oconv.setup(*config, lang->charmap(), config->retrieve("encoding"), NormTo));
+    oconv2.setup(*config, lang->charmap(), config->retrieve("encoding"), NormTo);
+  } else {
+    EXIT_ON_ERR(oconv.setup(*config, lang->charmap(), lang->data_encoding(), NormTo));
+    oconv2.setup(*config, lang->charmap(), lang->data_encoding(), NormTo);
+  }
+  while (wl_itr.adv()) {
+    if (*wl_itr->aff.str) 
+      COUT.printf("%s/%s\n", oconv(wl_itr->word), oconv2(wl_itr->aff));
+    else
+      COUT.printl(oconv(wl_itr->word));
+  }
+}
+
+///////////////////////////
+//
+// master
+//
+
+void dump (aspeller::Dict * lws, Convert * conv) 
+{
+  using namespace aspeller;
+
+  switch (lws->basic_type) {
   case Dict::basic_dict:
     {
-      Dictionary * ws = static_cast<Dictionary *>(lws.dict);
+      Dictionary * ws = static_cast<Dictionary *>(lws);
       StackPtr<WordEntryEnumeration> els(ws->detailed_elements());
       WordEntry * wi;
       while (wi = els->next(), wi) {
@@ -1307,10 +1373,10 @@ void dump (aspeller::LocalDict lws, Convert * conv)
     break;
   case Dict::multi_dict:
     {
-      StackPtr<DictsEnumeration> els(lws.dict->dictionaries());
-      const LocalDict * ws;
+      StackPtr<DictsEnumeration> els(lws->dictionaries());
+      Dict * ws;
       while (ws = els->next(), ws) 
-	dump (*ws, conv);
+	dump (ws, conv);
     }
     break;
   default:
@@ -1332,7 +1398,7 @@ void master () {
     
     find_language(*config);
     EXIT_ON_ERR(create_default_readonly_dict
-                (new IstreamVirEnumeration(CIN),
+                (new IstreamEnumeration(CIN),
                  *config));
 
   } else if (action == do_merge) {
@@ -1342,9 +1408,8 @@ void master () {
     
   } else if (action == do_dump) {
 
-    LocalDict d;
-    EXIT_ON_ERR(add_data_set(config->retrieve("master-path"), *config, d));
-    StackPtr<Convert> conv(setup_conv(d.dict->lang(), config));
+    EXIT_ON_ERR_SET(add_data_set(config->retrieve("master-path"), *config), Dict *, d);
+    StackPtr<Convert> conv(setup_conv(d->lang(), config));
     dump(d, conv);
   }
 }
@@ -1394,8 +1459,6 @@ void personal () {
     Dictionary * per = new_default_writable_dict();
     per->load(config->retrieve("personal-path"), *config);
     StackPtr<WordEntryEnumeration> els(per->detailed_elements());
-    LocalDictInfo wsi;
-    wsi.set(per->lang(), *config);
     StackPtr<Convert> conv(setup_conv(per->lang(), config));
 
     WordEntry * wi;
@@ -1485,7 +1548,7 @@ void soundslike() {
   CachePtr<Language> lang;
   find_language(*options);
   PosibErr<Language *> res = new_language(*options);
-  if (!res) {print_error(res.get_err()->mesg); exit(1);}
+  if (res.has_err()) {print_error(res.get_err()->mesg); exit(1);}
   lang.reset(res.data);
   Conv iconv(setup_conv(options, lang));
   Conv oconv(setup_conv(lang, options));
@@ -1509,16 +1572,16 @@ void munch()
   CachePtr<Language> lang;
   find_language(*options);
   PosibErr<Language *> res = new_language(*options);
-  if (!res) {print_error(res.get_err()->mesg); exit(1);}
+  if (res.has_err()) {print_error(res.get_err()->mesg); exit(1);}
   lang.reset(res.data);
   Conv iconv(setup_conv(options, lang));
   Conv oconv(setup_conv(lang, options));
   String word;
-  CheckList * cl = new_check_list();
+  GuessInfo gi;
   while (CIN.getline(word)) {
-    lang->munch(iconv(word), cl);
+    lang->munch(iconv(word), &gi);
     COUT << word;
-    for (const aspeller::CheckInfo * ci = check_list_data(cl); ci; ci = ci->next)
+    for (const aspeller::CheckInfo * ci = gi.head; ci; ci = ci->next)
     {
       COUT << ' ' << oconv(ci->word) << '/';
       if (ci->pre_flag != 0) COUT << oconv(static_cast<char>(ci->pre_flag));
@@ -1526,7 +1589,6 @@ void munch()
     }
     COUT << '\n';
   }
-  delete_check_list(cl);
 }
 
 //////////////////////////
@@ -1547,7 +1609,7 @@ void expand()
   CachePtr<Language> lang;
   find_language(*options);
   PosibErr<Language *> res = new_language(*options);
-  if (!res) {print_error(res.get_err()->mesg); exit(1);}
+  if (res.has_err()) {print_error(res.get_err()->mesg); exit(1);}
   lang.reset(res.data);
   Conv iconv(setup_conv(options, lang));
   Conv oconv(setup_conv(lang, options));
@@ -1574,7 +1636,7 @@ void expand()
       WordAff * p = exp_list;
       while (p) {
         COUT << oconv(p->word);
-        if (p->aff[0]) COUT << '/' << oconv((const char *)p->aff);
+        if (limit < INT_MAX && p->aff[0]) COUT << '/' << oconv((const char *)p->aff);
         p = p->next;
         if (p) COUT << ' ';
       }
@@ -1589,7 +1651,7 @@ void expand()
       }
       for (WordAff * p = exp_list; p; p = p->next) {
         COUT << word << ' ' << oconv(p->word);
-        if (p->aff[0]) COUT << '/' << oconv((const char *)p->aff);
+        if (limit < INT_MAX && p->aff[0]) COUT << '/' << oconv((const char *)p->aff);
         if (level >= 4) COUT.printf(" %f\n", ratio);
         else COUT << '\n';
       }
@@ -1633,7 +1695,7 @@ void combine()
   CachePtr<Language> lang;
   find_language(*options);
   PosibErr<Language *> res = new_language(*options);
-  if (!res) {print_error(res.get_err()->mesg); exit(1);}
+  if (res.has_err()) {print_error(res.get_err()->mesg); exit(1);}
   lang.reset(res.data);
   Conv iconv(setup_conv(options, lang));
   Conv oconv(setup_conv(lang, options));
@@ -1792,18 +1854,24 @@ void print_help () {
     "                    and help for filters matching <expr> if installed\n"
     "  -c|check <file>  to check a file\n"
     "  -a|pipe          \"ispell -a\" compatibility mode\n"
-    "  -l|list          produce a list of misspelled words from standard input\n"
+    "  list             produce a list of misspelled words from standard input\n"
     "  [dump] config [-e <expr>]  dumps the current configuration to stdout\n"
     "  config [+e <expr>] <key>   prints the current value of an option\n"
     "  soundslike       returns the sounds like equivalent for each word entered\n"
     "  munch            generate possible root words and affixes\n"
     "  expand [1-4]     expands affix flags\n"
+    "  clean [strict]   cleans a word list so that every line is a valid word\n"
     "  filter           passes standard input through filters\n"
     "  -v|version       prints a version line\n"
+    "  conv <from> <to> [<norm-form>]\n"
+    "    converts from one encoding to another\n"
+    "  norm (<norm-map> | <from> <norm-map> <to>) [<norm-form>]\n"
+    "    perform unicode normlization\n"
     "  dump|create|merge master|personal|repl [word list]\n"
     "    dumps, creates or merges a master, personal, or replacement word list.\n"
     "\n"
     "  <expr>           regular expression matching filtername(s) or \"all\"\n"
+    "  <norm-form>      normalization form to use, either none, internal, or strict\n"
     "\n"
     "[options] is any of the following:\n"
     "\n"), VERSION);

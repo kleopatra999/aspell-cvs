@@ -67,8 +67,7 @@ protected:
   PosibErr<void> update(FStream &, ParmString);
   PosibErr<void> save(bool do_update);
   PosibErr<void> update_file_date_info(FStream &);
-  PosibErr<void> load(ParmString, Config &, LocalDictList *,
-                      SpellerImpl *, const LocalDictInfo *);
+  PosibErr<void> load(ParmString, Config &, DictList *, SpellerImpl *);
   PosibErr<void> merge(ParmString);
   PosibErr<void> save_as(ParmString);
 
@@ -99,8 +98,7 @@ PosibErr<void> WritableBase::update_file_date_info(FStream & f) {
 }
   
 PosibErr<void> WritableBase::load(ParmString f0, Config & config,
-                                  LocalDictList *,
-                                  SpellerImpl *, const LocalDictInfo *)
+                                  DictList *, SpellerImpl *)
 {
   set_file_name(f0);
   const String f = file_name();
@@ -338,7 +336,7 @@ public:
   PosibErr<void> add(ParmString w) {return Dictionary::add(w);}
   PosibErr<void> add(ParmString w, ParmString s);
 
-  bool lookup (ParmString word, WordEntry &, const SensitiveCompare &) const;
+  bool lookup(ParmString word, const SensitiveCompare *, WordEntry &) const;
 
   bool clean_lookup(const char * sondslike, WordEntry &) const;
 
@@ -360,13 +358,13 @@ bool WritableDict::empty() const
   return word_lookup->empty();
 }
 
-bool WritableDict::lookup(ParmString word, WordEntry & o,
-                          const SensitiveCompare & c) const
+bool WritableDict::lookup(ParmString word, const SensitiveCompare * c,
+                          WordEntry & o) const
 {
   o.clear();
   pair<WordLookup::iterator, WordLookup::iterator> p(word_lookup->equal_range(word));
   while (p.first != p.second) {
-    if (c(word,*p.first)) {
+    if ((*c)(word,*p.first)) {
       o.what = WordEntry::Word;
       set_word(o, *p.first);
       return true;
@@ -449,7 +447,7 @@ PosibErr<void> WritableDict::add(ParmString w, ParmString s) {
   RET_ON_ERR(check_if_valid(*lang(),w));
   SensitiveCompare c(lang());
   WordEntry we;
-  if (WritableDict::lookup(w,we,c)) return no_err;
+  if (WritableDict::lookup(w,&c,we)) return no_err;
   byte * w2;
   w2 = (byte *)buffer.alloc(w.size() + 3);
   *w2++ = lang()->get_word_info(w);
@@ -522,16 +520,14 @@ PosibErr<void> WritableDict::save(FStream & out, ParmString file_name)
   out.printf("personal_ws-1.1 %s %i %s\n", 
              lang_name(), word_lookup->size(), file_encoding.c_str());
 
-  SoundslikeLookup::const_iterator i = soundslike_lookup_.begin();
-  SoundslikeLookup::const_iterator e = soundslike_lookup_.end();
+  WordLookup::const_iterator i = word_lookup->begin();
+  WordLookup::const_iterator e = word_lookup->end();
     
   StrVector::const_iterator j;
   
   ConvP conv(oconv);
   for (;i != e; ++i) {
-    for (j = i->second.begin(); j != i->second.end(); ++j) {
-      out.printf("%s\n", conv(*j));
-    }
+    out.printf("%s\n", conv(*i));
   }
   return no_err;
 }
@@ -561,7 +557,7 @@ public:
   Size   size()     const;
   bool   empty()    const;
 
-  bool lookup(ParmString, WordEntry &, const SensitiveCompare &) const;
+  bool lookup(ParmString, const SensitiveCompare *, WordEntry &) const;
 
   bool clean_lookup(ParmString sondslike, WordEntry &) const;
 
@@ -593,13 +589,13 @@ bool WritableReplDict::empty() const
   return word_lookup->empty();
 }
     
-bool WritableReplDict::lookup(ParmString word, WordEntry & o,
-                           const SensitiveCompare & c) const
+bool WritableReplDict::lookup(ParmString word, const SensitiveCompare * c,
+                              WordEntry & o) const
 {
   o.clear();
   pair<WordLookup::iterator, WordLookup::iterator> p(word_lookup->equal_range(word));
   while (p.first != p.second) {
-    if (c(word,*p.first)) {
+    if ((*c)(word,*p.first)) {
       o.what = WordEntry::Misspelled;
       set_word(o, *p.first);
       o.intr[0] = (void *)*p.first;
@@ -700,7 +696,7 @@ bool WritableReplDict::repl_lookup(const WordEntry & w, WordEntry & o) const
   } else {
     SensitiveCompare c(lang()); // FIXME: This is not exactly right
     WordEntry tmp;
-    WritableReplDict::lookup(w.word, tmp, c);
+    WritableReplDict::lookup(w.word, &c, tmp);
     repls = get_vector(tmp.word);
     if (!repls) return false;
   }

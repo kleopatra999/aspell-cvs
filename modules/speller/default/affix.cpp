@@ -55,6 +55,7 @@
 #include "speller_impl.hpp"
 #include "vararray.hpp"
 #include "lsort.hpp"
+#include "hash-t.hpp"
 
 using namespace std;
 
@@ -65,38 +66,47 @@ static char EMPTY[1] = {0};
 
 //////////////////////////////////////////////////////////////////////
 //
-//*Entry struct definations
+// Entry struct definations
 //
+
+struct Conds
+{
+  char * str;
+  unsigned num;
+  char conds[SETSIZE];
+  char get(byte i) const {return conds[i];}
+};
 
 struct AffEntry
 {
-  char *         appnd;
-  char *         strip;
-  unsigned int   appndl;
-  unsigned int   stripl;
-  unsigned int   numconds;
-  int            xpflg;
-  char         achar;
-  char         conds[SETSIZE];
+  const char *   appnd;
+  const char *   strip;
+  byte           appndl;
+  byte           stripl;
+  byte           xpflg;
+  char           achar;
+  const Conds *  conds;
+  //unsigned int numconds;
+  //char         conds[SETSIZE];
 };
 
 // A Prefix Entry
   
 struct PfxEntry : public AffEntry
 {
-  AffixMgr * pmyMgr;
-  
   PfxEntry * next;
   PfxEntry * next_eq;
   PfxEntry * next_ne;
   PfxEntry * flag_next;
-  PfxEntry(AffixMgr * pmgr) : pmyMgr(pmgr) {}
+  PfxEntry() {}
 
-  bool check(const LookupInfo &, ParmString, CheckInfo &, GuessInfo *) const;
+  bool check(const LookupInfo &, const AffixMgr * pmyMgr,
+             ParmString, CheckInfo &, GuessInfo *) const;
 
   inline bool          allow_cross() const { return ((xpflg & XPRODUCT) != 0); }
   inline byte flag() const { return achar;  }
   inline const char *  key() const  { return appnd;  }
+  bool applicable(SimpleString) const;
   SimpleString add(SimpleString, ObjStack & buf) const;
 };
 
@@ -104,15 +114,14 @@ struct PfxEntry : public AffEntry
 
 struct SfxEntry : public AffEntry
 {
-  AffixMgr*    pmyMgr;
-  char *       rappnd; // this is set in AffixMgr::build_sfxlist
+  const char * rappnd; // this is set in AffixMgr::build_sfxlist
   
   SfxEntry *   next;
   SfxEntry *   next_eq;
   SfxEntry *   next_ne;
   SfxEntry *   flag_next;
 
-  SfxEntry(AffixMgr* pmgr) : pmyMgr(pmgr) {}
+  SfxEntry() {}
 
   bool check(const LookupInfo &, ParmString, CheckInfo &, GuessInfo *,
              int optflags, AffEntry * ppfx);
@@ -120,7 +129,8 @@ struct SfxEntry : public AffEntry
   inline bool          allow_cross() const { return ((xpflg & XPRODUCT) != 0); }
   inline byte flag() const { return achar;  }
   inline const char *  key() const  { return rappnd; } 
-  SimpleString add(SimpleString, ObjStack & buf, int limit = INT_MAX) const;
+  bool applicable(SimpleString) const;
+  SimpleString add(SimpleString, ObjStack & buf, int limit, SimpleString) const;
 };
 
 //////////////////////////////////////////////////////////////////////
@@ -155,44 +165,42 @@ struct AffixLess
   bool operator() (T * x, T * y) const {return strcmp(x->key(),y->key()) < 0;}
 };
 
-//////////////////////////////////////////////////////////////////////
-//
-// CheckList
-//
+// struct StringLookup {
+//   struct Parms {
+//     typedef const char * Value;
+//     typedef const char * Key;
+//     static const bool is_multi = false;
+//     hash<const char *> hfun;
+//     size_t hash(const char * s) {return hfun(s);}
+//     bool equal(const char * x, const char * y) {return strcmp(x,y) == 0;}
+//     const char * key(const char * c) {return c;}
+//   };
+//   typedef HashTable<Parms> Lookup;
+//   Lookup lookup;
+//   ObjStack * data_buf;
+//   StringLookup(ObjStack * b) : data_buf(b) {}
+//   const char * dup(const char * orig) {
+//     pair<Lookup::iterator, bool> res = lookup.insert(orig);
+//     if (res.second) *res.first = data_buf->dup(orig);
+//     return *res.first;
+//     //return data_buf->dup(orig);
+//   }
+// };
 
-CheckList * new_check_list()
-{
-  return new CheckList;
-}
+struct CondsLookupParms {
+  typedef const Conds * Value;
+  typedef const char * Key;
+  static const bool is_multi = false;
+  hash<const char *> hfun;
+  size_t hash(const char * s) {return hfun(s);}
+  bool equal(const char * x, const char * y) {return strcmp(x,y) == 0;}
+  const char * key(const Conds * c) {return c->str;}
+};
 
-void delete_check_list(CheckList * cl)
-{
-  delete cl;
-}
+typedef HashTable<CondsLookupParms> CondsLookup;
 
-CheckInfo * check_list_data(CheckList * cl)
-{
-  if (cl->gi.num > 0)
-    return cl->data + 1;
-  else
-    return 0;
-}
-
-CheckList::CheckList()
- : gi(63)
-{
-  memset(data, 0, sizeof(data));
-  gi.reset(data);
-}
-
-void CheckList::reset()
-{
-  for (CheckInfo * p = data + 1; p != data + 1 + gi.num; ++p) {
-    free(const_cast<char *>(p->word.str()));
-    p->word = 0;
-  }
-  gi.reset(data);
-}
+static void encodeit(CondsLookup &, ObjStack &, 
+                     AffEntry * ptr, char * cs);
 
 //////////////////////////////////////////////////////////////////////
 //
@@ -214,34 +222,10 @@ PosibErr<void> AffixMgr::setup(ParmString affpath, Conv & iconv)
   return parse_file(affpath, iconv);
 }
 
-AffixMgr::~AffixMgr()
-{
-  // pass through linked prefix entries and clean up
-  for (int i=0; i < SETSIZE ;i++) {
-    pFlag[i] = NULL;
-    PfxEntry * ptr = pStart[i];
-    PfxEntry * nptr = NULL;
-    while (ptr) {
-      nptr = ptr->next;
-      delete ptr;
-      ptr = nptr;
-      nptr = NULL;
-    }
-  }
+AffixMgr::AffixMgr(const Language * l) 
+  : lang(l), data_buf(1024*16) {}
 
-  // pass through linked suffix entries and clean up
-  for (int j=0; j < SETSIZE ; j++) {
-    sFlag[j] = NULL;
-    SfxEntry * ptr = sStart[j];
-    SfxEntry * nptr = NULL;
-    while (ptr) {
-      nptr = ptr->next;
-      delete ptr;
-      ptr = nptr;
-      nptr = NULL;
-    }
-  }
-}
+AffixMgr::~AffixMgr() {}
 
 static inline void MAX(int & lhs, int rhs) 
 {
@@ -253,9 +237,11 @@ PosibErr<void> AffixMgr::parse_file(const char * affpath, Conv & iconv)
 {
   // io buffers
   String buf; DataPair dp;
+
+  CondsLookup conds_lookup;
  
   // open the affix file
-  affix_file = strings.dup(affpath);
+  affix_file = data_buf.dup(affpath);
   FStream afflst;
   RET_ON_ERR(afflst.open(affpath,"r"));
 
@@ -272,7 +258,7 @@ PosibErr<void> AffixMgr::parse_file(const char * affpath, Conv & iconv)
 
     if (dp.key == "SET") {
       String buf;
-      encoding = strings.dup(fix_encoding_str(dp.value, buf));
+      encoding = data_buf.dup(fix_encoding_str(dp.value, buf));
       char msg[96];
       snprintf(msg, 96, _("Expected the file to be in \"%s\" not \"%s\"."),
                lang->data_encoding(), encoding);
@@ -282,7 +268,7 @@ PosibErr<void> AffixMgr::parse_file(const char * affpath, Conv & iconv)
 
     /* parse in the flag used by the controlled compound words */
     //else if (d.key == "COMPOUNDFLAG")
-    //  compound = strings.dup(d.value);
+    //  compound = data_buf.dup(d.value);
 
     /* parse in the flag used by the controlled compound words */
     //else if (d.key == "COMPOUNDMIN")
@@ -302,7 +288,7 @@ PosibErr<void> AffixMgr::parse_file(const char * affpath, Conv & iconv)
     int numents = 0;      // number of affentry structures to parse
     char achar='\0';      // affix char identifier
     short xpflg=0;
-    StackPtr<AffEntry> nptr;
+    AffEntry * nptr;
     {
       // split affix header line into pieces
       split(dp);
@@ -323,10 +309,13 @@ PosibErr<void> AffixMgr::parse_file(const char * affpath, Conv & iconv)
       for (int j = 0; j < numents; j++) {
         getdata_pair(afflst, dp, buf);
 
-        if (affix_type == 'P')
-          nptr.reset(new PfxEntry(this));
-        else
-          nptr.reset(new SfxEntry(this));
+        if (affix_type == 'P') {
+          nptr = (AffEntry *) data_buf.alloc_bottom(sizeof(PfxEntry));
+          new (nptr) PfxEntry;
+        } else {
+          nptr = (AffEntry *) data_buf.alloc_bottom(sizeof(SfxEntry));
+          new (nptr) SfxEntry;
+        }
 
         nptr->xpflg = xpflg;
 
@@ -348,10 +337,10 @@ PosibErr<void> AffixMgr::parse_file(const char * affpath, Conv & iconv)
           ParmString s0(iconv(dp.key));
           MAX(max_strip_, s0.size());
           MAX(max_strip_f[(byte)achar], s0.size());
-          nptr->strip = strings.dup(s0);
+          nptr->strip = data_buf.dup(s0);
           nptr->stripl = s0.size();
         } else {
-          nptr->strip= strings.dup("");
+          nptr->strip  = "";
           nptr->stripl = 0;
         }
     
@@ -359,24 +348,24 @@ PosibErr<void> AffixMgr::parse_file(const char * affpath, Conv & iconv)
         if (dp.key.empty()) goto error;
         // key is affix string or 0 for null
         if (dp.key != "0") {
-          nptr->appnd = strings.dup(iconv(dp.key));
+          nptr->appnd  = data_buf.dup(iconv(dp.key));
           nptr->appndl = strlen(nptr->appnd);
         } else {
-          nptr->appnd  = strings.dup("");
+          nptr->appnd  = "";
           nptr->appndl = 0;
         }
     
         split(dp);
         if (dp.key.empty()) goto error;
         // key is the conditions descriptions
-        encodeit(nptr,iconv(dp.key));
+        encodeit(conds_lookup, data_buf, nptr,iconv(dp.key));
     
         // now create SfxEntry or PfxEntry objects and use links to
         // build an ordered (sorted by affix string) list
         if (affix_type == 'P')
-          build_pfxlist(static_cast<PfxEntry *>(nptr.release()));
+          build_pfxlist(static_cast<PfxEntry *>(nptr));
         else
-          build_sfxlist(static_cast<SfxEntry *>(nptr.release())); 
+          build_sfxlist(static_cast<SfxEntry *>(nptr)); 
       }
     }
     continue;
@@ -418,6 +407,8 @@ PosibErr<void> AffixMgr::parse_file(const char * affpath, Conv & iconv)
   process_pfx_order();
   process_sfx_order();
 
+  //CERR.printf("%u\n", data_buf.calc_size()/1024);
+
   return no_err;
 
 }
@@ -450,7 +441,6 @@ PosibErr<void> AffixMgr::build_pfxlist(PfxEntry* pfxptr)
   return no_err;
 }
 
-
 // we want to be able to quickly access suffix information
 // both by suffix flag, and sorted by the reverse of the
 // suffix string itself; so we need to set up two indexes
@@ -459,12 +449,14 @@ PosibErr<void> AffixMgr::build_sfxlist(SfxEntry* sfxptr)
 {
   SfxEntry * ptr;
   SfxEntry * ep = sfxptr;
-  sfxptr->rappnd = (char *)strings.alloc(sfxptr->appndl + 1);
+  char * tmp = (char *)data_buf.alloc(sfxptr->appndl + 1);
+  sfxptr->rappnd = tmp;
+
   // reverse the string
-  sfxptr->rappnd[sfxptr->appndl] = 0;
-  for (char * dest = sfxptr->rappnd + sfxptr->appndl - 1, * src = sfxptr->appnd;
-       dest >= sfxptr->rappnd;
-       --dest, ++src)
+  char * dest = tmp + sfxptr->appndl;
+  *dest-- = 0;
+  const char * src = sfxptr->appnd;
+  for (; dest >= tmp; --dest, ++src)
     *dest = *src;
 
   /* get the right starting point */
@@ -520,7 +512,7 @@ PosibErr<void> AffixMgr::process_pfx_order()
         ptr->next_eq = ptr->next;
     }
 
-    // now clean up by adding smart search termination strings:
+    // now clean up by adding smart search termination strings
     // if you are already a superset of the previous prefix
     // but not a subset of the next, search can end here
     // so set NextNE properly
@@ -592,24 +584,67 @@ PosibErr<void> AffixMgr::process_sfx_order()
   return no_err;
 }
 
-
+// assumes the cond string is valid
+static void normalize_cond_str(char * str)
+{
+  char * s = str;
+  char * d = str;
+  while (*s) {
+    if (*s != '[') {
+      *d++ = *s++;
+    } else if (s[2] == ']') {
+      *d++ = s[1];
+      s += 3;
+    } else {
+      *d++ = *s++;
+      if (*s == '^') *d++ = *s++;
+      while (*s != ']') {
+        char * min = s;
+        for (char * i = s + 1; *i != ']'; ++i) {
+          if ((byte)*i < (byte)*min) min = i;}
+        char c = *s;
+        *d++ = *min;
+        *min = c;
+        ++s;
+      }
+      *d++ = *s++;
+    }
+  }
+  *d = '\0';
+}
 
 // takes aff file condition string and creates the
 // conds array - please see the appendix at the end of the
 // file affentry.cxx which describes what is going on here
 // in much more detail
 
-void AffixMgr::encodeit(AffEntry * ptr, const char * cs)
+static void encodeit(CondsLookup & l, ObjStack & buf, 
+                     AffEntry * ptr, char * cs)
 {
   byte c;
   int i, j, k;
+
+  // see if we already have this conds matrix
+
+  normalize_cond_str(cs);
+  CondsLookup::iterator itr = l.find(cs);
+  if (itr != l.end()) {
+    ptr->conds = *itr;
+    return;
+  }
+
+  Conds * cds = (Conds *)buf.alloc_bottom(sizeof(Conds));
+  cds->str = buf.dup(cs);
+  l.insert(cds);
+  ptr->conds = cds;
+
   int nc = strlen(cs);
   VARARRAYM(byte, mbr, nc + 1, MAXLNLEN);
 
-  // now clear the conditions array */
-  for (i=0;i<SETSIZE;i++) ptr->conds[i] = (byte) 0;
+  // now clear the conditions array
+  memset(cds->conds, 0, sizeof(cds->conds));
 
-  // now parse the string to create the conds array */
+  // now parse the string to create the conds array
   
   int neg = 0;   // complement indicator
   int grp = 0;   // group indicator
@@ -619,7 +654,7 @@ void AffixMgr::encodeit(AffEntry * ptr, const char * cs)
 
   // if no condition just return
   if (strcmp(cs,".")==0) {
-    ptr->numconds = 0;
+    cds->num = 0;
     return;
   }
 
@@ -664,14 +699,14 @@ void AffixMgr::encodeit(AffEntry * ptr, const char * cs)
           // set the proper bits in the condition array vals for those chars
           for (j=0;j<nm;j++) {
             k = (unsigned int) mbr[j];
-            ptr->conds[k] = ptr->conds[k] | (1 << n);
+            cds->conds[k] = cds->conds[k] | (1 << n);
           }
         } else {
           // complement so set all of them and then unset indicated ones
-          for (j=0;j<SETSIZE;j++) ptr->conds[j] = ptr->conds[j] | (1 << n);
+          for (j=0;j<SETSIZE;j++) cds->conds[j] = cds->conds[j] | (1 << n);
           for (j=0;j<nm;j++) {
             k = (unsigned int) mbr[j];
-            ptr->conds[k] = ptr->conds[k] & ~(1 << n);
+            cds->conds[k] = cds->conds[k] & ~(1 << n);
           }
         }
         neg = 0;
@@ -682,9 +717,9 @@ void AffixMgr::encodeit(AffEntry * ptr, const char * cs)
         // but first handle special case of . inside condition
         if (c == '.') {
           // wild card character so set them all
-          for (j=0;j<SETSIZE;j++) ptr->conds[j] = ptr->conds[j] | (1 << n);
+          for (j=0;j<SETSIZE;j++) cds->conds[j] = cds->conds[j] | (1 << n);
         } else {  
-          ptr->conds[(unsigned int) c] = ptr->conds[(unsigned int)c] | (1 << n);
+          cds->conds[(unsigned int)c] = cds->conds[(unsigned int)c] | (1 << n);
         }
       }
       n++;
@@ -694,7 +729,7 @@ void AffixMgr::encodeit(AffEntry * ptr, const char * cs)
 
     i++;
   }
-  ptr->numconds = n;
+  cds->num = n;
   return;
 }
 
@@ -707,7 +742,7 @@ bool AffixMgr::prefix_check (const LookupInfo & linf, ParmString word,
   // first handle the special case of 0 length prefixes
   PfxEntry * pe = pStart[0];
   while (pe) {
-    if (pe->check(linf,word,ci,gi)) return true;
+    if (pe->check(linf,this,word,ci,gi)) return true;
     pe = pe->next;
   }
   
@@ -717,7 +752,7 @@ bool AffixMgr::prefix_check (const LookupInfo & linf, ParmString word,
 
   while (pptr) {
     if (isSubset(pptr->key(),word)) {
-      if (pptr->check(linf,word,ci,gi)) return true;
+      if (pptr->check(linf,this,word,ci,gi)) return true;
       pptr = pptr->next_eq;
     } else {
       pptr = pptr->next_ne;
@@ -787,16 +822,16 @@ bool AffixMgr::affix_check(const LookupInfo & linf, ParmString word,
   return suffix_check(linf, sword, ci, gi, 0, NULL);
 }
 
-void AffixMgr::munch(ParmString word, CheckList * cl) const
+void AffixMgr::munch(ParmString word, GuessInfo * gi) const
 {
   LookupInfo li(0, LookupInfo::AlwaysTrue);
   CheckInfo ci;
-  cl->reset();
+  gi->reset();
   CasePattern cp = lang->LangImpl::case_pattern(word);
   if (cp == AllUpper) return;
   if (cp != FirstUpper)
-    prefix_check(li, word, ci, &cl->gi);
-  suffix_check(li, word, ci, &cl->gi, 0, NULL);
+    prefix_check(li, word, ci, gi);
+  suffix_check(li, word, ci, gi, 0, NULL);
 }
 
 WordAff * AffixMgr::expand(ParmString word, ParmString aff, 
@@ -845,7 +880,7 @@ WordAff * AffixMgr::expand(ParmString word, ParmString aff,
   for (WordAff * * cur = &head; cur != end; cur = &(*cur)->next) {
     if ((int)(*cur)->word.size - max_strip_ >= limit) continue;
     byte * nsuf = (byte *)buf.alloc(nsuf_s);
-    expand_suffix((*cur)->word, (*cur)->aff, buf, limit, nsuf, &very_end);
+    expand_suffix((*cur)->word, (*cur)->aff, buf, limit, nsuf, &very_end, word);
     (*cur)->aff = nsuf;
   }
 
@@ -854,18 +889,20 @@ WordAff * AffixMgr::expand(ParmString word, ParmString aff,
 
 WordAff * AffixMgr::expand_suffix(ParmString word, const byte * aff, 
                                   ObjStack & buf, int limit,
-                                  byte * new_aff, WordAff * * * l) const
+                                  byte * new_aff, WordAff * * * l,
+                                  ParmString orig_word) const
 {
   WordAff * head = 0;
   if (l) head = **l;
   WordAff * * cur = l ? *l : &head;
   bool expanded     = false;
   bool not_expanded = false;
+  if (!orig_word) orig_word = word;
 
   while (*aff) {
     if ((int)word.size() - max_strip_f[*aff] < limit) {
       for (SfxEntry * p = sFlag[*aff]; p; p = p->flag_next) {
-        SimpleString newword = p->add(word, buf, limit);
+        SimpleString newword = p->add(word, buf, limit, orig_word);
         if (!newword) continue;
         if (newword == EMPTY) {not_expanded = true; continue;}
         *cur = (WordAff *)buf.alloc_bottom(sizeof(WordAff));
@@ -884,89 +921,67 @@ WordAff * AffixMgr::expand_suffix(ParmString word, const byte * aff,
   return head;
 }
 
+CheckAffixRes AffixMgr::check_affix(ParmString word, char aff) const
+{
+  CheckAffixRes res = InvalidAffix;
+  
+  for (PfxEntry * p = pFlag[(unsigned char)aff]; p; p = p->flag_next) {
+    res = InapplicableAffix;
+    if (p->applicable(word)) return ValidAffix;
+  }
+
+  for (SfxEntry * p = sFlag[(unsigned char)aff]; p; p = p->flag_next) {
+    if (res == InvalidAffix) res = InapplicableAffix;
+    if (p->applicable(word)) return ValidAffix;
+  }
+
+  return res;
+}
+
+
 
 //////////////////////////////////////////////////////////////////////
 //
 // LookupInfo
 //
 
-static void free_word(WordEntry * w)
-{
-  free((void *)w->word);
-}
-
-static void free_aff(WordEntry * w)
-{
-  free((void *)w->aff);
-}
-
-struct LookupBookkepping
-{
-  const char * aff; // the affix here is a list of valid affixes for
-                    // the word
-  bool alloc;
-  LookupBookkepping() : aff(0), alloc(false) {}
-};
-
-static void append_aff(LookupBookkepping & s, WordEntry & o)
-{
-  size_t s0 = strlen(s.aff);
-  size_t s1 = strlen(o.aff);
-  if (s0 == s1 && memcmp(s.aff, o.aff, s0) == 0) return;
-  char * tmp = (char *)malloc(s0 + s1 + 1);
-  // FIXME: avoid adding duplicate flags
-  memcpy(tmp, o.aff, s1);
-  memcpy(tmp + s1, s.aff, s0);
-  tmp[s0 + s1] = '\0';
-  if (s.alloc) free((void *)s.aff);
-  s.aff = tmp;
-  s.alloc = true;
-}
-
-bool LookupInfo::lookup (ParmString word, WordEntry & o) const
+int LookupInfo::lookup (ParmString word, const SensitiveCompare * c, 
+                        char achar, 
+                        WordEntry & o, GuessInfo * gi) const
 {
   SpellerImpl::WS::const_iterator i = begin;
-  const char * w = 0;
-  LookupBookkepping s;
+  const char * g = 0;
   if (mode == Word) {
     do {
-      if (i->dict->lookup(word, o, i->compare)) {
-        w = o.word;
-        if (s.aff == 0) s.aff = o.aff;
-        else append_aff(s, o); // this should not be a very common case
+      (*i)->lookup(word, c, o);
+      for (;!o.at_end(); o.adv()) {
+        if (TESTAFF(o.aff, achar))
+          return 1;
+        else
+          g = o.word;
       }
       ++i;
     } while (i != end);
   } else if (mode == Clean) {
     do {
-      if (i->dict->clean_lookup(word, o)) {
-        w = o.word;
-        if (s.aff == 0) s.aff = o.aff;
-        else append_aff(s, o); // this should not be a very common case
+      (*i)->clean_lookup(word, o);
+      for (;!o.at_end(); o.adv()) {
+        if (TESTAFF(o.aff, achar))
+          return 1;
+        else
+          g = o.word;
       }
       ++i;
     } while (i != end);
-//   } else if (mode == Soundslike) {
-//     do {
-//       if (i->dict->soundslike_lookup(word, o)) {
-//         w = o.word;
-//         if (s.aff == 0) s.aff = o.aff;
-//         else append_aff(s, o); // this should not be a very common case
-//         while (o.adv()) append_aff(s, o); // neither should this
-//       }
-//       ++i;
-//    } while (i != end);
-  } else {
-    o.word = strdup(word);
-    o.aff  = word + strlen(word);
-    //o.free_ = free_word; //FiXME this isn't right....
-    return true;
+  } else if (gi) {
+    g = gi->dup(word);
   }
-  if (!w) return false;
-  o.word = w;
-  o.aff = s.aff;
-  if (s.alloc) o.free_ = free_aff;
-  return true;
+  if (gi && g) {
+    CheckInfo * ci = gi->add();
+    ci->word = g;
+    return -1;
+  }
+  return 0;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -974,18 +989,33 @@ bool LookupInfo::lookup (ParmString word, WordEntry & o) const
 // Affix Entry
 //
 
+bool PfxEntry::applicable(SimpleString word) const
+{
+  unsigned int cond;
+  /* make sure all conditions match */
+  if ((word.size > stripl) && (word.size >= conds->num)) {
+    const byte * cp = (const byte *) word.str;
+    for (cond = 0;  cond < conds->num;  cond++) {
+      if ((conds->get(*cp++) & (1 << cond)) == 0)
+        break;
+    }
+    if (cond >= conds->num) return true;
+  }
+  return false;
+}
+
 // add prefix to this word assuming conditions hold
 SimpleString PfxEntry::add(SimpleString word, ObjStack & buf) const
 {
   unsigned int cond;
   /* make sure all conditions match */
-  if ((word.size > stripl) && (word.size >= numconds)) {
+  if ((word.size > stripl) && (word.size >= conds->num)) {
     const byte * cp = (const byte *) word.str;
-    for (cond = 0;  cond < numconds;  cond++) {
-      if ((conds[*cp++] & (1 << cond)) == 0)
+    for (cond = 0;  cond < conds->num;  cond++) {
+      if ((conds->get(*cp++) & (1 << cond)) == 0)
         break;
     }
-    if (cond >= numconds) {
+    if (cond >= conds->num) {
       /* */
       int alen = word.size - stripl;
       char * newword = (char *)buf.alloc(alen + appndl + 1);
@@ -998,7 +1028,8 @@ SimpleString PfxEntry::add(SimpleString word, ObjStack & buf) const
 }
 
 // check if this prefix entry matches 
-bool PfxEntry::check(const LookupInfo & linf, ParmString word,
+bool PfxEntry::check(const LookupInfo & linf, const AffixMgr * pmyMgr,
+                     ParmString word,
                      CheckInfo & ci, GuessInfo * gi) const
 {
   unsigned int		cond;	// condition number being examined
@@ -1014,7 +1045,7 @@ bool PfxEntry::check(const LookupInfo & linf, ParmString word,
 
   tmpl = word.size() - appndl;
 
-  if ((tmpl > 0) &&  (tmpl + stripl >= numconds)) {
+  if ((tmpl > 0) &&  (tmpl + stripl >= conds->num)) {
 
     // generate new root word by removing prefix and adding
     // back any characters that would have been stripped
@@ -1028,32 +1059,38 @@ bool PfxEntry::check(const LookupInfo & linf, ParmString word,
     // tested
 
     cp = (byte *)tmpword;
-    for (cond = 0;  cond < numconds;  cond++) {
-      if ((conds[*cp++] & (1 << cond)) == 0) break;
+    for (cond = 0;  cond < conds->num;  cond++) {
+      if ((conds->get(*cp++) & (1 << cond)) == 0) break;
     }
 
     // if all conditions are met then check if resulting
     // root word in the dictionary
 
-    if (cond >= numconds) {
+    if (cond >= conds->num) {
       CheckInfo * lci = 0;
+      CheckInfo * guess = 0;
       tmpl += stripl;
-      bool res = linf.lookup(tmpword, wordinfo);
 
-      if (res && TESTAFF(wordinfo.aff, achar)) {
+      int res = linf.lookup(tmpword, &linf.sp->s_cmp_end, achar, wordinfo, gi);
+
+      if (res == 1) {
 
         lci = &ci;
         lci->word = wordinfo.word;
         goto quit;
         
-      } 
+      } else if (res == -1) {
+
+        guess = gi->head;
+
+      }
       
       // prefix matched but no root word was found 
       // if XPRODUCT is allowed, try again but now 
       // cross checked combined with a suffix
       
       if (gi)
-        lci = gi->last;
+        lci = gi->head;
       
       if (xpflg & XPRODUCT) {
         if (pmyMgr->suffix_check(linf, ParmString(tmpword, tmpl), 
@@ -1061,9 +1098,13 @@ bool PfxEntry::check(const LookupInfo & linf, ParmString word,
                                  XPRODUCT, (AffEntry *)this)) {
           lci = &ci;
           
-        } else if (gi && gi->last != lci) {
+        } else if (gi) {
           
-          while (lci = const_cast<CheckInfo *>(lci->next), lci) {
+          CheckInfo * stop = lci;
+          for (lci = gi->head; 
+               lci != stop; 
+               lci = const_cast<CheckInfo *>(lci->next)) 
+          {
             lci->pre_flag = achar;
             lci->pre_strip_len = stripl;
             lci->pre_add_len = appndl;
@@ -1077,11 +1118,9 @@ bool PfxEntry::check(const LookupInfo & linf, ParmString word,
         }
       }
     
-      if (res && gi) {
-        
-        lci = gi->add();
-        lci->word = wordinfo.word;
-      }
+      if (guess)
+        lci = guess;
+      
     quit:
       if (lci) {
         lci->pre_flag = achar;
@@ -1095,15 +1134,31 @@ bool PfxEntry::check(const LookupInfo & linf, ParmString word,
   return false;
 }
 
-// add suffix to this word assuming conditions hold
-SimpleString SfxEntry::add(SimpleString word, ObjStack & buf, int limit) const
+bool SfxEntry::applicable(SimpleString word) const
 {
   int cond;
   /* make sure all conditions match */
-  if ((word.size > stripl) && (word.size >= numconds)) {
+  if ((word.size > stripl) && (word.size >= conds->num)) {
     const byte * cp = (const byte *) (word + word.size);
-    for (cond = numconds; --cond >=0; ) {
-      if ((conds[*--cp] & (1 << cond)) == 0)
+    for (cond = conds->num; --cond >=0; ) {
+      if ((conds->get(*--cp) & (1 << cond)) == 0)
+        break;
+    }
+    if (cond < 0) return true;
+  }
+  return false;
+}
+
+// add suffix to this word assuming conditions hold
+SimpleString SfxEntry::add(SimpleString word, ObjStack & buf, 
+                           int limit, SimpleString orig_word) const
+{
+  int cond;
+  /* make sure all conditions match */
+  if ((orig_word.size > stripl) && (orig_word.size >= conds->num)) {
+    const byte * cp = (const byte *) (orig_word + orig_word.size);
+    for (cond = conds->num; --cond >=0; ) {
+      if ((conds->get(*--cp) & (1 << cond)) == 0)
         break;
     }
     if (cond < 0) {
@@ -1144,7 +1199,7 @@ bool SfxEntry::check(const LookupInfo & linf, ParmString word,
 
   tmpl = word.size() - appndl;
 
-  if ((tmpl > 0)  &&  (tmpl + stripl >= numconds)) {
+  if ((tmpl > 0)  &&  (tmpl + stripl >= conds->num)) {
 
     // generate new root word by removing suffix and adding
     // back any characters that would have been stripped or
@@ -1163,8 +1218,8 @@ bool SfxEntry::check(const LookupInfo & linf, ParmString word,
     // this file for more info on exactly what is being
     // tested
 
-    for (cond = numconds;  --cond >= 0; ) {
-      if ((conds[*--cp] & (1 << cond)) == 0) break;
+    for (cond = conds->num;  --cond >= 0; ) {
+      if ((conds->get(*--cp) & (1 << cond)) == 0) break;
     }
 
     // if all conditions are met then check if resulting
@@ -1173,26 +1228,29 @@ bool SfxEntry::check(const LookupInfo & linf, ParmString word,
     if (cond < 0) {
       CheckInfo * lci = 0;
       tmpl += stripl;
-      if (linf.lookup(tmpword, wordinfo)) {
-        if (TESTAFF(wordinfo.aff, achar) && 
-            ((optflags & XPRODUCT) == 0 || 
-             TESTAFF(wordinfo.aff, ep->achar))) {
-          lci = &ci;
-        } else if (gi) {
-          lci = gi->add();
-          CERR.printf(">>%s %s\n", word.str(), wordinfo.word);
-        }
-
-        if (lci) {
-          lci->word = wordinfo.word;
-          lci->suf_flag = achar;
-          lci->suf_strip_len = stripl;
-          lci->suf_add_len = appndl;
-          lci->suf_add = appnd;
-        }
-        
-        if (lci == &ci) return true;
+      const SensitiveCompare * cmp = 
+        optflags & XPRODUCT ? &linf.sp->s_cmp_middle : &linf.sp->s_cmp_end;
+      int res = linf.lookup(tmpword, cmp, achar, wordinfo, gi);
+      if (res == 1
+          && ((optflags & XPRODUCT) == 0 || TESTAFF(wordinfo.aff, ep->achar)))
+      {
+        lci = &ci;
+        lci->word = wordinfo.word;
+      } else if (res == 1 && gi) {
+        lci = gi->add();
+        lci->word = wordinfo.word;
+      } else if (res == -1) { // gi must be defined
+        lci = gi->head;
       }
+
+      if (lci) {
+        lci->suf_flag = achar;
+        lci->suf_strip_len = stripl;
+        lci->suf_add_len = appndl;
+        lci->suf_add = appnd;
+      }
+      
+      if (lci == &ci) return true;
     }
   }
   return false;

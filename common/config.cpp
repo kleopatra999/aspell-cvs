@@ -1088,6 +1088,8 @@ namespace acommon {
        N_("ignore commands to store replacement pairs"), KEYINFO_MAY_CHANGE}
     , {"jargon",     KeyInfoString, "",
        N_("extra information for the word list")}
+    , {"variety", KeyInfoList, "",
+       N_("extra information for the word list")}
     , {"keyboard", KeyInfoString, "standard",
        N_("keyboard definition to use for typo analysis")}
     , {"lang", KeyInfoString, "<language-tag>",
@@ -1143,11 +1145,9 @@ namespace acommon {
        N_("search path for word list information files")}
     , {"affix-char",          KeyInfoString, "/", // FIXME: Implement
        N_("indicator for affix flags in word lists"), KEYINFO_UTF8}
-    , {"flag-char",           KeyInfoString, ":", // FIXME: Implement
-       N_("indicator for additional flags in word lists"), KEYINFO_UTF8}
     , {"use-other-dicts", KeyInfoBool, "true",
        N_("use personal, replacement & session dictionaries")}
-    , {"warn", KeyInfoBool, "false", // FIXME: Implement
+    , {"warn", KeyInfoBool, "true",
        N_("enable warnings")}
     , {"normalize", KeyInfoBool, "true",
        N_("enable Unicode normalization")}
@@ -1156,7 +1156,10 @@ namespace acommon {
     , {"norm-form", KeyInfoString, "nfc",
        N_("Unicode normalization form: none, nfd, nfc, comp")}
     , {"norm-strict", KeyInfoBool, "false",
-       N_("avoid lossy conversions")}
+       N_("avoid lossy conversions when normalization")}
+    , {"dict-alias", KeyInfoList, "",
+       N_("create dictionary aliases")}
+    
     
     //
     // These options are only used when creating dictionaries
@@ -1168,6 +1171,23 @@ namespace acommon {
        N_("use affix compression when creating dictionaries")}
     , {"partially-expand",  KeyInfoBool, "false",
        N_("partially expand affixes for better suggestions")}
+
+    //
+    // 
+    //
+    //
+
+    , {"validate-words", KeyInfoBool, "true",
+       N_("check if words are valid")}
+    , {"validate-affixes", KeyInfoBool, "true",
+       N_("check if affix flags are valid")}
+    , {"clean-words", KeyInfoBool, "false",
+       N_("attempts to clean words so that they are valid")}
+    , {"skip-invalid-words",  KeyInfoBool, "true",
+       N_("skip invalid words")}
+    , {"clean-affixes", KeyInfoBool, "true",
+       N_("remove invalid affix flags")}
+    
     //
     // These options are specific to the "aspell" utility.  They are
     // here so that they can be specified in configuration files.

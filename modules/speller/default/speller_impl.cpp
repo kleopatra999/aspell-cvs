@@ -133,7 +133,7 @@ namespace aspeller {
     WS::const_iterator i   = check_ws.begin();
     WS::const_iterator end = check_ws.end();
     do {
-      if (i->dict->lookup(w, w0, i->compare)) return true;
+      if ((*i)->lookup(w, &s_cmp, w0)) return true;
       ++i;
     } while (i != end);
     return false;
@@ -195,6 +195,7 @@ namespace aspeller {
         is_title = lang_->case_pattern(word) == FirstUpper ? Yes : No;
       *i = t;
       if (check(i, word_end, is_title == Yes, run_together_limit - 1, ci + 1, 0)) {
+        ci->compound = true;
         ci->next = ci + 1;
         return true;
       }
@@ -244,16 +245,18 @@ namespace aspeller {
     return 0;
   }
 
-  void SpellerImpl::add_dict(SpellerDict * wc)
+  PosibErr<void> SpellerImpl::add_dict(SpellerDict * wc)
   {
     Dict * w = wc->dict;
     assert(locate(w->id()) == 0);
 
-    if (!lang_) 
-    {
+    if (!lang_) {
       lang_.copy(w->lang());
       config_->replace("lang", lang_name());
       config_->replace("language-tag", lang_name());
+    } else {
+      if (strcmp(lang_->name(), w->lang()->name()) != 0)
+        return make_err(mismatched_language, lang_->name(), w->lang()->name());
     }
 
     // add to master list
@@ -281,6 +284,8 @@ namespace aspeller {
     case none_id:
       break;
     }
+
+    return no_err;
   }
 
   //////////////////////////////////////////////////////////////////////
@@ -426,18 +431,18 @@ namespace aspeller {
 
   SpellerImpl::SpellerImpl() 
     : Speller(0) /* FIXME */, ignore_repl(true), 
-      dicts_(0), personal_(0), session_(0), repl_(0), main_(0),
-      guess_info(7)
+      dicts_(0), personal_(0), session_(0), repl_(0), main_(0)
   {}
 
-  inline void add_dicts(SpellerImpl * sp, LocalDictList & d)
+  inline PosibErr<void> add_dicts(SpellerImpl * sp, DictList & d)
   {
     for (;!d.empty(); d.pop())
     {
-      if (!sp->locate(d.last().dict->id())) {
-        sp->add_dict(new SpellerDict(d.last()));
+      if (!sp->locate(d.last()->id())) {
+        RET_ON_ERR(sp->add_dict(new SpellerDict(d.last())));
       }
     }
+    return no_err;
   }
 
   PosibErr<void> SpellerImpl::setup(Config * c) {
@@ -447,18 +452,29 @@ namespace aspeller {
     ignore_repl = config_->retrieve_bool("ignore-repl");
     ignore_count = config_->retrieve_int("ignore");
 
-    LocalDict res;
-    LocalDictList to_add;
-    RET_ON_ERR(add_data_set(config_->retrieve("master-path"), *config_, res, &to_add, this));
-    add_dicts(this, to_add);
+    DictList to_add;
+    RET_ON_ERR(add_data_set(config_->retrieve("master-path"), *config_, &to_add, this));
+    RET_ON_ERR(add_dicts(this, to_add));
+
+    s_cmp.lang = lang_;
+
+    s_cmp_begin.lang = lang_;
+    s_cmp_begin.end = false;
+
+    s_cmp_middle.lang = lang_;
+    s_cmp_middle.begin = false;
+    s_cmp_middle.end   = false;
+
+    s_cmp_end.lang = lang_;
+    s_cmp_end.begin = false;
 
     StringList extra_dicts;
     config_->retrieve_list("extra-dicts", &extra_dicts);
     StringListEnumeration els = extra_dicts.elements_obj();
     const char * dict_name;
     while ( (dict_name = els.next()) != 0) {
-      RET_ON_ERR(add_data_set(dict_name,*config_, res, &to_add, this));
-      add_dicts(this, to_add);
+      RET_ON_ERR(add_data_set(dict_name,*config_, &to_add, this));
+      RET_ON_ERR(add_dicts(this, to_add));
     }
 
     bool use_other_dicts = config_->retrieve_bool("use-other-dicts");
@@ -472,7 +488,7 @@ namespace aspeller {
         temp->set_check_lang(lang_name(), *config_);
       else if (pe.has_err())
         return pe;
-      add_dict(new SpellerDict(temp, lang_, *config_, personal_id));
+      RET_ON_ERR(add_dict(new SpellerDict(temp, *config_, personal_id)));
     }
     
     if (use_other_dicts && !session_)
@@ -480,7 +496,7 @@ namespace aspeller {
       Dictionary * temp;
       temp = new_default_writable_dict();
       temp->set_check_lang(lang_name(), *config_);
-      add_dict(new SpellerDict(temp, lang_, *config_, session_id));
+      RET_ON_ERR(add_dict(new SpellerDict(temp, *config_, session_id)));
     }
      
     if (use_other_dicts && !repl_)
@@ -491,7 +507,7 @@ namespace aspeller {
         temp->set_check_lang(lang_name(), *config_);
       else if (pe.has_err())
         return pe;
-      add_dict(new SpellerDict(temp, lang_, *config_, personal_repl_id));
+      RET_ON_ERR(add_dict(new SpellerDict(temp, *config_, personal_repl_id)));
     }
 
     const char * sys_enc = lang_->charmap();
@@ -557,25 +573,21 @@ namespace aspeller {
 
       ti = &typeid(*cur->dict);
 
-      WSInfo inf;
-      inf.dict = cur->dict;
-      inf.set(*cur);
-
       if (cur->use_to_check) {
-        check_ws.push_back(inf);
-        if (inf.dict->affix_compressed) affix_ws.push_back(inf);
+        check_ws.push_back(cur->dict);
+        if (cur->dict->affix_compressed) affix_ws.push_back(cur->dict);
       }
       if (cur->use_to_suggest) {
-        suggest_ws.push_back(inf);
-        if (inf.dict->affix_compressed) suggest_affix_ws.push_back(inf);
+        suggest_ws.push_back(cur->dict);
+        if (cur->dict->affix_compressed) suggest_affix_ws.push_back(cur->dict);
       }
     }
-    fast_scan   = suggest_ws.front().dict->fast_scan;
-    fast_lookup = suggest_ws.front().dict->fast_lookup;
+    fast_scan   = suggest_ws.front()->fast_scan;
+    fast_lookup = suggest_ws.front()->fast_lookup;
     have_soundslike = lang_->have_soundslike();
     have_repl = lang_->have_repl();
-    invisible_soundslike = suggest_ws.front().dict->invisible_soundslike;
-    soundslike_root_only = suggest_ws.front().dict->soundslike_root_only;
+    invisible_soundslike = suggest_ws.front()->invisible_soundslike;
+    soundslike_root_only = suggest_ws.front()->soundslike_root_only;
     affix_compress = !affix_ws.empty();
 
     //
@@ -629,8 +641,8 @@ namespace aspeller {
   //
   //
 
-  SpellerDict::SpellerDict(LocalDict & d) 
-    : LocalDict(d), special_id(none_id), next(0) 
+  SpellerDict::SpellerDict(Dict * d) 
+    : dict(d), special_id(none_id), next(0) 
   {
     switch (dict->basic_type) {
     case Dict::basic_dict:
@@ -648,10 +660,9 @@ namespace aspeller {
     save_on_saveall = false;
   }
 
-  SpellerDict::SpellerDict(Dict * w, const Language * l, const Config & c, SpecialId id)
+  SpellerDict::SpellerDict(Dict * w, const Config & c, SpecialId id)
     : next(0) 
   {
-    set(l, c);
     dict = w;
     special_id = id;
     switch (id) {

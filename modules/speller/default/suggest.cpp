@@ -393,7 +393,7 @@ namespace {
          i != sp->suggest_ws.end();
          ++i)
     {
-      i->dict->clean_lookup(str, sw);
+      (*i)->clean_lookup(str, sw);
       for (;!sw.at_end(); sw.adv())
         add_nearmiss(i, sw, 0, score, -1, do_count);
     }
@@ -415,7 +415,7 @@ namespace {
          i != sp->suggest_ws.end();
          ++i)
     {
-      i->dict->clean_lookup(word, sw);
+      (*i)->clean_lookup(word, sw);
       if (!sw.at_end()) {
         ci->word = sw.word;
         return true;
@@ -520,7 +520,7 @@ namespace {
     if (w.what == WordEntry::Misspelled) {
       repl = new WordEntry;
       const ReplacementDict * repl_dict
-        = static_cast<const ReplacementDict *>(i->dict);
+        = static_cast<const ReplacementDict *>(*i);
       repl_dict->repl_lookup(w, *repl);
     }
     add_nearmiss(buffer.dup(ParmString(w.word, w.word_size)), 
@@ -646,7 +646,7 @@ namespace {
                           WordEntry * sw, const char * sl, int score)
   {
     WordEntry w;
-    i->dict->soundslike_lookup(*sw, w);
+    (*i)->soundslike_lookup(*sw, w);
 
     for (; !w.at_end(); w.adv()) {
       
@@ -681,7 +681,7 @@ namespace {
          i != sp->suggest_ws.end();
          ++i) 
     {
-      StackPtr<SoundslikeEnumeration> els(i->dict->soundslike_elements());
+      StackPtr<SoundslikeEnumeration> els((*i)->soundslike_elements());
 
       while ( (sw = els->next(stopped_at)) ) {
 
@@ -773,14 +773,14 @@ namespace {
     const char * sl = 0;
     EditDist score;
     int stopped_at = LARGE_NUM;
-    CheckList * cl = new_check_list();
-    lang->munch(original.word, cl);
+    GuessInfo gi;
+    lang->munch(original.word, &gi);
     Vector<const char *> sls;
     sls.push_back(original.soundslike.str());
 #ifdef DEBUG_SUGGEST
     COUT.printf("will try soundslike: %s\n", sls.back());
 #endif
-    for (const aspeller::CheckInfo * ci = check_list_data(cl); 
+    for (const aspeller::CheckInfo * ci = gi.head;
          ci; 
          ci = ci->next) 
     {
@@ -794,15 +794,13 @@ namespace {
 #endif
       }
     }
-    delete_check_list(cl);
-    cl = 0;
     const char * * begin = sls.pbegin();
     const char * * end   = sls.pend();
     for (SpellerImpl::WS::const_iterator i = sp->suggest_ws.begin();
          i != sp->suggest_ws.end();
          ++i) 
     {
-      StackPtr<SoundslikeEnumeration> els(i->dict->soundslike_elements());
+      StackPtr<SoundslikeEnumeration> els((*i)->soundslike_elements());
 
       while ( (sw = els->next(stopped_at)) ) {
           
@@ -865,11 +863,9 @@ namespace {
   }
 
   // generate an n-gram score comparing s1 and s2
-  static int ngram(int n, char * s1, const char * s2)
+  static int ngram(int n, char * s1, int l1, const char * s2, int l2)
   {
     int nscore = 0;
-    int l1 = strlen(s1);
-    int l2 = strlen(s2);
     int ns;
     for (int j=1;j<=n;j++) {
       ns = 0;
@@ -923,7 +919,7 @@ namespace {
          i != sp->suggest_ws.end();
          ++i) 
     {
-      StackPtr<SoundslikeEnumeration> els(i->dict->soundslike_elements());
+      StackPtr<SoundslikeEnumeration> els((*i)->soundslike_elements());
       
       while ( (sw = els->next(LARGE_NUM)) ) {
 
@@ -936,7 +932,8 @@ namespace {
         
         if (already_have.have(sl)) continue;
 
-        int ng = ngram(3, original_soundslike.data(), sl);
+        int ng = ngram(3, original_soundslike.data(),  original_soundslike.size(),
+                       sl, strlen(sl));
 
         if (ng >= min_score) {
           commit_temp(sl);
@@ -948,7 +945,6 @@ namespace {
             Candidates::iterator i = candidates.begin();
             Candidates::iterator j = candidates.begin();
             for (; i != candidates.end(); ++i) {
-              assert(i->info.free_ == 0);
               if (i->score == orig_min) continue;
               if (min_score > i->score) min_score = i->score;
               *j = *i;

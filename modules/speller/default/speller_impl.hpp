@@ -33,15 +33,16 @@ namespace aspeller {
   enum SpecialId {main_id, personal_id, session_id, 
                   personal_repl_id, none_id};
 
-  struct SpellerDict : public LocalDict
+  struct SpellerDict
   {
+    Dict *            dict;
     bool              use_to_check;
     bool              use_to_suggest;
     bool              save_on_saveall;
     SpecialId         special_id;
     SpellerDict     * next;
-    SpellerDict(LocalDict &);
-    SpellerDict(Dict *, const Language *, const Config &, SpecialId id = none_id);
+    SpellerDict(Dict *);
+    SpellerDict(Dict *, const Config &, SpecialId id = none_id);
     ~SpellerDict() {if (dict) dict->release();}
   };
 
@@ -71,7 +72,7 @@ namespace aspeller {
     //
     // Add a single dictionary that has not been previously added
     //
-    void add_dict(SpellerDict *);
+    PosibErr<void> add_dict(SpellerDict *);
 
     PosibErr<const WordList *> personal_word_list  () const;
     PosibErr<const WordList *> session_word_list   () const;
@@ -97,7 +98,7 @@ namespace aspeller {
 			 CheckInfo *, GuessInfo *);
 
     PosibErr<bool> check(MutableString word) {
-      guess_info.reset(guesses);
+      guess_info.reset();
       return check(word.begin(), word.end(), false,
 		   unconditional_run_together_ ? run_together_limit_ : 0,
 		   check_inf, &guess_info);
@@ -122,8 +123,8 @@ namespace aspeller {
     const CheckInfo * check_info() {
       if (check_inf[0].word)
         return check_inf;
-      else if (guess_info.num > 0)
-        return guesses + 1;
+      else if (guess_info.head)
+        return guess_info.head;
       else
         return 0;
     }
@@ -193,15 +194,14 @@ namespace aspeller {
 		     const char *, const char *) const;
 
     CheckInfo check_inf[8];
-    CheckInfo guesses[8];
     GuessInfo guess_info;
 
-    struct WSInfo : public LocalDictInfo
-    {
-      const Dictionary * dict;
-    };
+    SensitiveCompare s_cmp;
+    SensitiveCompare s_cmp_begin;
+    SensitiveCompare s_cmp_middle;
+    SensitiveCompare s_cmp_end;
 
-    typedef Vector<WSInfo> WS;
+    typedef Vector<const Dict *> WS;
     WS check_ws, affix_ws, suggest_ws, suggest_affix_ws;
 
     bool                    unconditional_run_together_;
@@ -228,10 +228,16 @@ namespace aspeller {
     SpellerImpl::WS::const_iterator begin;
     SpellerImpl::WS::const_iterator end;
     inline LookupInfo(SpellerImpl * s, Mode m);
-    bool lookup (ParmString word, WordEntry & o) const;
+    // returns 0 if nothing found
+    // 1 if a match is found
+    // -1 if a word is found but affix doesn't match and "gi"
+    int lookup (ParmString word, const SensitiveCompare * c, char aff, 
+                WordEntry & o, GuessInfo * gi) const;
   };
 
-  inline LookupInfo::LookupInfo(SpellerImpl * s, Mode m) : sp(s), mode(m) {
+  inline LookupInfo::LookupInfo(SpellerImpl * s, Mode m) 
+    : sp(s), mode(m) 
+  {
     switch (m) { 
     case Word: 
       begin = sp->affix_ws.begin(); 

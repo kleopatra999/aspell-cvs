@@ -77,7 +77,7 @@ namespace acommon {
 
   // Based on the iso-8859-* character sets it is very fast, almost all
   // lookups involving no more than 2 comparisons.
-  // NO looks ups involved more than 3 compassions.
+  // NO looks ups involded more than 3 compassions.
   // Also, no division (or modules) is done whatsoever.
 
 
@@ -201,29 +201,30 @@ namespace acommon {
       : to(t), last(l) {}
   };
   
-  // s is null end: with this no special cases
   template <class T, class From>
   static inline NormLookupRet<T,From> norm_lookup(const NormTable<T> * d, 
-                                                  From * s, 
+                                                  From * s, From * stop,
                                                   const typename T::To * def,
                                                   From * prev) 
   {
   loop:
-    const T * i = d->data + (static_cast<typename T::From>(*s) & d->mask);
-    for (;;) {
-      if (i->from == static_cast<typename T::From>(*s)) {
-        if (i->sub_table) {
-          // really tail recursion
-          if (i->to[1] != T::to_non_char) {def = i->to; prev = s;}
-          d = (const NormTable<T> *)(i->sub_table);
-          s++;
-          goto loop;
+    if (s != stop) {
+      const T * i = d->data + (static_cast<typename T::From>(*s) & d->mask);
+      for (;;) {
+        if (i->from == static_cast<typename T::From>(*s)) {
+          if (i->sub_table) {
+            // really tail recursion
+            if (i->to[1] != T::to_non_char) {def = i->to; prev = s;}
+            d = (const NormTable<T> *)(i->sub_table);
+            s++;
+            goto loop;
+          } else {
+            return NormLookupRet<T,From>(i->to, s);
+          }
         } else {
-          return NormLookupRet<T,From>(i->to, s);
+          i += d->height;
+          if (i >= d->end) break;
         }
-      } else {
-        i += d->height;
-        if (i >= d->end) break;
       }
     }
     return NormLookupRet<T,From>(def, prev);
@@ -600,14 +601,14 @@ namespace acommon {
     DecodeNormLookup(NormTable<E> * d) : data(d) {}
     // must be null terminated
     void decode(const char * in, int size, FilterCharVector & out) const {
-      if (size == -1) size = strlen(in);
-      const char * stop = in + size;
-      while (in < stop) {
+      const char * stop = in + size; // will word even if size -1
+      while (in != stop) {
         if (*in == 0) {
+          if (size == -1) break;
           out.append(0);
           ++in;
         } else {
-          NormLookupRet<E,const char> ret = norm_lookup<E>(data, in, 0, in);
+          NormLookupRet<E,const char> ret = norm_lookup<E>(data, in, stop, 0, in);
           for (unsigned i = 0; ret.to[i] && i < E::max_to; ++i)
             out.append(ret.to[i]);
           in = ret.last + 1;
@@ -668,7 +669,7 @@ namespace acommon {
           out.append('\0');
           ++in;
         } else {
-          NormLookupRet<E,const FilterChar> ret = norm_lookup<E>(data, in, (const byte *)"?", in);
+          NormLookupRet<E,const FilterChar> ret = norm_lookup<E>(data, in, stop, (const byte *)"?", in);
           for (unsigned i = 0; i < E::max_to && ret.to[i]; ++i)
             out.append(ret.to[i]);
           in = ret.last + 1;
@@ -682,7 +683,7 @@ namespace acommon {
           out.append('\0');
           ++in;
         } else {
-          NormLookupRet<E,const FilterChar> ret = norm_lookup<E>(data, in, 0, in);
+          NormLookupRet<E,const FilterChar> ret = norm_lookup<E>(data, in, stop, 0, in);
           if (ret.to == 0) {
             char m[70];
             snprintf(m, 70, _("The Unicode code point U+%04X is unsupported."), in->chr);
@@ -703,7 +704,7 @@ namespace acommon {
           buf.append(FilterChar(0));
           ++in;
         } else {
-          NormLookupRet<E,FilterChar> ret = norm_lookup<E>(data, in, (const byte *)"?", in);
+          NormLookupRet<E,FilterChar> ret = norm_lookup<E>(data, in, stop, (const byte *)"?", in);
           const FilterChar * end = ret.last + 1;
           unsigned width = 0;
           for (; in != end; ++in) width += in->width;
@@ -854,7 +855,6 @@ namespace acommon {
   {
     buf_.clear();
     decode_->decode(in, size, buf_);
-    buf_.append(0);
     FilterChar * start = buf_.pbegin();
     FilterChar * stop = buf_.pend();
     if (!filter.empty()) {
