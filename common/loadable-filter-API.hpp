@@ -32,20 +32,21 @@
 
 #ifdef FILTER_PROGRESS_CONTROL
 FILE * controllout=stderr;
-#define FDEBUGCLOSE {\
+#define FDEBUGCLOSE \
   if ((controllout != stdout) && (controllout != stderr)) {\
     fclose(controllout);\
     controllout=stderr;\
-  }\
-};
-#define FDEBUGOPEN {\
+  }
+
+#define FDEBUGOPEN \
   FDEBUGCLOSE \
   if ((controllout=fopen(FILTER_PROGRESS_CONTROL,"w")) == NULL) {\
     controllout=stderr;\
   }\
-  fprintf(controllout,"Debug Destination %s\n",FILTER_PROGRESS_CONTROL);\
-}
-#define FDEBUG {fprintf(controllout,"File: %s(%i)\n",__FILE__,__LINE__);}
+  fprintf(controllout,"Debug Destination %s\n",FILTER_PROGRESS_CONTROL);
+
+#define FDEBUG fprintf(controllout,"File: %s(%i)\n",__FILE__,__LINE__);
+#define FDEBUGPRINTF(a) fprintf(controllout,(a));
 #endif // FILTER_PROGRESS_CONTROL
 
 /* ACTIVATE_ENCODER, ACTIVATE_FILTER, ACTIVATE_DECODER:

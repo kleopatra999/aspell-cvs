@@ -844,8 +844,8 @@ namespace acommon {
         if( strncmp(i->name,"filter-",7) == 0 ){
           prefixend=7;
         }
-        out << "  " << &(i->name)[prefixend] << " Filter: " << i->desc 
-            << "\n\tconfigured as follows;\n";
+        out << "###  " << &(i->name)[prefixend] << " Filter: " << i->desc 
+            << "\n###\tconfigured as follows;\n";
         continue;
       }
       expandname="";
