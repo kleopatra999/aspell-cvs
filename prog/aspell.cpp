@@ -588,7 +588,8 @@ void pipe()
     case '^':
       ignore = 1;
     default:
-      checker->process(line + ignore, strlen(line));
+      line += ignore;
+      checker->process(line, strlen(line));
       while (Token token = checker->next_misspelling()) {
 	word = line + token.offset;
 	word[token.len] = '\0';
