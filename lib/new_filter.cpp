@@ -166,6 +166,7 @@ namespace acommon
   //filter is loaded.
 #ifdef HAVE_LIBDL
       if (!f) {
+
         for (currentfilter=(ConfigModule*)filter_modules_begin+standard_filters_size;
 	     currentfilter < (ConfigModule*)filter_modules_end; 
 	     currentfilter++) {
@@ -181,14 +182,15 @@ namespace acommon
             ((filterhandle[2]=dlopen(currentfilter->load,RTLD_NOW)) == NULL)) {
           return make_err(cant_dlopen_file,"filter setup",filter_name,dlerror());
         }
-        dynamicfilter.decoder=NULL;
-        dynamicfilter.encoder=NULL;
-        dynamicfilter.filter=NULL;
-        if (!(((void*)dynamicfilter.decoder=dlsym(filterhandle[0].val(),"new_decoder"))) &&
-	    !(((void*)dynamicfilter.encoder=dlsym(filterhandle[1].val(),"new_encoder"))) &&
-	    !(((void*)dynamicfilter.filter=dlsym(filterhandle[2].val(),"new_filter")))) {
+        ((void *)dynamicfilter.decoder) = dlsym(filterhandle[0].val(),"new_decoder");
+        ((void *)dynamicfilter.encoder) = dlsym(filterhandle[1].val(),"new_encoder");
+        ((void *)dynamicfilter.filter)  = dlsym(filterhandle[2].val(),"new_filter");
+        if (!dynamicfilter.decoder &&
+	    !dynamicfilter.encoder &&
+	    !dynamicfilter.filter) {
           return make_err(empty_filter,"filter setup",filter_name);
         }
+        dynamicfilter.name=filter_name;
         f=&dynamicfilter;
       } else {
         addcount=1;
@@ -201,7 +203,8 @@ namespace acommon
 	if (!keep) {
 	  ifilter.del();
 	} else {
-          filter.add_filter(ifilter.release(),filterhandle[0].release());
+          filter.add_filter(ifilter.release(),filterhandle[0].release(),
+                            Filter::DECODER);
         }
       } 
       if (use_filter && f->filter && (ifilter=f->filter())) {
@@ -209,7 +212,8 @@ namespace acommon
         if (!keep) {
           ifilter.del();
         } else {
-          filter.add_filter(ifilter.release(), filterhandle[2].release());
+          filter.add_filter(ifilter.release(), filterhandle[2].release(),
+                            Filter::FILTER);
         }
       }
       if (use_encoder && f->encoder && (ifilter=f->encoder())) {
@@ -217,7 +221,8 @@ namespace acommon
         if (!keep) {
           ifilter.del();
         } else {
-          filter.add_filter(ifilter.release(), filterhandle[1].release());
+          filter.add_filter(ifilter.release(), filterhandle[1].release(),
+                            Filter::ENCODER);
         }
       }
     }
