@@ -169,7 +169,6 @@ namespace acommon
       config->replace("mode", mode);
   }
 
-#ifdef HAVE_LIBDL
   class FilterHandle {
   public:
     FilterHandle() : handle(0) {}
@@ -182,7 +181,6 @@ namespace acommon
   private:
     void * handle;
   };
-#endif
 
   PosibErr<void> setup_filter(Filter & filter, 
 			      Config * config, 
