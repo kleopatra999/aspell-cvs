@@ -66,12 +66,9 @@
 // And like the .wrd file the hash table contains offsets not pointers.
 //
 
-#include <vector>
-#include <algorithm>
+#include <map>
 
-using std::vector;
 using std::pair;
-using std::sort;
 
 #include <string.h>
 #include <stdio.h>
@@ -80,6 +77,7 @@ using std::sort;
 #include "settings.h"
 
 #include "fstream.hpp"
+#include "vector.hpp"
 #include "vector_hash-t.hpp"
 #include "block_vector.hpp"
 #include "data.hpp"
@@ -189,22 +187,6 @@ namespace aspeller_default_readonly_ws {
     };
     typedef VectorHashTable<WordLookupParms> WordLookup;
     
-    struct SoundslikeLookupParms {
-      const char * block_begin;
-      SoundslikeLookupParms() {}
-      SoundslikeLookupParms(const char * b) : block_begin(b) {}
-      typedef BlockVector<const u32int> Vector;
-      typedef u32int                    Value;
-      typedef const char *              Key;
-      static const bool is_multi = false;
-      Key key(Value v) const {return block_begin + v;}
-      hash<const char *> hash;
-      bool equal(Key rhs, Key lhs) const {return strcmp(rhs,lhs) == 0;}
-      bool is_nonexistent(Value v) const {return v == u32int_max;}
-      void make_nonexistent(const Value & v) const {abort();}
-    };
-    typedef VectorHashTable<SoundslikeLookupParms> SoundslikeLookup;
-
   private:
       
     char *           block;
@@ -214,8 +196,6 @@ namespace aspeller_default_readonly_ws {
     const char *     word_block;
     u32int           max_word_length;
     bool             use_soundslike;
-    SoundslikeLookup soundslike_lookup;
-    const char *     soundslike_block;
     const char *     soundslike_words_begin;
     
     ReadOnlyWS(const ReadOnlyWS&);
@@ -299,7 +279,6 @@ namespace aspeller_default_readonly_ws {
     u32int soundslike_words_offset;
     u32int soundslike_count;
     u32int soundslike_buckets;
-    u32int soundslike_size;
     u32int lang_name_size;
     u32int soundslike_name_size;
     u32int soundslike_version_size;
@@ -393,17 +372,12 @@ namespace aspeller_default_readonly_ws {
     
     max_word_length = data_head.max_word_length;
     
-    if (use_soundslike) {
-      soundslike_block = block + data_head.word_block_size + data_head.word_size;
+    if (use_soundslike)
       soundslike_words_begin 
-	= soundslike_block + data_head.soundslike_words_offset;
-      soundslike_lookup.parms().block_begin = soundslike_block;
-      begin = reinterpret_cast<const u32int *>
-	(soundslike_block + data_head.soundslike_block_size);
-      soundslike_lookup.vector().set(begin,
-				     begin + data_head.soundslike_buckets);
-      soundslike_lookup.set_size(data_head.soundslike_count);
-    }
+	= block 
+	+ data_head.word_block_size 
+	+ data_head.word_size 
+	+ data_head.soundslike_words_offset;
 
     return no_err;
   }
@@ -468,7 +442,7 @@ namespace aspeller_default_readonly_ws {
     typedef WordLookup::const_iterator  Iterator; 
     const char * word_block_begin;
     const Language * lang;
-    vector<char> buf;
+    Vector<char> buf;
     SoundslikeElementsParmsNoSL(u32int max_len, const char * b, 
 				const Language * l) 
       : word_block_begin(b), lang(l)
@@ -551,13 +525,7 @@ namespace aspeller_default_readonly_ws {
 
     if (use_soundslike) {
 
-      SoundslikeLookup::const_iterator i = soundslike_lookup.find(soundslike);
-      if (i == soundslike_lookup.end()) { 
-	return new MakeAlwaysEndEnumeration<BasicWordInfo>();
-      } else {
-	return ReadOnlyWS::words_w_soundslike
-	  (SoundslikeWord(soundslike_block + *i, 0));
-      }
+      abort();
 
     } else {
 
@@ -603,7 +571,7 @@ namespace aspeller_default_readonly_ws {
   using namespace aspeller;
 
   struct WordLookupParms {
-    typedef vector<const char *> Vector;
+    typedef Vector<const char *> Vector;
     typedef const char *         Value;
     typedef const char *         Key;
     static const bool is_multi = true;
@@ -620,29 +588,26 @@ namespace aspeller_default_readonly_ws {
 
   typedef VectorHashTable<WordLookupParms> WordHash;
 
-  struct SoundslikeLookupParms {
-    typedef const char *                Key;
-    struct List {
-      union {
-	u32int * list;
-	u32int   single;
-      } d;
-      u16int   size;
-      u16int   num_inserted;
+  struct SoundslikeList {
+    struct Word {
+      u32int loc;
+      u32int hash_idx;
     };
-    typedef pair<Key, List> Value;
-    typedef vector<Value>   Vector;
-    static const bool is_multi = false;
-    const Key & key(const Value & v) const {return v.first;}
-    hash<const char *>  hash;
-    bool equal(const Key & rhs, const Key & lhs) const {return strcmp(rhs,lhs) == 0;}
-    bool is_nonexistent(const Value & v) const {return v.first == 0;}
-    void make_nonexistent(Value & v) const {
-      memset(&v, 0, sizeof(Value));
-    }
+    union {
+      Word * list;
+      Word   single;
+    } d;
+    u16int   size;
+    u16int   num_inserted;
   };
 
-  typedef VectorHashTable<SoundslikeLookupParms> SoundHash;
+  struct LtStr
+  {
+    bool operator()(const char * s1, const char * s2) const
+      {return strcmp(s1, s2) < 0;}
+  };
+
+  typedef std::map<const char *, SoundslikeList, LtStr> SoundMap;
 
   static inline unsigned int round_up(unsigned int i, unsigned int size) {
     return ((i + size - 1)/size)*size;
@@ -655,15 +620,6 @@ namespace aspeller_default_readonly_ws {
       OUT << '\0';
   }
 
-  struct SortedSoundslikeLessThan
-  {
-    SoundHash::Vector & vec;
-    SortedSoundslikeLessThan(SoundHash::Vector & v) : vec(v) {}
-    bool operator() (u32int lhs, u32int rhs) {
-      return strcmp(vec[lhs].first, vec[rhs].first) < 0;
-    }
-  };
-  
   PosibErr<void> create (ParmString base, 
 			 StringEnumeration * els,
 			 const Language & lang) 
@@ -701,10 +657,10 @@ namespace aspeller_default_readonly_ws {
 
     String temp;
 
-    SoundHash sound_prehash;
-    StringBuffer   sound_prehash_char_buf;
-    vector<u32int> sound_prehash_list_buf;
-    int            sound_prehash_list_buf_size = 0;
+    SoundMap       sound_map;
+    StringBuffer   sound_map_char_buf;
+    Vector<SoundslikeList::Word> sound_map_list_buf;
+    int                          sound_map_list_buf_size = 0;
     {
       WordHash word_hash;
       StringBuffer buf;
@@ -720,8 +676,9 @@ namespace aspeller_default_readonly_ws {
       while ( (w0 = els->next()) != 0) {
 
 	unsigned int s = strlen(w0);
-	vector<char> tstr(w0, w0+s+1);
-	char * w = &tstr[0];
+	CharVector tstr;
+	tstr.append(w0, s+1);
+	char * w = tstr.data();
 	
 	char * p = strchr(w, ':');
 	if (p == 0) {
@@ -791,10 +748,7 @@ namespace aspeller_default_readonly_ws {
       advance_file(OUT, data_head.head_size);
       std::streampos start = data_head.head_size;
 
-      if (use_soundslike)
-	sound_prehash.resize(word_hash.bucket_count());
-      
-      vector<u32int> final_hash(word_hash.bucket_count(), u32int_max);
+      Vector<u32int> final_hash(word_hash.bucket_count(), u32int_max);
       
       OUT << '\0';
       for (unsigned int i = 0; i != word_hash.vector().size(); ++i) {
@@ -813,23 +767,24 @@ namespace aspeller_default_readonly_ws {
 	if (use_soundslike) {
 
 	  temp = lang.to_soundslike(value);
-	  SoundHash::iterator j = sound_prehash.find(temp.c_str());
-	  if (j == sound_prehash.end()) {
+	  SoundMap::iterator j = sound_map.find(temp.c_str());
+	  if (j == sound_map.end()) {
 
-	    SoundHash::value_type to_insert;
-	    to_insert.first = sound_prehash_char_buf.alloc(temp.size()+1);
+	    SoundMap::value_type 
+	      to_insert(sound_map_char_buf.alloc(temp.size()+1), 
+			SoundslikeList());
 	    strncpy(const_cast<char *>(to_insert.first), 
 		    temp.c_str(), 
 		    temp.size() + 1);
-	    sound_prehash.insert(to_insert).first->second.size = 1;
+	    sound_map.insert(to_insert).first->second.size = 1;
 
 	  } else {
 
 	    if (j->second.size == 1)
-	      sound_prehash_list_buf_size++;
+	      sound_map_list_buf_size++;
 	    
 	    j->second.size++;
-	    sound_prehash_list_buf_size++;
+	    sound_map_list_buf_size++;
 
 	  }
 	}
@@ -837,7 +792,7 @@ namespace aspeller_default_readonly_ws {
 
       if (use_soundslike) {
 
-	sound_prehash_list_buf.resize(sound_prehash_list_buf_size);
+	sound_map_list_buf.resize(sound_map_list_buf_size);
 	int p = 0;
 
 	for (unsigned int i = 0; i != word_hash.vector().size(); ++i) {
@@ -847,16 +802,18 @@ namespace aspeller_default_readonly_ws {
 	  if (word_hash.parms().is_nonexistent(value)) continue;
 	  
 	  temp = lang.to_soundslike(value);
-	  SoundHash::iterator j = sound_prehash.find(temp.c_str());
-	  //assert(j != sound_prehash.end());
+	  SoundMap::iterator j = sound_map.find(temp.c_str());
+	  //assert(j != sound_map.end());
 	  if (j->second.num_inserted == 0 && j->second.size != 1) {
-	    j->second.d.list = &*sound_prehash_list_buf.begin() + p;
+	    j->second.d.list = &*sound_map_list_buf.begin() + p;
 	    p += j->second.size;
 	  } 
 	  if (j->second.size == 1) {
-	    j->second.d.single = final_hash[i];
+	    j->second.d.single.loc      = final_hash[i];
+	    j->second.d.single.hash_idx = i;
 	  } else {
-	    j->second.d.list[j->second.num_inserted] = final_hash[i];
+	    j->second.d.list[j->second.num_inserted].loc      = final_hash[i];
+	    j->second.d.list[j->second.num_inserted].hash_idx = i;
 	  }
 	  ++j->second.num_inserted;
 	}
@@ -880,32 +837,14 @@ namespace aspeller_default_readonly_ws {
     }
     
     if (use_soundslike) {
-      sound_prehash.resize(sound_prehash.size()*4/5);
-
-      vector<u32int> sorted_soundslikes;
-      sorted_soundslikes.reserve(sound_prehash.size());
-
-      for (unsigned int i = 0; i != sound_prehash.vector().size(); ++i) {
-
-	if (sound_prehash.parms().is_nonexistent(sound_prehash.vector()[i])) 
-	  continue;
-
-	sorted_soundslikes.push_back(i);
-      }
-
-      sort(sorted_soundslikes.begin(), sorted_soundslikes.end(),
-	   SortedSoundslikeLessThan(sound_prehash.vector()));
-
       CharVector     soundslike_data;
-      vector<u32int> final_hash(sound_prehash.bucket_count(), u32int_max);
-
 
       //
       // Writting soundslike words, creating soundslike Final Hash
       //
 
-      vector<u32int>::iterator i   = sorted_soundslikes.begin();
-      vector<u32int>::iterator end = sorted_soundslikes.end();
+      SoundMap::iterator i   = sound_map.begin();
+      SoundMap::iterator end = sound_map.end();
       unsigned int j;
 
       // these must be a power of 2
@@ -927,21 +866,20 @@ namespace aspeller_default_readonly_ws {
 
 	CharVector & o = soundslike_data;
 
-	const SoundHash::value_type & value = sound_prehash.vector()[*i];
-	const char * sl = value.first;
+	const char * sl = i->first;
 	unsigned int sl_size = strlen(sl);
 
-	u16int count = value.second.size;
+	u16int count = i->second.size;
 	
-	if (count == 1)
-	  o.write32(value.second.d.single);
-	else
-	  o.write(value.second.d.list, count * 4);
+	if (count == 1) {
+	  o.write32(i->second.d.single.loc);
+	} else {
+	  for (j = 0; j != count; ++j)
+	    o.write32(i->second.d.list[j].loc);
+	}
 	
 	o.write16(count);
 	o.write16(0); // place holder for offset to next item
-	
-	final_hash[*i] = o.size();
 	
 	o.at16(prev_pos - 2) |= o.size() - prev_pos;
 	prev_pos = o.size();
@@ -955,17 +893,19 @@ namespace aspeller_default_readonly_ws {
 	  jump[j] = 4;
 	}
 
-	o << value.first << '\0';
+	o << sl << '\0';
 	
 	while (o.size() % 4 != 0)
 	  o.write('\0');
 
+	SoundMap::iterator i1 = i;
+	++i1;
 	for (j = (j == 0) ? (1) : (j << 1);
 	     j <= RANGE_STOP
 	       && j < sl_size
 	       && strncmp(prev_sl, sl, j+1) != 0
-	       && i + 1 != sorted_soundslikes.end() 
-	       && strncmp(sl, sound_prehash.vector()[*(i+1)].first, j+1) == 0;
+	       && i1 != sound_map.end() 
+	       && strncmp(sl, i1->first, j+1) == 0;
 	     j <<= 1) 
 	{
 	  o.write16(j);
@@ -999,15 +939,7 @@ namespace aspeller_default_readonly_ws {
       // Write final soundslike data
       OUT.write(soundslike_data.data(), data_head.soundslike_block_size);
 
-      // Witting Final soundslike Hash
-      advance_file(OUT, data_head.head_size + data_head.total_block_size);
-      OUT.write(&final_hash.front(), final_hash.size() * 4);
-
-      data_head.soundslike_count   = sound_prehash.size();
-      data_head.soundslike_buckets = sound_prehash.bucket_count();
-      data_head.soundslike_size    = round_up(final_hash.size() * 4, page_size);
-      data_head.total_block_size += data_head.soundslike_size;
-    
+      data_head.soundslike_count   = sound_map.size();
     }
 
     advance_file(OUT, data_head.head_size + data_head.total_block_size);
