@@ -1,3 +1,3 @@
 export SED=@SED@
 
-SUBDIRS = cc
+SUBDIRS = cc filter
