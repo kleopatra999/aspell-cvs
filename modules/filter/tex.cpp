@@ -86,7 +86,7 @@ namespace acommon {
   {
     name_ = "tex-filter";
     order_num_ = 0.35;
-fprintf(stderr,"name %s \n",name_);
+    fprintf(stderr,"name %s \n",name_);
 
     commands.clear();
     opts->retrieve_list("filter-tex-command", &commands);
@@ -286,7 +286,7 @@ fprintf(stderr,"name %s \n",name_);
   };
 
   Recode::Recode()
-  : code(0)
+    : code(0)
   {  
     minlength=0;
     reset();
@@ -296,7 +296,7 @@ fprintf(stderr,"name %s \n",name_);
     reset();
     code.resize(rec.code.size());
     
-  int countrec=0;
+    int countrec=0;
   
     for (countrec=0;
          countrec < code.size();
@@ -305,7 +305,7 @@ fprintf(stderr,"name %s \n",name_);
       if (!rec.code[countrec]) {
         continue;
       }
-  int length=strlen(rec.code[countrec]);
+      int length=strlen(rec.code[countrec]);
 
       code[countrec]= new char[length+1];
       strncpy(code[countrec],rec.code[countrec],length);
@@ -325,7 +325,7 @@ fprintf(stderr,"name %s \n",name_);
 
   void Recode::reset() {
 
-  unsigned int countcode=0;
+    unsigned int countcode=0;
 
     for (countcode=0;
          countcode < code.size();
@@ -341,10 +341,10 @@ fprintf(stderr,"name %s \n",name_);
 
   bool Recode::setExpansion(const char * expander) {
 
-  char * begin=(char *)expander;
-  char * end=begin;
-  char * start=begin;
-  int keylen=0;
+    char * begin=(char *)expander;
+    char * end=begin;
+    char * start=begin;
+    int keylen=0;
 
 
     if (code.size() > 0) {
@@ -356,11 +356,11 @@ fprintf(stderr,"name %s \n",name_);
       }
       if (end  && (begin != end)) {
         
-    char hold = *end;
+        char hold = *end;
   
         *end='\0';
 
-    int length=strlen(begin);
+        int length=strlen(begin);
 
         if ((begin == start) && (keylen || (length != 1))) {
           if ((length != 1) || (keylen != length) ||
@@ -394,7 +394,7 @@ fprintf(stderr,"name %s \n",name_);
   }
 
   int Recode::encode(FilterChar * & begin,FilterChar * & end,
-                      FilterCharVector * external) {
+                     FilterCharVector * external) {
     if ((code.size() < 2) || 
         (begin == NULL) || 
         (begin == end) || 
@@ -412,9 +412,9 @@ fprintf(stderr,"name %s \n",name_);
   int Recode::decode(FilterChar * & begin,FilterChar * & end,
                      FilterCharVector * internal) {
   
-  FilterChar * i = begin;
-  char * codepointer = NULL;
-  char * codestart   = NULL; 
+    FilterChar * i = begin;
+    char * codepointer = NULL;
+    char * codestart   = NULL; 
   
     if (code.size() < 2) {
       return 0;
@@ -423,7 +423,7 @@ fprintf(stderr,"name %s \n",name_);
           ((codepointer == NULL) || (*codepointer))) {
       if (codepointer == NULL) {
 
-  int countcodes=0;
+        int countcodes=0;
 
         for (countcodes=1;
              countcodes < (int) code.size();
@@ -470,8 +470,8 @@ fprintf(stderr,"name %s \n",name_);
   };
 
   TexEncoder::TexEncoder()
-  : multibytes(0),
-    buf()
+    : multibytes(0),
+      buf()
   {
   }
 
@@ -479,12 +479,12 @@ fprintf(stderr,"name %s \n",name_);
     name_ = "tex-encoder";
     order_num_ = 0.4;
 
-  StringList multibytechars;
+    StringList multibytechars;
     
-  config->retrieve_list("filter-tex-multi-byte", &multibytechars);
+    config->retrieve_list("filter-tex-multi-byte", &multibytechars);
 
-  StringEnumeration * multibytelist=multibytechars.elements();
-  const char * multibyte=NULL;
+    StringEnumeration * multibytelist=multibytechars.elements();
+    const char * multibyte=NULL;
 
     while ((multibyte=multibytelist->next())) {
       
@@ -494,7 +494,7 @@ fprintf(stderr,"name %s \n",name_);
         continue;
       }
 
-  int countmulti=0;
+      int countmulti=0;
 
       while ((countmulti < multibytes.size()) &&
              !multibytes[countmulti].setExpansion(multibyte)) {
@@ -514,12 +514,12 @@ fprintf(stderr,"name %s \n",name_);
   void TexEncoder::process(FilterChar * & start, FilterChar * & stop) {
     buf.clear();
 
-  FilterChar * i=start;
+    FilterChar * i=start;
 
     while (i && (i != stop)) {
 
-  FilterChar * old = i;
-  int count=0;
+      FilterChar * old = i;
+      int count=0;
 
       for (count=0;
            count < multibytes.size();
@@ -554,31 +554,31 @@ fprintf(stderr,"name %s \n",name_);
     Vector<char *>hyphens;
      
   public:
-     TexDecoder();
-     virtual PosibErr<bool> setup(Config * config); 
-     virtual void process(FilterChar * & start, FilterChar * & stop);
-     virtual void reset() ;
-     virtual ~TexDecoder();
+    TexDecoder();
+    virtual PosibErr<bool> setup(Config * config); 
+    virtual void process(FilterChar * & start, FilterChar * & stop);
+    virtual void reset() ;
+    virtual ~TexDecoder();
   };
 
   TexDecoder::TexDecoder()
-  : multibytes(0),
-    buf(),
-    hyphens()
+    : multibytes(0),
+      buf(),
+      hyphens()
   {
-FDEBUGNOTOPEN
+    FDEBUGNOTOPEN;
   }
 
   PosibErr<bool> TexDecoder::setup(Config * config) {
     name_ = "tex-decoder";
     order_num_ = 0.3;
 
-  StringList multibytechars;
+    StringList multibytechars;
     
     config->retrieve_list("filter-tex-multi-byte", &multibytechars);
 
-  StringEnumeration * multibytelist=multibytechars.elements();
-  const char * multibyte=NULL;
+    StringEnumeration * multibytelist=multibytechars.elements();
+    const char * multibyte=NULL;
 
     multibytes.resize(0);
     
@@ -590,7 +590,7 @@ FDEBUGNOTOPEN
         continue;
       }
 
-  int countmulti=0;
+      int countmulti=0;
 
       while ((countmulti < multibytes.size()) &&
              !multibytes[countmulti].setExpansion(multibyte)) {
@@ -604,18 +604,18 @@ FDEBUGNOTOPEN
         }
       }
     }
-  StringList hyphenChars;
+    StringList hyphenChars;
     
     config->retrieve_list("filter-tex-hyphen", &hyphenChars);
 
-  StringEnumeration * hyphenList=hyphenChars.elements();
-  const char * hyphen=NULL;
+    StringEnumeration * hyphenList=hyphenChars.elements();
+    const char * hyphen=NULL;
 
     hyphens.resize(0);
     while ((hyphen=hyphenList->next())) {
-FDEBUGPRINTF("next hyphen char `")
-FDEBUGPRINTF(hyphen)
-FDEBUGPRINTF("'\n")
+      FDEBUGPRINTF("next hyphen char `");
+      FDEBUGPRINTF(hyphen);
+      FDEBUGPRINTF("'\n");
       hyphens.push_back(strdup(hyphen));
     }
     return true;
@@ -624,29 +624,29 @@ FDEBUGPRINTF("'\n")
   void TexDecoder::process(FilterChar * & start, FilterChar * & stop) {
     buf.clear();
 
-  FilterChar * i=start;
+    FilterChar * i=start;
 
-FDEBUGPRINTF("filtin `")
+    FDEBUGPRINTF("filtin `");
     while (i && (i != stop)) {
-
-  FilterChar * old = i;
-  int count=0;
-
+      
+      FilterChar * old = i;
+      int count=0;
+      
       for (count=0;
            count < multibytes.size();
            count++) { 
-
-FilterChar * j = i;
-
+        
+        FilterChar * j = i;
+        
         i+=multibytes[count].decode(i,stop,&buf);
 
-while (j != i) {
-char jp[2]={'\0','\0'};
+        while (j != i) {
+          char jp[2]={'\0','\0'};
 
-jp[0]=*j;
-FDEBUGPRINTF(jp);
-j++;
-}
+          jp[0]=*j;
+          FDEBUGPRINTF(jp);
+          j++;
+        }
       }
       for(count=0;
           count < hyphens.size();
@@ -654,25 +654,25 @@ j++;
         if (!hyphens[count]) {
           continue;
         }
-  char * hp = &hyphens[count][0];
-  char * hpo = hp;
-  FilterChar * j = i;
+        char * hp = &hyphens[count][0];
+        char * hpo = hp;
+        FilterChar * j = i;
         while (*hp && (j != stop) &&
                (*hp == *j)) {
           hp++;
           j++;
         }
         if (!*hp) {
-FDEBUGPRINTF("{")
-FilterChar * k = i;
-while (k != j) {
-char kp[2]={'\0','\0'};
+          FDEBUGPRINTF("{");
+          FilterChar * k = i;
+          while (k != j) {
+            char kp[2]={'\0','\0'};
 
-kp[0]=*k;
-FDEBUGPRINTF(kp);
-k++;
-} 
-FDEBUGPRINTF("}")
+            kp[0]=*k;
+            FDEBUGPRINTF(kp);
+            k++;
+          } 
+          FDEBUGPRINTF("}");
           if (buf.size()) {
             buf[buf.size()-1].width+=strlen(hpo);
 //          buf.append(*i,strlen(hpo)+1);
@@ -681,17 +681,17 @@ FDEBUGPRINTF("}")
 //FIXME better solution for illegal hyphenation at begin of line
 //      illegal as new line chars are whitespace for latex
             buf.append(*i,strlen(hpo));
-char ip[2]={'\0','\0'};
-ip[0]=*i;
-FDEBUGPRINTF(ip);
+            char ip[2]={'\0','\0'};
+            ip[0]=*i;
+            FDEBUGPRINTF(ip);
           }
           i=j;
         }
       }
       if (i == old) {
-char ip[2]={'\0','\0'};
-ip[0]=*i;
-FDEBUGPRINTF(ip);
+        char ip[2]={'\0','\0'};
+        ip[0]=*i;
+        FDEBUGPRINTF(ip);
         buf.append(*i);
         i++;
       }
@@ -699,15 +699,15 @@ FDEBUGPRINTF(ip);
     buf.append('\0');
     start = buf.pbegin();
     stop  = buf.pend() - 1;
-FDEBUGPRINTF("'\nfiltout `")
-i = start;
-while (i != stop) {
-char ip[2]={'\0','\0'};
-ip[0]=*i;
-FDEBUGPRINTF(ip);
-i++;
-}
-FDEBUGPRINTF("'\n");
+    FDEBUGPRINTF("'\nfiltout `");
+    i = start;
+    while (i != stop) {
+      char ip[2]={'\0','\0'};
+      ip[0]=*i;
+      FDEBUGPRINTF(ip);
+      i++;
+    }
+    FDEBUGPRINTF("'\n");
   }
 
 
@@ -717,9 +717,8 @@ FDEBUGPRINTF("'\n");
   }
 
   TexDecoder::~TexDecoder(){
-FDEBUGCLOSE
+    FDEBUGCLOSE;
   }
-        
     
   ACTIVATE_ENCODER(acommon,TexEncoder,tex);
   ACTIVATE_FILTER(acommon,TexFilter,tex);
