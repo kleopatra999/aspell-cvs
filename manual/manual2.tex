@@ -30,6 +30,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% User specified LaTeX commands.
 
 \usepackage[T1]{fontenc}
+\usepackage{textcomp}
 \usepackage{xspace}
 \newcommand{\nach}{$\to$\xspace}
 \newcommand{\hoch}{\texttt{$^\wedge$}}
@@ -71,7 +72,8 @@
 
 \end{htmlonly}
 
-\usepackage{babel}
+\usepackage[english,german]{babel}
+\selectlanguage{english}
 \makeatother
 \begin{document}
 
@@ -728,11 +730,11 @@ file.
 
 \paragraph{Note:}
 \small{}%
-Filters and corresponding options allso may be assembled inside a special meta
+Filters and corresponding options also may be assembled inside a special meta
 filter file named ``<metafilter>.flt''.
 A filter has to be loaded via adding a \verb#add-filter <filtername># line to the meta filter file before it's options may be specified.
 
-On commandline than \verb#add<metafilter># is specified instead of the filters and options assembling it.
+On command line than \verb#add<metafilter># is specified instead of the filters and options assembling it.
 \normalsize  
 
 \subsubsection{Boolean}
@@ -879,6 +881,7 @@ the quote char
 \begin{description}
 \item [tex-command]\textit{(list)} \TeX{} commands
 \item [tex-check-comments]\textit{(boolean)} check \TeX{} comments
+\item [tex-multi-byte]\textit{(list)} \TeX{}  multi byte letter en|decoding 
 \end{description}
 \item[context]
 This filter can be used to spell check source codes, html sources and other texts which consist of different contexts.
@@ -960,7 +963,7 @@ to stdout and nothing else.
 The default configuration of a particular filter may be quested by passing the name of the filter or a corresponding regular expression to the config command.
 This is done by passing +e <\,{}expr\,{}> to dump config command of Aspell.
 If +e is the only argument to dump config Aspell assumes ``+e all'' which lists the configuration of all installed and reachable filters.
-In any other case or in case of questing the configuration of a specific option +e allways has to be followed by ``<\,{}filtername\,{}>'', ``<\,{}regex\,{}>'' or a literal ``all''.
+In any other case or in case of questing the configuration of a specific option +e always has to be followed by ``<\,{}filtername\,{}>'', ``<\,{}regex\,{}>'' or a literal ``all''.
 The parameter +e and its argument always must be specified immediately after config command and before specifying name of option in order to be recognized by Aspell.
    
 \section{Printing Help screen}
@@ -1093,7 +1096,33 @@ rem-tex-command foo
 will remove the command foo, if present, from the list of \TeX{} commands.
 
 \paragraph{Note:}
-The \textbf{tex} filter mode is allso available via \textbf{latex} alias name.
+The \TeX filter mode is also available via \textbf{latex} alias name.
+
+The \TeX filter mode also contains a decoding and a encoding filter for \textbf{babel} character codes like the German Umlauts:
+\selectlanguage{german}
+\begin{itemize}
+\item[\textbf{\"a}] -> \textbf{\textbackslash{}\dq{}a} -> \textbf{\dq{}a}
+\item[\textbf{\"o}] -> \textbf{\textbackslash{}\dq{}o} -> \textbf{\dq{}o}
+\item[\textbf{\"u}] -> \textbf{\textbackslash{}\dq{}u} -> \textbf{\dq{}u}
+\item[\textbf{\"s}] -> \textbf{\textbackslash{}\dq{}s} -> \textbf{\dq{}s}
+\end{itemize}
+\selectlanguage{english}
+
+\begin{quote}
+add|rem-tex-multi-byte conversion 
+\end{quote}
+Changes list of multi character coded \TeX (babel) characters recognized by Aspell. 
+In case of German umlauts mentioned above this would mean that Aspell would decode from their multi character representation to their proper single char representation.
+Given the German word \texttt{St\"arke(strength)} which within \TeX/\LaTeX document has to be written as \selectlanguage{german}\texttt{St\dq{}arke} or as \texttt{St\textbackslash{}\dq{}a}\selectlanguage{english} would split it into the two words \texttt{St} and \texttt{arke} if it does not know anything about the multi char encoding \selectlanguage{german}\textbf{\dq{}a} or \textbf{\textbackslash{}\dq{}a} of \textbf{"a}\selectlanguage{english}.
+On the other hand if it knows about it than Aspell will recognize the word properly and will not try to make any strange suggestion.
+
+Each multi character coding conversion has to be specified the following way:
+\begin{verbatim}
+<char>:<rep>[:<rep>[...]]
+\end{verbatim}
+Where char is the character encoded by multiple characters and rep stands for a specific representation of that character. For each character may be specified as many representations as available for it. 
+
+
 
 
 \subsubsection{Context Filter/Mode}
@@ -1702,6 +1731,24 @@ have the following format
 \end{quote}
 \emph{(Part of the preceding section was directly copied out of the
 Ispell manual)}
+
+Further Aspell pipe command recoginzes the following parameters:
+\begin{description}
+\item[noauto] do not come up with sugestions automatically;
+\item[word] stop spelling after first mispelled word if found;
+\end{description}
+
+If moauto was specified on commandline than Aspell only prints the misspelled words but does not come up with any sugestions.
+In order to still retrieve sugestions without restarting Aspell a leading '?' will make aspell print them for the entire line.
+
+In word mode a leading '§' will make Aspell seeking all mispelled words on al line instead of stopping after the first misspelling.
+
+To summarize these: 
+
+\begin{description}
+\item[?] print sugestions for entire line in noauto mode
+\item[§] seek all misspellings on the entire line
+\end{description}
 
 
 \section{Notes of Storing Replacement Pairs\label{replpair}}
