@@ -402,7 +402,7 @@ char * trim_wspace (char * str)
   while (last > 0 && asc_isspace(str[last])) {
     --last;
   }
-  str[last] = '\0';
+  str[last + 1] = '\0';
   return str;
 }
 

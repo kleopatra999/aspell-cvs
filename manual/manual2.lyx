@@ -74,10 +74,10 @@
 
 \layout Title
 
-GNU Aspell 0.50.4
+GNU Aspell 0.50.4.1
 \layout Date
 
-September 26, 2003
+October 11, 2003
 \layout Author
 
 Copyright (c) 2000-2003
@@ -5835,6 +5835,16 @@ appendix
 \layout Chapter
 
 Changelog
+\layout Section*
+
+Changes from 0.50.4 to 0.50.4.1 (Oct 11, 2003)
+\layout Itemize
+
+Fixed major bug in pipe mode which caused the last character to be chopped
+ off words before they were stored.
+\layout Itemize
+
+Minor formating fixes in the manual.
 \layout Section*
 
 Changes from 0.50.3 to 0.50.4 (Sep 26, 2003)
