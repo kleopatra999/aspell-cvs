@@ -28,6 +28,8 @@
 #include "string_enumeration.hpp"
 #include "string_list.hpp"
 #include "string_map.hpp"
+#include "strtonum.hpp"
+#include <stdio.h>
 
 #ifdef HAVE_LIBDL
 #include <dlfcn.h>
@@ -44,14 +46,15 @@ namespace acommon
 
 #include "static_filters.src.cpp"
 
-  //
+  // FIXME moved to new_config and modified 
   // filter modes
-  // 
+  /* 
 
   const char * filter_modes = "none,url,email,sgml,tex";
   
-  class IndividualFilter;
+  */
 
+  class IndividualFilter;
   static int filter_modules_referencing = 0;
 
   //
@@ -75,35 +78,6 @@ namespace acommon
     }
   };
 
-  void set_mode_from_extension (Config * config, ParmString filename)
-  {
-
-    // Initialize exts mapping
-    StringList modes;
-    itemize(filter_modes, modes);
-    StringListEnumeration els = modes.elements_obj();
-    const char * mode;
-    ExtsMap exts;
-    while ((mode = els.next ()) != 0)
-      {
-      exts.set_mode(mode);
-      String to_find = mode;
-      to_find += "-extension";
-      PosibErr<void> err = config->retrieve_list(to_find, &exts);
-      err.ignore_err();
-    }
-    const char * ext0 = strrchr(filename, '.');
-    if (ext0 == 0)
-      ext0 = filename;
-    else
-      ++ext0;
-    String ext = ext0;
-    for (unsigned int i = 0; i != ext.size(); ++i)
-      ext[i] = asc_tolower(ext[i]);
-    mode = exts.lookup(ext);
-    if (mode != 0)
-      config->replace("mode", mode);
-  }
 
   class FilterHandle {
   public:
@@ -115,7 +89,9 @@ namespace acommon
     }
     void * release() {
       void * tmp = handle;
-      handle = 0;
+//FIXME shouldn't this set handle to NULL ??? and make the below FIXME obsolete??
+//      hm test later !!!
+      handle = NULL;
       return tmp;
     }
     operator bool() {
@@ -127,7 +103,7 @@ namespace acommon
     // The direct interface usually when new_filter ... functions are coded
     // manually
     FilterHandle & operator= (void * h) {
-//FIXME only true for first filter but not for multible filters 
+//FIXME only true for first filter but not for multiple filters 
 //      assert(handle == NULL);
       handle = h; return *this;
     }
@@ -157,12 +133,14 @@ namespace acommon
       //fprintf(stderr, "Loading %s ... \n", filter_name);
       FilterEntry * f = find_individual_filter(filter_name);
       // Changed for reflecting new filter loadability dependent uppon
-      // existance of libdl if there is not libdl than the following
-      // behaves like as ever means filter name different from
-      // standard filters is rejected if libdl is existent filter name
-      // different from standard filters is checked against all
-      // filters added. If the filter is contained the corresponding
-      // decoder encoder and filter is loaded.
+      // existance of libdl.
+      // In case libdl is not available a filter is only available if made
+      // one of the standard filters. This is done by statically linking
+      // the filter sources.
+      // On systems providing libdl or in case libtool mimics libdl 
+      // The following code parts assure that all filters needed and requested
+      // by user are loaded properly or be reported to be missing.
+      // 
 #ifdef HAVE_LIBDL
       if (!f) {
 
@@ -266,7 +244,11 @@ namespace acommon
     virtual ~FilterOptionExpandNotifier(void);
     virtual Notifier * clone(Config * conf);
     virtual PosibErr<void> item_added(const KeyInfo * key, ParmString value);
-    virtual PosibErr<void> item_updated(const KeyInfo * key, ParmString value);
+/*
+ * FIXME obsolete as no loadable filter exists any more and filtermodes
+ *       are handled by new_fmode file
+ *  virtual PosibErr<void> item_updated(const KeyInfo * key, ParmString value);
+ */
 //FIXME Add item_removed member to clear away filter options 
   };
 
@@ -314,6 +296,7 @@ namespace acommon
     config(conf) 
   {
     filter_modules_referencing++;
+    conf->set_filter_modules(filter_modules_begin, filter_modules_end);
     do {
       StringList test;
       config->retrieve_list("option-path",&test);
@@ -342,6 +325,9 @@ namespace acommon
           if (filter_modules_begin[countextended].load != NULL) {
             free((char*)filter_modules_begin[countextended].load);
           }
+          if (filter_modules_begin[countextended].desc != NULL) {
+            free((char*)filter_modules_begin[countextended].desc);
+          }
           release_options(filter_modules_begin[countextended].begin,
                           filter_modules_begin[countextended].end);
           if (filter_modules_begin[countextended].begin) {
@@ -367,8 +353,8 @@ namespace acommon
   {
     int name_len = strlen(key->name);
     ConfigModule * current = (ConfigModule*)filter_modules_begin;
-    String option_name="";
-    String filter_name="lib";
+    String option_name = "";
+    String filter_name = "lib";
     FStream options;
     //String option_key;
     String option_value;
@@ -383,14 +369,11 @@ namespace acommon
     void * help = NULL;
     StringList filt_path;
     StringList opt_path;
-    bool greater;
-    bool equal;
-    bool less;
     int line_count = 0;
     char line_number[9]="0";
     int active_option = 0;
-    String expand="filter-";
-    int norealoption = 0;
+    String expand = "filter-";
+//FIXME remove    int norealoption = 0;
     FixedBuffer<> buf; DataPair d;
 
     if ((name_len == 6) &&
@@ -404,140 +387,107 @@ namespace acommon
           return no_err;
         current++;
       }
+
+      String filter_description = "";
+
       if (current >= filter_modules_end) {
         option_name += value;
         option_name += "-filter.opt";
         filter_name += value;
         filter_name += "-filter.so";
         if (!filter_path.expand_filename(filter_name)) {
-          filter_name  = value;
-          filter_name += ".flt";
-          if (!filter_path.expand_filename(filter_name)) {
-            return make_err(no_such_filter, "add-filter", value);
-          }
-          RET_ON_ERR(options.open(filter_name,"r"));
-
-	  bool empty_file = true;
-
-          while (getdata_pair(options,d,buf)) {
-            if ((d.key == "add-filter" || d.key == "rem-filter") 
-		&& value == value.str())
-	    {
-              fprintf(stderr,"warning: specifying filter twice makes no sense\n"
-		      "\tignoring `%s %s'\n",
-		      d.key.str(),d.value.str());
-              continue;
-            }
-            empty_file = false;
-            RET_ON_ERR(config->replace(d.key,d.value));
-          }
-          if (empty_file) {
-            return make_err(empty_filter, "filter setup", filter_name);
-          }
-          config->replace("rem-filter",value);
-          return no_err;
+          return make_err(no_such_filter, "add-filter", value);
         }
-        else if (!option_path.expand_filename(option_name)) {
+        if (!option_path.expand_filename(option_name)) {
           return make_err(no_options,"add_filter",option_name,"Options missing");
-
         }
         if (config->have(value)) {
+//FEATURE ? rescale priority instead and continue ???
           fprintf(stderr,"warning: specifying filter twice makes no sense\n");
           return no_err;
         }
         RET_ON_ERR(options.open(option_name,"r"));
-        greater = equal = less = false;
 
         while (getdata_pair(options,d,buf))
 	{
 	  to_lower(d.key);
-	  unescape(d.value);
 	  option_value = d.value;
-          line_count++;
+          line_count += getReadLines();
+          sprintf(line_number,"%i",line_count);
 
 	  //
 	  // key == aspell
 	  //
           if (d.key == "aspell") 
 	  {
-	    option_start = 0;
-            if ((option_value.size() > option_start) &&
-                (option_value[option_start] == '>')) {
-              greater = true;
-              option_start++;
-            }
-            if ((option_value.size() > option_start) &&
-                (option_value[option_start] == '<')) {
-              less = true;
-              option_start++;
-            }
-            if ((option_value.size() > option_start) &&
-                (option_value[option_start] == '=')) {
-              equal = true;
-              option_start++;
-            }
-            if (option_start == 0) {
-              equal = true;
-            }
-            if ((option_value.size() > option_start) &&
-                !asc_isdigit(option_value[option_start])) {
-              sprintf(line_number,"%i",line_count);
+            if ( d.value == NULL || *(d.value) == '\0' ) {
               return make_err(confusing_version,"add_filter",option_name,line_number);
             }
-            option_value.erase(0,option_start);
-            for (option_count = 0;(option_count < option_value.size()) &&
-                               (option_count < version.size());
-                 option_count++) {
-              if (asc_isdigit(option_value[option_count]) &&
-                  asc_isdigit(version[option_count])) {
-                if (greater &&
-                    ((option_value[option_count] < version[option_count]) ||
-                     ((option_value[option_count] == version[option_count]) &&
-                      (option_value.size()-1 == option_count) &&
-                      (option_value.size() < version.size())))) {
-                   break;
-                }
-                if (less &&
-                    ((option_value[option_count] > version[option_count]) ||
-                     ((option_value[option_count] == version[option_count]) &&
-                      (version.size()-1 == option_count) &&
-                      (option_value.size() > version.size())))) {
-                  break;
-                }
-                if (option_value[option_count] == version[option_count]) {
-                  if (equal &&
-                      (version.size()-1 == option_count) &&
-                      (option_value.size()-1 == option_count)) {
-                    break;
-                  }
-                  else if ((version.size()-1 > option_count) &&
-                           (option_value.size()-1 > option_count)) {
-                    continue;
-                  }
-                }
-                sprintf(line_number,"%i",line_count);
-                return make_err(bad_version,"add-filter",option_name,line_number);
-              }
-              if (less &&
-                  asc_isdigit(option_value[option_count]) &&
-                  (version[option_count] == '.' ) &&
-                  (version.size()-1 > option_count)) {
-                break;
-              }
-              if (greater &&
-                  asc_isdigit(version[option_count]) &&
-                  (option_value[option_count] == '.') &&
-                  (option_value.size()-1 > option_count)) {
-                break;
-              }
-              if ((version[option_count] == '.') &&
-                  (option_value[option_count] == '.') &&
-                  (version.size()-1 > option_count) &&
-                  (option_value.size()-1 > option_count)) {
-                continue;
-              }
-              sprintf(line_number,"%i",line_count);
+
+            char * requirement = d.value.str();
+            char * relop = requirement;
+            char swap = '\0';
+fprintf(stderr," %s = %s (%s)\n",d.key.str(),d.value.str(),requirement);
+            
+            if ( *requirement == '>' || *requirement == '<' || 
+                 *requirement == '!' ) {
+              requirement++;
+            }
+            if ( *requirement == '=' ) {
+              requirement++;
+            }
+
+            String reqVers(requirement);
+
+            swap = *requirement;
+            *requirement = '\0';
+
+            String relOp(relop);
+
+            *requirement = swap;
+fprintf(stderr," %s = %s (%s)\n",d.key.str(),d.value.str(),requirement);
+
+            char actVersion[] = PACKAGE_VERSION;
+            char * act = &actVersion[0];
+            char * seek = act;
+
+fprintf(stderr,"* %s * %s * %s * %s\n",act,seek,actVersion,PACKAGE_VERSION);
+            while (    ( seek != NULL )
+                    && ( *seek != '\0' ) 
+                    && ( *seek < '0' )
+                    && ( *seek > '9' ) 
+                    && ( *seek != '.' )
+                    && ( *seek != 'x' )
+                    && ( *seek != 'X' ) ) {
+fprintf(stderr,"%c",*seek);
+              seek++;
+            }
+fprintf(stderr,"-");
+            act = seek;
+            while (    ( seek != NULL )
+                    && ( seek != '\0' ) 
+                    && (    (    ( *seek >= '0' )
+                              && ( *seek <= '9' ) )
+                         || ( *seek == '.' )
+                         || ( *seek == 'x' )
+                         || ( *seek == 'X' ) ) ) {
+fprintf(stderr,"%c",*seek);
+              seek++;
+            }
+            if ( seek != NULL ) {
+              *seek = '\0';
+            }
+fprintf(stderr,"-%s\n",act);
+
+            PosibErr<bool> peb = verifyVersion(relOp.c_str(),act,requirement,"add_filter");
+
+            if ( peb.has_err() ) {
+              peb.ignore_err();
               return make_err(confusing_version,"add_filter",option_name,line_number);
+            }
+	    if ( peb == false ) {
+              peb.ignore_err();
+              return make_err(bad_version,"add_filter",option_name,line_number); 
             }
             continue;
 	  } 
@@ -545,69 +495,55 @@ namespace acommon
 	  //
 	  // key == option
 	  //
-	  if (d.key == "option" || 
-              (!active_option && 
-               (d.key == "desc" || d.key == "description") && 
-	       (norealoption = 1 /* this is intendtional (= vs ==)?*/ )))
-	  {
-            //if (!norealoption && config->have(option_value.c_str())) {
-            //  fprintf(stderr,"option %s: might conflict with Aspell option\n"
-            //                 "try to prefix it by `filter-'\n",
-            //          option_value.c_str());
-            //}
-            if (!norealoption || begin == NULL) {
-	      help = realloc(begin,(optsize+=1)*sizeof(KeyInfo));
-	      begin = (KeyInfo*)help;
-	      cur_opt = begin + optsize - 1;
-              memset(cur_opt, 0, sizeof(KeyInfo));
-              cur_opt->name = cur_opt->def = cur_opt->desc = NULL;
-	      if (!norealoption && begin == NULL)
-		cur_opt->type = KeyInfoDescript;
+	  if (d.key == "option" ) {
+            expand  = "filter-";
+            expand += option_value;
+            if (config->have(expand)) {
+              if (begin != NULL) {
+                release_options(begin,begin+optsize);
+                free(begin);
+              }
+              option_value.insert(0,"(filter-)");
+//              sprintf(line_number,"%i",line_count);
+              return make_err(identical_option,"add_filter",option_name,line_number);
             }
-            if (norealoption && begin != NULL) {
-              begin[0].type = KeyInfoDescript;
-              begin[0].def  = NULL;
-              if (begin[0].desc != NULL) {
-                free((char*)begin[0].desc);
-                begin[0].desc = NULL;
+
+            KeyInfo * expandopt = NULL;
+
+            if (    (    ( begin == NULL )
+                      && (     (expandopt = (KeyInfo *)malloc(sizeof(KeyInfo) * (optsize + 1)))
+                           == NULL ) )
+                 || (    (expandopt = (KeyInfo *) realloc(begin,sizeof(KeyInfo) * (optsize + 1)))
+                      == NULL ) ) {
+              if ( begin != NULL ) {
+                release_options(begin,begin + optsize);
+                free(begin);
               }
-              if (option_value.size() == 0) 
-		option_value = "-";
-	      begin[0].desc = strdup(option_value.c_str());
-              if (begin[0].name == NULL) {
-		begin[0].name = (const char *)malloc(strlen(value)+strlen("filter-")+1);
-                ((char *)begin[0].name)[0] = '\0';
-                strncat((char*)begin[0].name,"filter-",7);
-                strncat((char*)begin[0].name,value,strlen(value));
-              }
-            } else {
-              expand  = "filter-";
-              expand += option_value;
-              if (config->have(expand)) {
-                if (begin != NULL) {
-                  release_options(begin,begin+optsize);
-                  free(begin);
-                }
-                option_value.insert(0,"(filter-)");
-                sprintf(line_number,"%i",line_count);
-                return make_err(identical_option,"add_filter",option_name,line_number);
-              }
-	      char * n = (char *)malloc(7 + value.size() + 1 + option_value.size() + 1);
-	      cur_opt->name = n;
-	      memcpy(n, "filter-", 7);              n += 7;
-	      memcpy(n, value.str(), value.size()); n += value.size();
-	      *n = '-'; ++n;
-	      memcpy(n, option_value.c_str(), option_value.size() + 1);
-	      cur_opt->type = KeyInfoBool;
-              cur_opt->def  = NULL;
-              cur_opt->desc = NULL;
-              cur_opt->otherdata[0]='\0';
-              active_option = 1;
+              return make_err(cant_extend_options,"add_filter",value);
             }
-            norealoption = 0;
+            begin = expandopt;
+
+            // let cur_opt point to newly generated last element 
+            // ( begin + optsize ) and increment optsize after to indicate
+            // actual number of options 
+            // ( !!! postfix increment !!! returns value before increment !!! )
+            cur_opt = begin + optsize;
+            optsize++;
+            
+	    char * n = (char *)malloc(7 + value.size() + 1 + option_value.size() + 1);
+
+	    cur_opt->name = n;
+	    memcpy(n, "filter-", 7);              n += 7;
+	    memcpy(n, value.str(), value.size()); n += value.size();
+	    *n = '-'; ++n;
+	    memcpy(n, option_value.c_str(), option_value.size() + 1);
+	    cur_opt->type = KeyInfoBool;
+            cur_opt->def  = NULL;
+            cur_opt->desc = NULL;
+            cur_opt->otherdata[0]='\0';
+            active_option = 1;
             continue;
           }
-
 
 	  //
 	  // key == static
@@ -620,13 +556,48 @@ namespace acommon
           }
 
 	  //
+	  // key == description
+	  //
+          if ((d.key == "desc") ||
+              (d.key == "description")) {
+
+            //
+            // filter description
+            // 
+            if (!active_option) {
+              filter_description = option_value;
+            }
+
+            //
+            //option description
+            //
+            else {
+
+              //avoid memory leak;
+              if ( cur_opt->desc != NULL) {
+                free((char *)cur_opt->desc);
+                cur_opt->desc = NULL;
+              }
+              cur_opt->desc = strdup(option_value.c_str());
+            }
+            continue;
+          }
+	  
+	  //
+	  // key = endfile
+	  //
+          if (d.key == "endfile") {
+            break;
+          }
+
+	  //
 	  // !active_option
 	  //
           if (!active_option) {
             if (begin != NULL) {
               free(begin);
             }
-            sprintf(line_number,"%i",line_count);
+//            sprintf(line_number,"%i",line_count);
             return make_err(options_only,"add_filter",option_name,line_number);
           }
 
@@ -641,7 +612,8 @@ namespace acommon
               cur_opt->type = KeyInfoInt;
             else if (d.value == "string")
               cur_opt->type = KeyInfoString;
-	    else 
+	    //FIXME why not force user to ommit type specifier or explicitly say bool ???
+	    else
 	      cur_opt->type = KeyInfoBool;
             continue;
           }
@@ -650,30 +622,30 @@ namespace acommon
 	  // key == default
 	  //
           if (d.key == "def" || d.key == "default") {
-	    //FIXME: Type detection ???
-            if (cur_opt->type == KeyInfoList) {
-              if (cur_opt->def != NULL) {
-                option_value += ",";
-                option_value += cur_opt->def;
-                free((void*)cur_opt->def);
-              }
-            }  
-            if (((cur_opt->def)=strdup(option_value.c_str()) ) == NULL) {
-              if (begin != NULL) {
-                release_options(begin,begin+optsize);
-                free(begin);
-              }
-              return make_err(cant_extend_options,"add_filter",value);
+            
+            //
+            //try some syntax checking 
+            //if ( cur_opt->type != KeyInfoList && cur_opt->def != NULL ) {
+            //
+            //  //SyntaxError
+            //  continue;
+            //}
+            if ( cur_opt->type == KeyInfoList && cur_opt->def != NULL) {
+              option_value += ",";
+              option_value += cur_opt->def;
+              free((void*)cur_opt->def);
             }
-            continue;
-          }
 
-	  //
-	  // key == description
-	  //
-          if ((d.key == "desc") ||
-              (d.key == "description")) {
-            if (((cur_opt->desc)=strdup(option_value.c_str())) == NULL) {
+            //
+            //may try some syntax checking
+            //if ( cur_opt->type == KeyInfoBool ) {
+            //  check for valid bool values true false 0 1 on off ...
+            //  and issue error if wrong or assume false ??
+            //}
+            //if ( cur_opt->type == KeyInfoInt ) {
+            //  check for valid integer or double and issue error if not
+            //}
+            if ( ( (cur_opt->def)=strdup(option_value.c_str()) ) == NULL ) {
               if (begin != NULL) {
                 release_options(begin,begin+optsize);
                 free(begin);
@@ -699,13 +671,6 @@ namespace acommon
             active_option = 0;
             continue;
           }
-	  
-	  //
-	  // key = endfle
-	  //
-          if (d.key == "endfile") {
-            break;
-          }
 
 	  // 
 	  // error
@@ -714,25 +679,14 @@ namespace acommon
             release_options(begin,begin+optsize);
             free(begin);
           }
-          sprintf(line_number,"%i",line_count);
           return make_err(invalid_option_modifier,"add_filter",option_name,line_number);
         
-	} // end while getdata_pair
-
-
-        if ((begin == NULL) || 
-            (begin[0].type != KeyInfoDescript) ||
-            (begin[0].name == NULL) || 
-            (begin[0].desc == NULL)) {
-          if (begin != NULL) {
-            release_options(begin,begin+optsize);
-            free(begin);
-          }
-          return make_err(cant_extend_options,"add_filter",value);
-        }
-        if (filter_modules_begin == filter_modules) {
-          if ((mbegin = (ConfigModule*)malloc(modsize*sizeof(ConfigModule))) == NULL) {     
-            if (begin != NULL) {
+	} // end while getdata_pair_c
+     
+        if ( filter_modules_begin == filter_modules ) {
+          //avoid memory leaks
+          if ( (mbegin = (ConfigModule*)malloc(modsize*sizeof(ConfigModule))) == NULL ) {     
+            if ( begin != NULL ) {
               release_options(begin,begin+optsize);
               free(begin);
             }
@@ -743,8 +697,10 @@ namespace acommon
           filter_modules_end   = mbegin + modsize;
           config->set_filter_modules(filter_modules_begin,filter_modules_end);
         }
-        if ((mbegin = (ConfigModule*)realloc((ConfigModule*)filter_modules_begin,
-                     ++modsize*sizeof(ConfigModule))) == NULL) {     
+
+        //avoid memory leaks
+        if ( (mbegin = (ConfigModule*)realloc((ConfigModule*)filter_modules_begin,
+                                              ++modsize*sizeof(ConfigModule))) == NULL) {     
           if (begin != NULL) {
             release_options(begin,begin+optsize);
             free(begin);
@@ -753,15 +709,16 @@ namespace acommon
         }
         mbegin[modsize-1].name  = strdup(value);
         mbegin[modsize-1].load  = strdup(filter_name.c_str());
+        mbegin[modsize-1].desc  = strdup(filter_description.c_str());
         mbegin[modsize-1].begin = begin;
         mbegin[modsize-1].end   = begin+optsize;
         filter_modules_begin = mbegin;
         filter_modules_end   = mbegin+modsize;
         config->set_filter_modules(filter_modules_begin,filter_modules_end);
         return no_err;
-      }
+      }// end if (current >= filter_modules_end) 
       return make_err(no_such_filter,"add_filter",value);
-    }
+    }// end if "filter"
     else if ((name_len == 11) &&
              !strncmp(key->name,"filter-path",11)) {
       RET_ON_ERR(config->retrieve_list("filter-path",&filt_path));
@@ -775,6 +732,10 @@ namespace acommon
     return no_err;
   }
 
+/*
+ * FIXME remove as there is no `loadable' filter any more and mode parsing done
+ *       by mode_notifier in new_config.cpp
+ * 
   PosibErr<void> FilterOptionExpandNotifier::item_updated(const KeyInfo * key, ParmString value){
     int name_len = strlen(key->name);
     String option_name;
@@ -796,5 +757,6 @@ namespace acommon
     }
     return no_err;
   }
+ */
 
 }

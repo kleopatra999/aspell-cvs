@@ -1,9 +1,9 @@
-# tex filter option file
+# TeX filter option file
 
 #This Filter is usable with the following version(s) of Aspell
 ASPELL >=0.51
 
-#This line will be printed when typing `aspell help tex'
+#This line will be printed when typing `Aspell help TeX'
 DESCRIPTION Filter for recognizing TeX/LaTeX commands
 
 STATIC filter
@@ -88,13 +88,13 @@ ENDOPTION
 OPTION multi-byte
 TYPE list
 DESCRIPTION multi character coded letters (<char>:<rep>[:<rep>[...]])
-DEFAULT Ä:\\"A:"A
-DEFAULT ä:\\"a:"a
-DEFAULT Ö:\\"O:"O
-DEFAULT ö:\\"o:"o
-DEFAULT Ü:\\"U:"U
-DEFAULT ü:\\"u:"u
-DEFAULT ß:\\"s:"s
+DEFAULT Ä:\"A:"A
+DEFAULT ä:\"a:"a
+DEFAULT Ö:\"O:"O
+DEFAULT ö:\"o:"o
+DEFAULT Ü:\"U:"U
+DEFAULT ü:\"u:"u
+DEFAULT ß:\"s:"s
 ENDOPTION
 
 OPTION hyphen

@@ -17,7 +17,8 @@
 #include <deque>
 #include <ctype.h>
 #include "settings.h"
-
+#include <stdio.h>
+#define DEBUG {fprintf(stderr,"File: %s(%i)\n",__FILE__,__LINE__);}
 
 #ifdef USE_LOCALE
 # include <locale.h>
@@ -61,7 +62,8 @@ void config();
 void check(bool interactive);
 void pipe();
 void filter();
-void list();
+//FIXME removed as conflicts with std::list
+//      did me add this ???? void list();
 void dicts();
 
 void master();
@@ -221,6 +223,7 @@ int main (int argc, const char *argv[])
   textdomain (PACKAGE);
 #endif
 
+  EXIT_ON_ERR(intialize_filter_modes(options));
   EXIT_ON_ERR(options->read_in_settings());
 
   if (argc == 1) {print_help(); return 0;}
@@ -248,7 +251,7 @@ int main (int argc, const char *argv[])
 	  PosibErr<const KeyInfo *> ki = options->keyinfo(base_name);
           if (!ki.has_err(unknown_key)) {
             other_opt.name    = option_name.c_str();
-            other_opt.num_arg = ki.data->type == KeyInfoBool ? 0 : 1;
+            other_opt.num_arg = ki.data->type == KeyInfoBool ? 0 : 1; //FIXME what if --rem-all- given ??;; debug mode ???
             o = &other_opt;
           }
 	} 
@@ -260,11 +263,13 @@ int main (int argc, const char *argv[])
 	while (j != mode_abrvs_end && j->abrv != argv[i][1]) ++j;
 	if (j == mode_abrvs_end) {
 	  o = find_option(argv[i][1]);
-	  if (argv[i][1] == 'v' && argv[i][2] == 'v')
+	  if (argv[i][1] == 'v' && argv[i][2] == 'v') {
 	    // Hack for -vv
 	    parm = argv[i] + 3;
-	  else
+          }
+	  else {
 	    parm = argv[i] + 2;
+          }
 	} else {
 	  other_opt.name = "mode";
 	  other_opt.num_arg = 1;
@@ -1424,35 +1429,20 @@ void expand_expression(Config * config){
     config->retrieve_list("option-path",&optpath);
     filterpath=filtpath;
     optionpath=optpath;
-    if (regcomp(&seekfor,args[0].c_str(),REG_NEWLINE|REG_NOSUB)) {
+    if (regcomp(&seekfor,args[0].c_str(),REG_NEWLINE|REG_NOSUB|REG_EXTENDED)) {
       make_err(invalid_expression,"help",args[0]);
       return;
     }
     while (filterpath.expand_file_part(&seekfor,candidate)) {
       if (((locate_ending=candidate.rfind("-filter.so")) !=
            candidate.length() - 10)) {
-        if ((locate_ending=candidate.rfind(".flt")) !=
-            candidate.length() - 4) {
-          continue;
-        }
-        else {
-          candidate.erase(locate_ending,4);
-          eliminate_path=0;
-          while ((hold_eliminator=candidate.find('/',eliminate_path)) < 
-                 candidate.length()) {
-            eliminate_path=hold_eliminator+1;
-          }
-          toload=candidate.erase(0,eliminate_path);
-          if (regexec(&seekfor,toload.c_str(),0,NULL,0)) {
-            continue;
-          }
-        }
+        continue;
       }
       else {
         candidate.erase(locate_ending,10);
         eliminate_path=0;
-        while ((hold_eliminator=candidate.find('/',eliminate_path)) < 
-               candidate.length()) {
+        while ( (hold_eliminator=candidate.find('/',eliminate_path)) < 
+                candidate.length() && hold_eliminator >= 0 ) {
           eliminate_path=hold_eliminator+1;
         }
         if (candidate.find("lib",eliminate_path) != eliminate_path) {
@@ -1508,12 +1498,15 @@ void print_help () {
   const KeyInfo * k;
   while (k = els->next(), k) {
     if (k->desc == 0) continue;
-    if (k->type == KeyInfoDescript && !strncmp(k->name,"filter-",7)) {
+//FIXME obsolete code as module description resides now in ConfigModule Remove comment
+//    if (k->type == KeyInfoDescript && !strncmp(k->name,"filter-",7)) {
+    
+    if (els->active_filter_module_changed()) {
       printf(_("\n"
                "  %s filter: %s\n"
                "    NOTE: in ambiguous case prefix following options by `filter-'\n"),
-               &(k->name)[7],k->desc);
-      continue;
+               els->active_filter_module_name(),els->active_filter_module_desc());
+//      continue;
     }
     const PossibleOption * o = find_option(k->name);
     const char * name = k->name;
@@ -1530,5 +1523,6 @@ void print_help () {
       }
     }
   }
+  print_mode_help(stdout);//wouldnt stderr be better ??
 }
 

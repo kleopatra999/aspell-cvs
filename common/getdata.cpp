@@ -11,6 +11,15 @@
 #include "asc_ctype.hpp"
 
 namespace acommon {
+  unsigned int linenumber = 0 ;
+
+  unsigned int getReadLines() {
+    // deactivate counting to keep old source working and to ensure that
+    // resetLineNumber is called with proper initial value for each file
+    // linecounting is dersired for
+    return linenumber;
+  }
+
 
   bool getdata_pair(IStream & in, DataPair & d, const Buffer & buf)
   {
@@ -18,11 +27,13 @@ namespace acommon {
     char * p;
     char * end;
 
-    // get first non blank line
+    // get first non blank line and count all read ones
+    linenumber = 0;
     do {
         p = buf.data + 1;
         end = in.getline(p, buf.size-1);
         if (end == 0) return false;
+        linenumber++;
         while (*p == ' ' || *p == '\t') ++p;
     } while (*p == '#' || *p == '\0');
 
@@ -38,7 +49,7 @@ namespace acommon {
     if (*p == '#' || *p == '\0') {*p = '\0'; return true;}
     *p = '\0';
 
-    // skip any whitspace
+    // skip any whitespace
     ++p;
     while (*p == ' ' || *p == '\t') ++p;
     if (*p == '\0' || *p == '#') {return true;}

@@ -47,7 +47,7 @@ public:
   
   StringPairEnumeration * elements() const;
   
-  // insert a new element.   Will NOT overright an existing entry.
+  // insert a new element.   Will NOT overwrite an existing entry.
   // returns false if the element already exists.
   bool insert(ParmString key, ParmString value) {
     return insert(key, value, false);
@@ -55,13 +55,13 @@ public:
   PosibErr<bool> add(ParmString key) {
     return insert(key, 0, false);
   }
-  // insert a new element. WILL overight an exitsing entry
+  // insert a new element. WILL overwrite an existing entry
   // always returns true
   bool replace(ParmString key, ParmString value) {
     return insert(key, value, true);
   }
   
-  // removes an element.  Returnes true if the element existed.
+  // removes an element.  Returns true if the element existed.
   PosibErr<bool> remove(ParmString key) ;
   
   PosibErr<void> clear();
@@ -79,7 +79,7 @@ public:
 private:
   void resize(const unsigned int *);
   
-  // inserts an element the last paramerts conters if an
+  // inserts an element the last parameter encounters if an
   // existing element will be overwritten.
   bool insert(ParmString key, ParmString value, bool);
   

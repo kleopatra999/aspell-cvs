@@ -61,6 +61,8 @@ namespace acommon {
     void write (char c);
     void write (ParmString);
     void write (const void *, unsigned int);
+    String & lower();
+    String & upper();
   };
 
   inline String operator+ (ParmString rhs, ParmString lhs)

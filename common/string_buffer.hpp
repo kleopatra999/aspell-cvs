@@ -13,7 +13,7 @@
 namespace acommon {
 
   class StringBuffer {
-  public: // but dont use
+  public: // but don't use
     static const unsigned int   buf_size = 1024 - 16;
     struct Buf {
       char buf[buf_size];

@@ -53,13 +53,16 @@ namespace acommon {
 
   void to_lower(char *);
 
-  // extract the first whitespace delemited word from d.value and put
+  // extract the first whitespace delimited word from d.value and put
   // it in d.key.  d.value is expected not to have any leading
-  // whitespace. The string is modifed in place so that d.key will be
-  // null terminated.  d.value is modifed to point to any additional
+  // whitespace. The string is modified in place so that d.key will be
+  // null terminated.  d.value is modified to point to any additional
   // data after key with any leading white space removed.  Returns
   // false when there are no more words to extract
   bool split(DataPair & d);
+
+  // get number of lines read during last call to getdata_pair
+  unsigned int getReadLines();
 
 }
 #endif

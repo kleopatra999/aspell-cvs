@@ -514,7 +514,12 @@ namespace aspeller_default_readonly_ws {
     
   static void soundslike_next(WordEntry * w)
   {
-    const char * cur = static_cast<const char *>(w->intr[0]);
+//FIXME what to do here if compiler complains about static cast assume
+//      some define or pragma should be set to allow this but do not 
+//      have in mind -> replace by now with good old c-ish cast;
+//      Hope to find solution before commit 
+//    const char * cur = static_cast<const char *>(w->intr[0]);
+    const char * cur = (const char *)(w->intr[0]);
     w->word = cur;
     unsigned int len = strlen(cur);
     cur += len + 1;

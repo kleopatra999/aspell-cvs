@@ -54,10 +54,16 @@ namespace acommon {
   }
   static inline bool operator==(const char * s1, MutableString s2)
   {
+    if ( s1 == NULL ) {
+      return s2.size() == 0;
+    }
     return strcmp(s1,s2) == 0;
   }
   static inline bool operator==(MutableString s1, const char * s2)
   {
+    if ( s2 == NULL ) {
+      return s1.size() == 0;
+    }
     return strcmp(s1,s2) == 0;
   }
 
@@ -70,10 +76,16 @@ namespace acommon {
   }
   static inline bool operator!=(const char * s1, MutableString s2)
   {
+    if ( s1 == NULL ) {
+      return s2.size() != 0;
+    }
     return strcmp(s1,s2) != 0;
   }
   static inline bool operator!=(MutableString s1, const char * s2)
   {
+    if ( s2 == NULL ) {
+      return s1.size() != 0;
+    }
     return strcmp(s1,s2) != 0;
   }
 }

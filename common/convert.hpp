@@ -26,7 +26,7 @@ namespace acommon {
 			FilterCharVector & out) const = 0;
   };
   struct Encode {
-    // null characters should be tretead like any other character
+    // null characters should be treated like any other character
     // by the encoder.
     virtual PosibErr<void> init(ParmString, Config &) {return no_err;}
     virtual void encode(const FilterChar * in, const FilterChar * stop, 
@@ -37,7 +37,7 @@ namespace acommon {
       {return false;}
   };
   struct Conv { // convert directly from in_code to out_code
-    // should not take owenership of decode and encode 
+    // should not take ownership of decode and encode 
     // decode and encode guaranteed to stick around for the life
     // of the object
     virtual PosibErr<void> init(const Decode *, const Encode *, 
