@@ -8,54 +8,65 @@
 #include "file_data_util.hpp"
 #include "clone_ptr-t.hpp"
 
-#include <vector>
-
 namespace aspeller {
   
-  class GenericSoundslike : public Soundslike {
+  class SimpileSoundslike : public Soundslike {
   private:
     const Language * lang;
+    char first[256];
+    char rest[256];
   public:
-    GenericSoundslike(const Language * l) : lang(l) {}
+    SimpileSoundslike(const Language * l) : lang(l) {}
 
-    PosibErr<void> setup() {return no_err;}
+    PosibErr<void> setup(Conv &) {
+      memcpy(first, lang->sl_first_, 256);
+      memcpy(rest,  lang->sl_rest_, 256);
+      return no_err;
+    }
     
     String soundslike_chars() const {
       bool chars_set[256] = {0};
+      for (int i = 0; i != 256; ++i) 
+      {
+        char c = first[i];
+        if (c) chars_set[static_cast<unsigned char>(c)] = true;
+        c = rest[i];
+        if (c) chars_set[static_cast<unsigned char>(c)] = true;
+      }
       String     chars_list;
       for (int i = 0; i != 256; ++i) 
-	{
-	  char c = lang->to_sl(static_cast<char>(i));
-	  if (c) chars_set[static_cast<unsigned char>(c)] = true;
-	}
-      for (int i = 0; i != 256; ++i) 
-	{
-	  if (chars_set[i]) 
-	    chars_list += static_cast<char>(i);
-	}
+      {
+        if (chars_set[i]) 
+          chars_list += static_cast<char>(i);
+      }
       return chars_list;
     }
-
-    String to_soundslike(ParmString str) const 
+    
+    char * to_soundslike(char * res, const char * str, int size) const 
     {
-      String new_word;
-      char prev = '\0';
-      char cur;
+      char prev, cur = '\0';
+
+      const char * i = str;
+      while (*i) {
+        cur = first[static_cast<unsigned char>(*i++)];
+        if (cur) {*res++ = cur; break;}
+      }
+      prev = cur;
       
-      for (const char * i = str; *i != '\0'; ++i) {
-	cur = lang->to_sl(*i);
-	if (cur != '\0' && cur != prev) new_word += lang->to_sl(*i);
+      while (*i) {
+	cur = rest[static_cast<unsigned char>(*i++)];
+	if (cur && cur != prev) *res++ = cur;
 	prev = cur;
       }
-      
-      return new_word;
+      *res = '\0';
+      return res;
     }
 
     const char * name () const {
-      return "generic";
+      return "simple";
     }
     const char * version() const {
-      return "1.0";
+      return "2.0";
     }
   };
 
@@ -65,18 +76,15 @@ namespace aspeller {
   public:
     NoSoundslike(const Language * l) : lang(l) {}
 
-    PosibErr<void> setup() {return no_err;}
+    PosibErr<void> setup(Conv &) {return no_err;}
     
     String soundslike_chars() const {
-      return get_stripped_chars(*lang);
+      return get_clean_chars(*lang);
     }
 
-    String to_soundslike(ParmString str) const 
+    char * to_soundslike(char * res, const char * str, int size) const 
     {
-      String new_word;
-      new_word.reserve(str.size());
-      to_stripped(*lang, str, new_word);
-      return new_word;
+      return lang->LangImpl::to_clean(res, str);
     }
 
     const char * name() const {
@@ -96,20 +104,15 @@ namespace aspeller {
 
     PhonetSoundslike(const Language * l) : lang(l) {}
 
-    PosibErr<void> setup() {
+    PosibErr<void> setup(Conv & iconv) {
       String file;
       file += lang->data_dir();
       file += '/';
       file += lang->name();
       file += "_phonet.dat";
-      PosibErr<PhonetParms *> pe = load_phonet_rules(file);
+      PosibErr<PhonetParms *> pe = new_phonet(file, iconv, lang);
       if (pe.has_err()) return pe;
       phonet_parms.reset(pe);
-      for (int i = 0; i != 256; ++i) {
-	phonet_parms->to_upper[i] = lang->to_upper(i);
-	phonet_parms->is_alpha[i] = lang->is_alpha(i);
-      }
-      init_phonet_hash(*phonet_parms);
       return no_err;
     }
 
@@ -121,26 +124,24 @@ namespace aspeller {
       for (const char * * i = phonet_parms->rules + 1; 
 	   *(i-1) != PhonetParms::rules_end;
 	   i += 2) 
-	{
-	  for (const char * j = *i; *j; ++j) 
-	    {
-	      chars_set[static_cast<unsigned char>(*j)] = true;
-	    }
-	}
+      {
+        for (const char * j = *i; *j; ++j) 
+        {
+          chars_set[static_cast<unsigned char>(*j)] = true;
+        }
+      }
       for (int i = 0; i != 256; ++i) 
-	{
-	  if (chars_set[i]) 
-	    chars_list += static_cast<char>(i);
-	}
+      {
+        if (chars_set[i]) 
+          chars_list += static_cast<char>(i);
+      }
       return chars_list;
     }
     
-    String to_soundslike(ParmString str) const 
+    char * to_soundslike(char * res, const char * str, int size) const 
     {
-      std::vector<char> new_word;
-      new_word.resize(str.size()+1);
-      phonet(str, &new_word.front(), *phonet_parms);
-      return &new_word.front();
+      int new_size = phonet(str, res, size, *phonet_parms);
+      return res + new_size;
     }
     
     const char * name() const
@@ -155,17 +156,20 @@ namespace aspeller {
   
   
   PosibErr<Soundslike *> new_soundslike(ParmString name, 
+                                        Conv & iconv,
                                         const Language * lang)
   {
     Soundslike * sl;
-    if (name == "generic") {
-      sl = new GenericSoundslike(lang);
+    if (name == "simple" || name == "generic") {
+      sl = new SimpileSoundslike(lang);
     } else if (name == "none") {
       sl = new NoSoundslike(lang);
-    } else {
+    } else if (name == lang->name()) {
       sl = new PhonetSoundslike(lang);
+    } else {
+      abort(); // FIXME
     }
-    PosibErrBase pe = sl->setup();
+    PosibErrBase pe = sl->setup(iconv);
     if (pe.has_err()) {
       delete sl;
       return pe;
@@ -173,6 +177,5 @@ namespace aspeller {
       return sl;
     }
   }
-
 }
 

@@ -35,6 +35,9 @@
 #include "errors.hpp"
 #include "fstream.hpp"
 #include "getdata.hpp"
+#include "language.hpp"
+#include "objstack.hpp"
+#include "vararray.hpp"
 
 using namespace acommon;
 
@@ -63,42 +66,45 @@ namespace aspeller {
 #endif
 
   struct PhonetParmsImpl : public PhonetParms {
-    std::vector<const char *> rdata;
-    std::vector<char>         data;
+    void * data;
+    ObjStack strings;
+    PhonetParmsImpl() : data(0) {}
+    ~PhonetParmsImpl() {if (data) free(data);}
   };
+
+  static void init_phonet_hash(PhonetParms & parms);
   
-  PosibErr<PhonetParms *> load_phonet_rules(const String & file) {
-    FixedBuffer<> buf; DataPair dp;
+  PosibErr<PhonetParms *> new_phonet(const String & file, 
+                                     Conv & iconv,
+                                     const Language * lang) 
+  {
+    String buf; DataPair dp;
 
     FStream in;
     RET_ON_ERR(in.open(file, "r"));
 
     PhonetParmsImpl * parms = new PhonetParmsImpl();
 
+    parms->lang = lang;
+
     parms->followup        = true;
     parms->collapse_result = false;
 
-    int size = 0;
     int num = 0;
-    while (true) {
-      if (!getdata_pair(in, dp, buf)) break;
+    while (getdata_pair(in, dp, buf)) {
       if (dp.key != "followup" && dp.key != "collapse_result" &&
-	  dp.key != "version") {
+	  dp.key != "version")
 	++num;
-	size += dp.key.size() + 1;
-	if (dp.value != "_") {
-	  size += dp.value.size() + 1;
-	}
-      }
     }
 
-    parms->data.reserve(size);
-    char * d = &parms->data.front();
-
-    parms->rdata.reserve(2 * num + 2);
-    std::vector<const char *>::iterator r = parms->rdata.begin();
-
     in.restart();
+
+    size_t vsize = sizeof(char *) * (2 * num + 2);
+    parms->data = malloc(vsize);
+
+    const char * * r = (const char * *)parms->data;
+
+    char * empty_str = parms->strings.dup("");
 
     while (true) {
       if (!getdata_pair(in, dp, buf)) break;
@@ -109,23 +115,15 @@ namespace aspeller {
       } else if (dp.key == "version") {
 	parms->version = dp.value;
       } else {
-	strncpy(d, dp.key.str(), dp.key.size() + 1);
-	*r = d;
+	*r = parms->strings.dup(iconv(dp.key));
 	++r;
-	d += dp.key.size() + 1;
 	if (dp.value == "_") {
-	  *r = "";
+	  *r = empty_str;
 	} else {
-	  strncpy(d, dp.value.str(), dp.value.size() + 1);
-	  *r = d;
-	  d += dp.value.size() + 1;
+	  *r = parms->strings.dup(iconv(dp.value));
 	}
 	++r;
       }
-    }
-    if (d != &parms->data.front() + size) {
-      delete parms;
-      return make_err(file_error, file);
     }
     if (parms->version.empty()) {
       delete parms;
@@ -133,37 +131,15 @@ namespace aspeller {
     }
     *(r  ) = PhonetParms::rules_end;
     *(r+1) = PhonetParms::rules_end;
-    parms->rules = &parms->rdata.front();
+    parms->rules = (const char * *)parms->data;
+
+    init_phonet_hash(*parms);
 
     return parms;
   }
 
-  // FIXME: Get this information from the language class
-  void init_phonet_charinfo(PhonetParms & parms) {
-    
-    const unsigned char * vowels_low = 
-      (const unsigned char *) "àáâãäåæçèéêëìíîïğñòóôõöøùúûüışßÿ";
-    const unsigned char * vowels_cap =
-      (const unsigned char *) "ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏĞÑÒÓÔÕÖØÙÚÛÜİŞßÿ";
-    
-    int i;
-    /**  create "to_upper" and "is_alpha" arrays  **/
-    for (i = 0; i < 256; i++) {
-      parms.to_upper[i] = asc_islower(i) ?  (unsigned char) asc_toupper(i) 
-	                                 : (unsigned char) i;
-      parms.is_alpha[i] = asc_isalpha(i);
-    }
-    for (i = 0; vowels_low[i] != '\0'; i++) {
-      /**  toupper doen't handel "unusual" characters  **/
-      parms.to_upper[vowels_low[i]] = vowels_cap[i];
-      parms.to_upper[vowels_cap[i]] = vowels_cap[i];
-      parms.is_alpha[vowels_low[i]] = parms.is_alpha[vowels_cap[i]] = true;
-    }
-
-  }
-
-  void init_phonet_hash(PhonetParms & parms) {
-
+  static void init_phonet_hash(PhonetParms & parms) 
+  {
     int i, k;
 
     for (i = 0; i < parms.hash_size; i++) {
@@ -182,7 +158,7 @@ namespace aspeller {
 
 
 #ifdef PHONET_TRACE
-  void trace_info(char * text, int n, char * error, 
+  void trace_info(char * text, int n, char * error,
 		  const PhonetParms & parms) 
   {
     /**  dump tracing info  **/
@@ -192,30 +168,27 @@ namespace aspeller {
   }
 #endif
 
-  int phonet (const char * inword, char * target, 
+  int phonet (const char * inword, char * target,
+              int len,
 	      const PhonetParms & parms)
   {
-    assert (target != NULL && inword != NULL);
     /**       Do phonetic transformation.       **/
     /**  "len" = length of "inword" incl. '\0'. **/
 
     /**  result:  >= 0:  length of "target"    **/
     /**            otherwise:  error            **/
 
-
     int  i,j,k=0,n,p,z;
     int  k0,n0,p0=-333,z0;
-    int len = strlen(inword)+1;
-    std::vector<char> word(len);
+    if (len == -1) len = strlen(inword);
+    VARARRAY(char, word, len + 1);
     char c, c0;
     const char * s;
 
     typedef unsigned char uchar;
     
     /**  to_upperize string  **/
-    for (i = 0; inword[i] != '\0'; i++)
-      word[i] = parms.to_upper[(uchar)inword[i]];
-    word[i] = '\0';
+    parms.lang->LangImpl::to_upper(word, inword);
 
     /**  check word  **/
     i = j = z = 0;
@@ -248,7 +221,7 @@ namespace aspeller {
           }
           if (*s == '(') {
             /**  check letters in "(..)"  **/
-            if (parms.is_alpha[(uchar)word[i+k]]  // ...could be implied?
+            if (parms.lang->is_alpha(word[i+k])  // ...could be implied?
                 && strchr(s+1, word[i+k]) != NULL) {
               k++;
               while (*s != ')')
@@ -274,12 +247,13 @@ namespace aspeller {
 
           if (*s == '\0'
               || (*s == '^'  
-                 && (i == 0  ||  ! parms.is_alpha[(uchar)word[i-1]])
-                 && (*(s+1) != '$'
-                 || (! parms.is_alpha[(uchar)word[i+k0]] )))
+                  && (i == 0  ||  ! parms.lang->is_alpha(word[i-1]))
+                  && (*(s+1) != '$'
+                      || (! parms.lang->is_alpha(word[i+k0]) )))
               || (*s == '$'  &&  i > 0  
-                 &&  parms.is_alpha[(uchar)word[i-1]]
-                 && (! parms.is_alpha[(uchar)word[i+k0]] ))) {
+                  &&  parms.lang->is_alpha(word[i-1])
+                  && (! parms.lang->is_alpha(word[i+k0]) ))) 
+          {
             /**  search for followup rules, if:     **/
             /**  parms.followup and k > 1  and  NO '-' in searchstring **/
             c0 = word[i+k-1];
@@ -305,7 +279,7 @@ namespace aspeller {
                 }
                 if (*s == '(') {
                   /**  check letters  **/
-                  if (parms.is_alpha[(uchar)word[i+k0]]
+                  if (parms.lang->is_alpha(word[i+k0])
                       &&  strchr (s+1, word[i+k0]) != NULL) {
                     k0++;
                     while (*s != ')'  &&  *s != '\0')
@@ -328,7 +302,8 @@ namespace aspeller {
 
                 if (*s == '\0'
                     /**  *s == '^' cuts  **/
-                    || (*s == '$'  &&  ! parms.is_alpha[(uchar)word[i+k0]])) {
+                    || (*s == '$'  &&  ! parms.lang->is_alpha(word[i+k0]))) 
+                {
                   if (k0 == k) {
                     /**  this is just a piece of the string  **/
                     #ifdef PHONET_TRACE
@@ -397,7 +372,7 @@ namespace aspeller {
               i += k - 1;
               z = 0;
               while (*s != '\0'
-                     &&  *(s+1) != '\0'  &&  j < len-1) {
+                     &&  *(s+1) != '\0'  &&  j < len) {
                 if (j == 0  ||  target[j-1] != *s) {
                   target[j] = *s;
                   j++;
@@ -412,6 +387,7 @@ namespace aspeller {
                   target[j] = c;
                   j++;
                 }
+                // FIXME: This may overlap
                 strcpy (&word[0], &word[0]+i+1);
                 i = 0;
                 z0 = 1;
@@ -423,7 +399,7 @@ namespace aspeller {
         } /**  end of while (parms.rules[n][0] == c)  **/
       } /**  end of if (n >= 0)  **/
       if (z0 == 0) {
-        if (k && (assert(p0!=-333),!p0) &&  j < len-1  &&  c != '\0'
+        if (k && (assert(p0!=-333),!p0) &&  j < len &&  c != '\0'
            && (!parms.collapse_result  ||  j == 0  ||  target[j-1] != c)){
            /**  condense only double letters  **/
           target[j] = c;

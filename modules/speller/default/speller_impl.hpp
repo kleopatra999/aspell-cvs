@@ -30,6 +30,21 @@ namespace aspeller {
   class SensitiveCompare;
   class Suggest;
 
+  enum SpecialId {main_id, personal_id, session_id, 
+                  personal_repl_id, none_id};
+
+  struct SpellerDict : public LocalDict
+  {
+    bool              use_to_check;
+    bool              use_to_suggest;
+    bool              save_on_saveall;
+    SpecialId         special_id;
+    SpellerDict     * next;
+    SpellerDict(LocalDict &);
+    SpellerDict(Dict *, const Language *, const Config &, SpecialId id = none_id);
+    ~SpellerDict() {if (dict) dict->release();}
+  };
+
   class SpellerImpl : public Speller
   {
   public:
@@ -46,33 +61,17 @@ namespace aspeller {
 
   public:
 
-    enum SpecialId {main_id, personal_id, session_id, 
-		    personal_repl_id, none_id};
-
-    typedef Enumeration<DataSet *> * WordLists;
+    typedef Enumeration<Dict *> * WordLists;
 
     WordLists wordlists() const;
     int num_wordlists() const;
 
-    bool have(const DataSet::Id &) const;
-    bool have(SpecialId) const;
-    LocalWordSet locate (const DataSet::Id &);
-    bool attach(DataSet *, const LocalWordSetInfo * li = 0);
-    bool steal(DataSet *, const LocalWordSetInfo * li = 0);
-    bool detach(const DataSet::Id &);
-    bool destroy(const DataSet::Id &);
-  
-    SpecialId check_id(const DataSet::Id &) const;
-    void change_id(const DataSet::Id &, SpecialId);
-  
-    bool use_to_check(const DataSet::Id &) const;
-    void use_to_check(const DataSet::Id &, bool);
-    bool use_to_suggest(const DataSet::Id &) const;
-    void use_to_suggest(const DataSet::Id &, bool);
-    bool save_on_saveall(const DataSet::Id &) const;
-    void save_on_saveall(const DataSet::Id &, bool);
-    bool own(const DataSet::Id &) const;
-    void own(const DataSet::Id &, bool);
+    const SpellerDict * locate (const Dict::Id &) const;
+
+    //
+    // Add a single dictionary that has not been previously added
+    //
+    void add_dict(SpellerDict *);
 
     PosibErr<const WordList *> personal_word_list  () const;
     PosibErr<const WordList *> session_word_list   () const;
@@ -93,13 +92,13 @@ namespace aspeller {
     //
   
     PosibErr<bool> check(char * word, char * word_end, /* it WILL modify word */
-			 unsigned int run_together_limit,
+                         bool try_uppercase,
+			 unsigned run_together_limit,
 			 CheckInfo *, GuessInfo *);
 
     PosibErr<bool> check(MutableString word) {
       guess_info.reset(guesses);
-      return check(word.begin(), 
-		   word.end(), 
+      return check(word.begin(), word.end(), false,
 		   unconditional_run_together_ ? run_together_limit_ : 0,
 		   check_inf, &guess_info);
     }
@@ -111,6 +110,10 @@ namespace aspeller {
     }
 
     PosibErr<bool> check(const char * word) {return check(ParmString(word));}
+
+    bool check2(char * word, /* it WILL modify word */
+                bool try_uppercase,
+                CheckInfo & ci, GuessInfo * gi);
 
     bool check_affix(ParmString word, CheckInfo & ci, GuessInfo * gi);
 
@@ -146,14 +149,11 @@ namespace aspeller {
     PosibErr<void> store_replacement(const String & mis, const String & cor,
 				     bool memory);
 
-
-    
-
     //
     // Private Stuff (from here to the end of the class)
     //
 
-    class DataSetCollection;
+    class DictCollection;
     class ConfigNotifier;
 
   private:
@@ -161,21 +161,23 @@ namespace aspeller {
 
     CachePtr<const Language>   lang_;
     CopyPtr<SensitiveCompare>  sensitive_compare_;
-    CopyPtr<DataSetCollection> wls_;
+    //CopyPtr<DictCollection> wls_;
     ClonePtr<Suggest>       suggest_;
     ClonePtr<Suggest>       intr_suggest_;
     unsigned int            ignore_count;
     bool                    ignore_repl;
-    bool                    unconditional_run_together_;
-    unsigned int            run_together_limit_;
-    const char *            run_together_middle_;
-    unsigned int            run_together_min_;
-    unsigned int            run_together_start_len_;
     String                  prev_mis_repl_;
     String                  prev_cor_repl_;
 
     void operator= (const SpellerImpl &other);
     SpellerImpl(const SpellerImpl &other);
+
+    SpellerDict * dicts_;
+    
+    Dictionary       * personal_;
+    Dictionary       * session_;
+    ReplacementDict  * repl_;
+    Dictionary       * main_;
 
   public:
     // these are public so that other classes and functions can use them, 
@@ -183,7 +185,7 @@ namespace aspeller {
 
     const SensitiveCompare & sensitive_compare() const {return *sensitive_compare_;}
 
-    const DataSetCollection & data_set_collection() const {return *wls_;}
+    //const DictCollection & data_set_collection() const {return *wls_;}
 
     PosibErr<void> set_check_lang(ParmString lang, ParmString lang_dir);
   
@@ -194,28 +196,39 @@ namespace aspeller {
     CheckInfo guesses[8];
     GuessInfo guess_info;
 
-    struct WSInfo {
-      const BasicWordSet * ws;
-      SensitiveCompare cmp;
-      ConvertWord convert;
+    struct WSInfo : public LocalDictInfo
+    {
+      const Dictionary * dict;
     };
 
     typedef Vector<WSInfo> WS;
     WS check_ws, affix_ws, suggest_ws, suggest_affix_ws;
 
+    bool                    unconditional_run_together_;
+    unsigned int            run_together_limit_;
+    unsigned int            run_together_min_;
+
     bool affix_info, affix_compress;
 
-    bool use_soundslike, fast_scan, fast_lookup;
+    bool have_repl;
+
+    bool have_soundslike;
+
+    bool invisible_soundslike, soundslike_root_only;
+
+    bool fast_scan, fast_lookup;
+
+    bool run_together;
 
   };
 
   struct LookupInfo {
     SpellerImpl * sp;
-    enum Mode {Word, Guess, Soundslike, AlwaysTrue} mode;
+    enum Mode {Word, Guess, Clean, Soundslike, AlwaysTrue} mode;
     SpellerImpl::WS::const_iterator begin;
     SpellerImpl::WS::const_iterator end;
     inline LookupInfo(SpellerImpl * s, Mode m);
-    inline bool lookup (ParmString word, WordEntry & o) const;
+    bool lookup (ParmString word, WordEntry & o) const;
   };
 
   inline LookupInfo::LookupInfo(SpellerImpl * s, Mode m) : sp(s), mode(m) {
@@ -224,11 +237,12 @@ namespace aspeller {
       begin = sp->affix_ws.begin(); 
       end = sp->affix_ws.end();
       return;
-    case Guess: 
+    case Guess:
       begin = sp->check_ws.begin(); 
       end = sp->check_ws.end(); 
       mode = Word; 
       return;
+    case Clean:
     case Soundslike: 
       begin = sp->suggest_affix_ws.begin(); 
       end = sp->suggest_affix_ws.end(); 

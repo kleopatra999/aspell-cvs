@@ -8,6 +8,7 @@
 #define ASPELL_FSTREAM__HPP
 
 #include <stdio.h>
+
 #include "string.hpp"
 #include "istream.hpp"
 #include "ostream.hpp"
@@ -41,11 +42,13 @@ namespace acommon {
     void ignore() {getc(file_);}
     int peek() {int c = getc(file_); ungetc(c, file_); return c;}
 
-    // NOTE: Use c_stream only as a last resort as it may
-    //       disappear if the underlining impl changes
     FILE * c_stream();
-    // However, file_no will always be available.
     int file_no();
+    
+    int vprintf(const char * format, va_list ap)
+    {
+      return vfprintf(file_, format, ap);
+    }
 
     void flush() {fflush(file_);}
 
@@ -55,11 +58,7 @@ namespace acommon {
     void skipws();
 
     // Will return false if there is no more data
-    bool getline(String & str) {return IStream::getline(str);}
-    bool getline(String &, char d);
-
-    char * getline(char * str, size_t s) {return IStream::getline(str,s);}
-    char * getline(char *, size_t, char d);
+    bool append_line(String &, char d);
 
     // These perform raw io with any sort of formating
     bool read(void *, unsigned int i);

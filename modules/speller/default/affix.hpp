@@ -1,25 +1,27 @@
 // This file is part of The New Aspell
-// Copyright (C) 2002 by Kevin Atkinson under the GNU LGPL
+// Copyright (C) 2004 by Kevin Atkinson under the GNU LGPL
 // license version 2.0 or 2.1.  You should have received a copy of the
 // LGPL license along with this library if you did not you can find it
 // at http://www.gnu.org/.
 //
 // Copyright 2002 Kevin B. Hendricks, Stratford, Ontario, Canada And
-// Contributors.  All rights reserved. See the file affix.license for
-// details.
+// Contributors.  All rights reserved.
+//
 
-#ifndef _AFFIXMGR_HXX_
-#define _AFFIXMGR_HXX_
+#ifndef ASPELL_AFFIX__HPP
+#define ASPELL_AFFIX__HPP
 
 #include "posib_err.hpp"
 #include "wordinfo.hpp"
 #include "fstream.hpp"
 #include "parm_string.hpp"
+#include "simple_string.hpp"
 #include "char_vector.hpp"
+#include "objstack.hpp"
 
 #define SETSIZE         256
 #define MAXAFFIXES      256
-#define MAXWORDLEN      100
+#define MAXWORDLEN      255
 #define XPRODUCT        (1 << 0)
 
 #define MAXLNLEN        1024
@@ -29,6 +31,7 @@
 namespace acommon {
   class Config;
   struct CheckInfo;
+  struct Conv;
 }
 
 namespace aspeller {
@@ -47,30 +50,19 @@ namespace aspeller {
   CheckInfo * check_list_data(CheckList *);
 
   struct LookupInfo;
-
-  struct AffEntry
-  {
-    char *       appnd;
-    char *       strip;
-    short        appndl;
-    short        stripl;
-    short        numconds;
-    short        xpflg;
-    char         achar;
-    char         conds[SETSIZE];
-  };
+  struct AffEntry;
   struct PfxEntry;
   struct SfxEntry;
 
   struct WordAff
   {
-    String word;
-    String af;
+    SimpleString word;
+    const unsigned char * aff;
+    WordAff * next;
   };
 
   class AffixMgr
   {
-
     const Language * lang;
 
     PfxEntry *          pStart[SETSIZE];
@@ -78,40 +70,52 @@ namespace aspeller {
     PfxEntry *          pFlag[SETSIZE];
     SfxEntry *          sFlag[SETSIZE];
 
-    String              encoding;
-    String              compound;
-    int                 cpdmin;
+    int max_strip_f[SETSIZE];
+    int max_strip_;
 
-    String affix_file;
+    const char *        encoding;
+    //const char *        compound;
+    //int                 cpdmin;
+
+    ObjStack strings;
+    void *   data_;
+
+    const char * affix_file;
 
   public:
  
-    AffixMgr(const Language * l) : lang(l) {}
+    AffixMgr(const Language * l) : lang(l), data_(0) {}
     ~AffixMgr();
 
-    PosibErr<void> setup(ParmString affpath);
+    unsigned int max_strip() const {return max_strip_;}
+
+    PosibErr<void> setup(ParmString affpath, Conv &);
 
     bool affix_check(const LookupInfo &, ParmString, CheckInfo &, GuessInfo *) const;
     bool prefix_check(const LookupInfo &, ParmString, CheckInfo &, GuessInfo *) const;
     bool suffix_check(const LookupInfo &, ParmString, CheckInfo &, GuessInfo *,
                       int sfxopts, AffEntry* ppfx) const;
 
-    void get_word(String & word, const CheckInfo &) const;
+    void munch(ParmString word, CheckList *) const;
 
-    void  munch(ParmString word, CheckList *) const;
-    void  expand(ParmString word, ParmString affixes, CheckList *) const;
-    // expand enough so the affixes does not effect the first limit
-    // characters
-    int                 expand(ParmString word, ParmString af, 
-                               int limit, WordAff * l) const;
+    // None of the expand methods reset the objstack
 
-    char *              get_encoding();
-             
+    WordAff * expand(ParmString word, ParmString aff, 
+                     ObjStack &, int limit = INT_MAX) const;
+
+    WordAff * expand_prefix(ParmString word, ParmString aff, 
+                            ObjStack & buf) const 
+    {
+      return expand(word,aff,buf,0);
+    }
+    WordAff * expand_suffix(ParmString word, const unsigned char * new_aff,
+                            ObjStack &, int limit = INT_MAX,
+                            unsigned char * new_aff = 0, WordAff * * * l = 0) const;
+    
   private:
-    PosibErr<void> parse_file(const char * affpath);
-    PosibErr<void> parse_affix(ParmString line, const char at, FStream & af);
+    PosibErr<void> parse_file(const char * affpath, Conv &);
 
-    void encodeit(AffEntry * ptr, char * cs);
+    void encodeit(AffEntry * ptr, const char * cs);
     PosibErr<void> build_pfxlist(PfxEntry* pfxptr);
     PosibErr<void> build_sfxlist(SfxEntry* sfxptr);
     PosibErr<void> process_pfx_order();
@@ -119,8 +123,8 @@ namespace aspeller {
   };
 
   PosibErr<AffixMgr *> new_affix_mgr(ParmString name, 
+                                     Conv &,
                                      const Language * lang);
-
 }
 
 #endif

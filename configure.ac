@@ -1,4 +1,4 @@
-AC_INIT(GNU Aspell, 0.51-cvs)
+AC_INIT(GNU Aspell, 0.60-cvs)
 AC_CONFIG_SRCDIR(prog/aspell.cpp)
 AC_CANONICAL_SYSTEM
 AM_INIT_AUTOMAKE
@@ -15,7 +15,7 @@ dnl pkgdatadir
 
 pkgdatadir=undef
 AC_ARG_ENABLE(pkgdatadir, 
-[  --enable-pkgdatadir=DIR   device dependent data files [DATADIR/aspell] ], 
+[  --enable-pkgdatadir=DIR   device dependent data files [LIBDIR/aspell-0.60] ], 
 pkgdatadir=$enable_pkgdatadir)
 
 AC_ARG_ENABLE(pkgdata-dir, 
@@ -24,7 +24,7 @@ pkgdatadir=$enable_dict_dir)
 
 if test "$pkgdatadir" = "undef"
 then
-  pkgdatadir=\${datadir}/aspell
+  pkgdatadir=\${libdir}/aspell-0.60
 fi
 
 AC_SUBST(pkgdatadir)
@@ -33,7 +33,7 @@ dnl pkglibdir
 
 pkglibdir=undef
 AC_ARG_ENABLE(pkglibdir, 
-[  --enable-pkglibdir=DIR   device dependent data files [LIBDIR/aspell] ], 
+[  --enable-pkglibdir=DIR   device dependent data files [LIBDIR/aspell-0.60] ], 
 pkglibdir=$enable_pkglibdir)
 
 AC_ARG_ENABLE(dict-dir, 
@@ -42,7 +42,7 @@ pkglibdir=$enable_dict_dir)
 
 if test "$pkglibdir" = "undef"
 then
-  pkglibdir=\${libdir}/aspell
+  pkglibdir=\${libdir}/aspell-0.60
 fi
 
 AC_SUBST(pkglibdir)
@@ -61,13 +61,16 @@ AC_ARG_ENABLE(curses-include,
 AC_ARG_ENABLE(compile-in-filters,
 [  --enable-compile-in-filters])
 
+AC_ARG_ENABLE(pspell-compatibility,
+[  --disable-pspell-compatibility])
+
 dnl
 
 AC_PROG_CXX
-if test "$GXX" == "yes"
-then
-  CXXFLAGS="$CXXFLAGS -fno-exceptions"
-fi
+#if test "$GXX" == "yes"
+#then
+#  CXXFLAGS="$CXXFLAGS -fno-exceptions"
+#fi
 
 AC_LANG([C++])
 
@@ -100,6 +103,8 @@ then
 fi
 
 AM_CONDITIONAL(COMPILE_IN_FILTERS, test "$enable_compile_in_filters" == "yes")
+
+AM_CONDITIONAL(PSPELL_COMPATIBILITY, test "$enable_pspell_compatibility" != "no")
 
 dnl GETTEXT
 
@@ -200,6 +205,8 @@ AC_TRY_COMPILE(
   [AC_MSG_RESULT(no)
    AC_MSG_WARN([Unable to find locking mechanism, Aspell will not be thread safe.])] )
 
+AM_LANGINFO_CODESET
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                                                                 #
 #                     Terminal function tests                     #
@@ -230,24 +237,58 @@ then
   if test -z "$CURSES_LIB"
   then
 
-    AC_CHECK_LIB(curses, initscr,
-      [CURSES_LIB=-lcurses],
+    AC_CHECK_LIB(ncursesw, initscr,
+      [CURSES_LIB=-lncursesw],
       [
 
     dnl else if
     AC_CHECK_LIB(ncurses, initscr,
-      [CURSES_LIB=-lncurses])
-    ] )
-    
+      [CURSES_LIB=-lncurses],
+      [
+
+    dnl else if
+    AC_CHECK_LIB(curses, initscr,
+      [CURSES_LIB=-lcurses]) ] ) ] )
+
   fi
 
   if test -n "$CURSES_LIB"
   then
-     AC_MSG_CHECKING(if standard curses include sequence will work)
      ORIG_LIBS="$LIBS"
      ORIG_CPPFLAGS="$CPPFLAGS"
      CPPFLAGS="$CURSES_INCLUDE $CPPFLAGS"
      LIBS="$CURSES_LIB $LIBS"
+
+     AC_MSG_CHECKING(for wide character support in curses libraray)
+     AC_TRY_LINK(
+       [#include <wchar.h>
+        #include <ncursesw/curses.h>
+       ],
+       [wchar_t wch = 0;
+        addnwstr(&wch, 1);],
+       [AC_MSG_RESULT(yes)
+        AC_DEFINE(USE_NCURSESW, 1,
+                  [Defined if wide character support found in ncursesw/])
+        AC_DEFINE(HAVE_WIDE_CURSES, 1,
+                  [Defined if curses libraray includes wide character support])],
+       [
+
+     dnl else if
+     AC_TRY_LINK(
+       [#include <wchar.h>
+        #include <curses.h>
+       ],
+       [wchar_t wch = 0;
+        addnwstr(&wch, 1);],
+       [AC_MSG_RESULT(yes)
+        AC_DEFINE(HAVE_WIDE_CURSES, 1, [])],
+       [
+
+     dnl else
+     AC_MSG_RESULT(no)
+     ] ) ] )
+
+     AC_MSG_CHECKING(if standard curses include sequence will work)
      AC_TRY_LINK(
        [#include <termios.h>
 	#include <unistd.h>
@@ -290,7 +331,7 @@ then
        [AC_MSG_RESULT(no)
         
 
-     dnl else if
+     dnl else
      use_curses=false
      CURSES_LIBS=""
      CURSES_INCLUDE=""
@@ -339,6 +380,8 @@ then
   AC_DEFINE(POSIX_TERMIOS, 1, [Defined if Posix Termios is Supported])
 fi
 
+
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                                                                 #
 #                    Compiler Quirks Tests                        #
@@ -373,11 +416,12 @@ AC_TRY_COMPILE(
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 AC_CONFIG_FILES([Makefile gen/Makefile common/Makefile lib/Makefile data/Makefile 
-                 m4/Makefile
+                 m4/Makefile 
                  auto/Makefile modules/Makefile modules/tokenizer/Makefile
                  modules/speller/Makefile modules/speller/default/Makefile
 		 interfaces/Makefile interfaces/cc/Makefile
 		 scripts/Makefile examples/Makefile
 		 prog/Makefile manual/Makefile po/Makefile.in modules/filter/Makefile
-		 ])
+		 myspell/Makefile
+                 ])
 AC_OUTPUT

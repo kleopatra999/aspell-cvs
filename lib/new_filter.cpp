@@ -352,21 +352,17 @@ namespace acommon
     FStream options;
     String option_value;
     String version = PACKAGE_VERSION;
-    unsigned int option_start = 0;
-    unsigned int option_count = 0;
     KeyInfo * begin = NULL;
     KeyInfo * cur_opt = NULL;
     int optsize = 0;
     ConfigModule * mbegin = NULL;
     int modsize = filter_modules_end-filter_modules_begin;
-    void * help = NULL;
     StringList filt_path;
     StringList opt_path;
-    int line_count = 0;
     char line_number[9]="0";
     int active_option = 0;
     String expand = "filter-";
-    FixedBuffer<> buf; DataPair d;
+    String buf; DataPair d;
 
     if ((name_len == 6) &&
         !strncmp(key->name,"filter",6)){
@@ -403,8 +399,7 @@ namespace acommon
 	{
 	  to_lower(d.key);
 	  option_value = d.value;
-          line_count += getReadLines();
-          sprintf(line_number,"%i",line_count);
+          sprintf(line_number,"%i",d.line_num);
 
 	  //
 	  // key == aspell
@@ -415,7 +410,7 @@ namespace acommon
               return make_err(confusing_version,"add_filter",option_name,line_number);
             }
 
-            char * requirement = d.value.str();
+            char * requirement = d.value.str;
             char * relop = requirement;
             char swap = '\0';
             
@@ -487,7 +482,7 @@ namespace acommon
                 release_options(begin,begin+optsize);
                 free(begin);
               }
-              option_value.insert(0,"(filter-)");
+              option_value.insert(0,"(filter-)", 9);
               return make_err(identical_option,"add_filter",option_name,line_number);
             }
 
@@ -523,7 +518,8 @@ namespace acommon
 	    cur_opt->type = KeyInfoBool;
             cur_opt->def  = NULL;
             cur_opt->desc = NULL;
-            cur_opt->otherdata[0]='\0';
+            cur_opt->flags = 0;
+            cur_opt->other_data = 0;
             active_option = 1;
             continue;
           }
@@ -628,15 +624,16 @@ namespace acommon
             continue;
           }
 
-	  //
-	  // key == other
-	  //
-          if (d.key == "other") {
-            strncpy(cur_opt->otherdata,option_value.c_str(),15);
-            cur_opt->otherdata[15]='\0';
+          
+ 	  //
+ 	  // key == flags
+ 	  //
+          if (d.key == "flags") {
+            if (d.value == "utf-8" || d.value == "UTF-8")
+              cur_opt->flags = KEYINFO_UTF8;
             continue;
           }
-
+           
 	  //
 	  // key == endoption
 	  //

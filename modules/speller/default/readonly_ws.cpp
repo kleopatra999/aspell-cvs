@@ -13,25 +13,22 @@
 // * hash table
 
 // data block laid out as follows:
-// WITH Soundslike data:
-//   (<pad><16 bit: sounds like size><16 bit: offset to next item><soundslike>
-//      (<word><null>)+<null>)+
-// WITHOUT Soundslike data
-//   (<8 bit: offset><8 bit: sl offset><word><null>[<affix info>]<null>)+
-// compound info is currently not used (ie broken)
-
-// TODO:
-//   consider adding flags to speed up checking
-//     1 bit: all lower case
-//     1 bit: no accent info
-//   which leaves 6 bits for other info which could possible be used
-//   to flag special words.   Such as those which are abbreviations
-//   or prefixes and can only appear before a word if there is a
-//   '-'.
+//
+// The lower 4 bits are used for word info.  The upper 4 bits can be used to store 
+//   info on additional info.
+// * have affix flags
+// * have compound category flags
+// Words:
+//   (<8 bit frequency><8 bit: flags><8 bit: offset>
+//      <8 bit: word size><word><null>
+//      [<affix info><null>][<category info><null>])+
+// Words with soundslike:
+//   (<8 bit: offset to next item><8 bit: soundslike size><soundslike>
+//      <words>)+
+// An extra <null> is inserted at the end of each "group".
+//
 
 #include <map>
-// FIXME: There is NO real need to use a map here.  Simpily use a vector or list
-//   and then sort when done
 
 using std::pair;
 
@@ -50,16 +47,17 @@ using std::pair;
 #include "fstream.hpp"
 #include "language.hpp"
 #include "stack_ptr.hpp"
-#include "string_buffer.hpp"
+#include "objstack.hpp"
 #include "vector.hpp"
 #include "vector_hash-t.hpp"
 #include "check_list.hpp"
-
+#include "lsort.hpp"
 #include "iostream.hpp"
 
 typedef unsigned int   u32int;
 static const u32int u32int_max = (u32int)-1;
 typedef unsigned short u16int;
+typedef unsigned char byte;
 
 #ifdef HAVE_MMAP 
 
@@ -122,23 +120,78 @@ static inline void mmap_free(char *, unsigned int)
 
 #endif
 
-namespace aspeller_default_readonly_ws {
+static byte HAVE_AFFIX_FLAGS = 1 << 7;
+static byte HAVE_CATEGORY_FLAGS = 1 << 6;
+
+static byte WORD_INFO_MASK = 0x0F;
+
+static const int FREQUENCY_INFO_O = 4;
+static const int FLAGS_O = 3;
+static const int NEXT_O = 2;
+static const int WORD_SIZE_O = 1;
+
+static inline int get_word_size(const char * d) {
+  return *reinterpret_cast<const byte *>(d - WORD_SIZE_O);
+}
+
+static inline byte get_flags(const char * d) {
+  return *reinterpret_cast<const byte *>(d - FLAGS_O);
+}
+
+static inline byte get_offset(const char * d) {
+  return *reinterpret_cast<const byte *>(d - NEXT_O);
+}
+
+static inline const char * get_next(const char * d) {
+  return d + *reinterpret_cast<const byte *>(d - NEXT_O);
+}
+
+static inline const char * get_sl_words_begin(const char * d) {
+  return d + *reinterpret_cast<const byte *>(d - WORD_SIZE_O) + 4;
+  // FIXME: This isn't right when frequency info is stored in the table
+}
+
+// get_next might go past the end so don't JUST compare
+// for equality.  Ie use while (cur < end) not (cur != end)
+static inline const char * get_sl_words_end(const char * d) {
+  return get_next(d) - 3;
+}
+
+static inline const char * get_affix(const char * d) {
+  int word_size = get_word_size(d);
+  if (get_flags(d) & HAVE_AFFIX_FLAGS) 
+    return d + word_size +  1;
+  else
+    return d + word_size;
+}
+
+static inline const char * get_category(const char * d) {
+  int word_size = get_word_size(d);
+  if (get_flags(d) & HAVE_AFFIX_FLAGS & HAVE_CATEGORY_FLAGS) 
+    return d + strlen(d + word_size +  1) + 1;
+  else if (get_flags(d) & HAVE_CATEGORY_FLAGS)
+    return d + word_size +  1;
+  else
+    return d + word_size;
+}
+
+namespace {
 
   using namespace aspeller;
 
   /////////////////////////////////////////////////////////////////////
   // 
-  //  ReadOnlyWS
+  //  ReadOnlyDict
   //
     
-  struct SoundslikeJump
+  struct Jump
   {
     char   sl[4];
     u32int loc;
-    SoundslikeJump() {memset(this, 0, sizeof(SoundslikeJump));}
+    Jump() : sl(), loc() {}
   };
   
-  class ReadOnlyWS : public BasicWordSet
+  class ReadOnlyDict : public Dictionary
   {
       
   public: //but don't use
@@ -146,8 +199,6 @@ namespace aspeller_default_readonly_ws {
     struct WordLookupParms {
       const char * block_begin;
       WordLookupParms() {}
-      //WordLookupParms(const char * b, const Language * l)
-      //	: block_begin(b), hash(l), equal(l) {}
       typedef BlockVector<const u32int> Vector;
       typedef u32int                    Value;
       typedef const char *              Key;
@@ -166,36 +217,30 @@ namespace aspeller_default_readonly_ws {
     char *           block;
     u32int           block_size;
     bool             block_mmaped;
-    const SoundslikeJump * jump1;
-    const SoundslikeJump * jump2;
+    const Jump * jump1;
+    const Jump * jump2;
     WordLookup       word_lookup;
     const char *     word_block;
     
-    ReadOnlyWS(const ReadOnlyWS&);
-    ReadOnlyWS& operator= (const ReadOnlyWS&);
+    ReadOnlyDict(const ReadOnlyDict&);
+    ReadOnlyDict& operator= (const ReadOnlyDict&);
 
     struct ElementsParms;
     struct SoundslikeElements;
-    struct StrippedElements;
+    struct CleanElements;
 
   public:
     WordEntryEnumeration * detailed_elements() const;
     Size      size()     const;
     bool      empty()    const;
 
-    static const char * get_affix(const char * w) {return w+(unsigned char)*(w-1);}
-    
-    void convert(const char * w, WordEntry & o) const {
-      o.what = WordEntry::Word;
-      o.word = w;
-      o.aff  = !have_soundslike ? get_affix(w) : w - 1; // w - 1 is NULL
-    }
-    
-    ReadOnlyWS() {
+    ReadOnlyDict() 
+      : Dictionary(basic_dict, "ReadOnlyDict")
+    {
       block = 0;
     }
 
-    ~ReadOnlyWS() {
+    ~ReadOnlyDict() {
       if (block != 0) {
 	if (block_mmaped)
 	  mmap_free(block, block_size);
@@ -203,56 +248,66 @@ namespace aspeller_default_readonly_ws {
 	  free(block);
       }
     }
-      
-    PosibErr<void> load(ParmString, Config *, SpellerImpl *, const LocalWordSetInfo *);
+    
+    PosibErr<void> load(ParmString, Config &, LocalDictList *, 
+                        SpellerImpl *, const LocalDictInfo *);
 
     bool lookup(ParmString word, WordEntry &, const SensitiveCompare &) const;
 
-    bool striped_lookup(const char * sondslike, WordEntry &) const;
+    bool clean_lookup(ParmString, WordEntry &) const;
 
     bool soundslike_lookup(const WordEntry &, WordEntry &) const;
-    bool soundslike_lookup(const char * sondslike, WordEntry &) const;
+    bool soundslike_lookup(ParmString, WordEntry &) const;
     
     SoundslikeEnumeration * soundslike_elements() const;
   };
+
+  static inline void convert(const char * w, WordEntry & o) {
+    o.what = WordEntry::Word;
+    o.word = w;
+    o.aff  = get_affix(w);
+    o.word_size = get_word_size(w);
+    o.word_info = get_flags(w) & WORD_INFO_MASK;
+  }
     
   //
   //  
   //
 
-  struct ReadOnlyWS::ElementsParms {
+  struct ReadOnlyDict::ElementsParms {
     typedef WordEntry *                Value;
     typedef WordLookup::const_iterator Iterator; 
-    const ReadOnlyWS * ws;
+    const ReadOnlyDict * ws;
     WordEntry data;
-    ElementsParms(const ReadOnlyWS * w) : ws(w) {}
+    ElementsParms(const ReadOnlyDict * w) : ws(w) {}
     bool endf(const Iterator & i) const {return i.at_end();}
     Value end_state() const {return 0;}
     WordEntry * deref(const Iterator & i) {
-      ws->convert(ws->word_block + *i, data);
+      convert(ws->word_block + *i, data);
       return & data;
     }
   };
 
-  WordEntryEnumeration * ReadOnlyWS::detailed_elements() const {
+  WordEntryEnumeration * ReadOnlyDict::detailed_elements() const {
     return new MakeEnumeration<ElementsParms>(word_lookup.begin(), ElementsParms(this));
   }
 
-  ReadOnlyWS::Size ReadOnlyWS::size() const {
+  ReadOnlyDict::Size ReadOnlyDict::size() const {
     return word_lookup.size();
   }
   
-  bool ReadOnlyWS::empty() const {
+  bool ReadOnlyDict::empty() const {
     return word_lookup.empty();
   }
 
-  static const char * const cur_check_word = "aspell default speller rowl 1.7";
+  static const char * const cur_check_word = "aspell default speller rowl 1.9";
 
   struct DataHead {
     // all sizes except the last four must to divisible by:
     static const uint align = 16;
     char check_word[64];
     u32int endian_check; // = 12345678
+    char lang_hash[16];
 
     u32int head_size;
     u32int block_size;
@@ -270,11 +325,16 @@ namespace aspeller_default_readonly_ws {
     u32int soundslike_name_size;
     u32int soundslike_version_size;
 
-    u32int affix_info; // none zero if affix information is encoded in table
+    byte affix_info; // 0 = none, 1 = partially expanded, 2 = full
+    byte invisible_soundslike;
+    byte soundslike_root_only;
+    byte compound_info; //
+    byte freq_info;
   };
 
-  PosibErr<void> ReadOnlyWS::load(ParmString f0, Config * config, 
-				  SpellerImpl *, const LocalWordSetInfo *)
+  PosibErr<void> ReadOnlyDict::load(ParmString f0, Config & config, 
+                                    LocalDictList *, 
+                                    SpellerImpl *, const LocalDictInfo *)
   {
     set_file_name(f0);
     const char * fn = file_name();
@@ -308,24 +368,29 @@ namespace aspeller_default_readonly_ws {
     f.read(word.data(), data_head.lang_name_size);
 
     PosibErr<void> pe = set_check_lang(word.data(),config);
-    if (pe.has_err())
-      return pe.with_file(fn);
+    if (pe.has_err()) {
+      if (pe.prvw_err()->is_a(language_related_error))
+        return pe.with_file(fn);
+      else
+        return pe;
+    }
 
     if (data_head.soundslike_name_size != 0) {
-      have_soundslike = true;
-
       word.resize(data_head.soundslike_name_size);
       f.read(word.data(), data_head.soundslike_name_size);
 
       if (strcmp(word.data(), lang()->soundslike_name()) != 0)
-        return make_err(bad_file_format, fn, _("Wrong soundslike"));
+        return make_err(bad_file_format, fn, _("Wrong soundslike."));
 
       word.resize(data_head.soundslike_version_size);
       f.read(word.data(), data_head.soundslike_version_size);
 
       if (strcmp(word.data(), lang()->soundslike_version()) != 0)
-        return make_err(bad_file_format, fn, _("Wrong soundslike version"));
+        return make_err(bad_file_format, fn, _("Wrong soundslike version."));
     }
+
+    invisible_soundslike = data_head.invisible_soundslike;
+    soundslike_root_only = data_head.soundslike_root_only;
 
     affix_compressed = data_head.affix_info;
 
@@ -340,15 +405,13 @@ namespace aspeller_default_readonly_ws {
 
     if (data_head.jump2_offset) {
       fast_scan = true;
-      jump1 = reinterpret_cast<const SoundslikeJump *>(block 
-						       + data_head.jump1_offset);
-      jump2 = reinterpret_cast<const SoundslikeJump *>(block 
-						       + data_head.jump2_offset);
+      jump1 = reinterpret_cast<const Jump *>(block + data_head.jump1_offset);
+      jump2 = reinterpret_cast<const Jump *>(block + data_head.jump2_offset);
     } else {
       jump1 = jump2 = 0;
     }
 
-    word_block       = block + data_head.word_offset;
+    word_block = block + data_head.word_offset;
 
     word_lookup.parms().block_begin = word_block;
     word_lookup.parms().hash .lang     = lang();
@@ -361,8 +424,8 @@ namespace aspeller_default_readonly_ws {
     return no_err;
   }
 
-  bool ReadOnlyWS::lookup(ParmString word, WordEntry & o,
-                          const SensitiveCompare & c) const 
+  bool ReadOnlyDict::lookup(ParmString word, WordEntry & o,
+                            const SensitiveCompare & c) const 
   {
     o.clear();
     o.what = WordEntry::Word;
@@ -377,33 +440,28 @@ namespace aspeller_default_readonly_ws {
     return false;
   }
 
-  struct ReadOnlyWS::SoundslikeElements : public SoundslikeEnumeration
+  struct ReadOnlyDict::SoundslikeElements : public SoundslikeEnumeration
   {
     WordEntry data;
-    const ReadOnlyWS * obj;
-    const SoundslikeJump * jump1;
-    const SoundslikeJump * jump2;
+    const ReadOnlyDict * obj;
+    const Jump * jump1;
+    const Jump * jump2;
     const char * cur;
     int level;
-    bool sl;
-
-    u16int next_pos() const {
-      if (sl) return *reinterpret_cast<const u16int *>(cur - 2);
-      else return *reinterpret_cast<const unsigned char *>(cur - 2);
-    }
+    bool invisible_soundslike;
 
     WordEntry * next(int stopped_at);
 
-    SoundslikeElements(const ReadOnlyWS * o)
+    SoundslikeElements(const ReadOnlyDict * o)
       : obj(o), jump1(obj->jump1), jump2(obj->jump2), cur(0), 
-        level(1), sl(o->have_soundslike) {
-      data.what = o->have_soundslike ? WordEntry::Soundslike : WordEntry::Word;}
+        level(1), invisible_soundslike(o->invisible_soundslike) {
+      data.what = o->invisible_soundslike ? WordEntry::Word : WordEntry::Soundslike;}
   };
-  
-  WordEntry * ReadOnlyWS::SoundslikeElements::next(int stopped_at) {
+
+  WordEntry * ReadOnlyDict::SoundslikeElements::next(int stopped_at) {
 
     //CERR << level << ":" << stopped_at << "  :";
-    //CERR << jump1->sl << ":" << jump2->sl << "\n";
+    //CERR << jump1->data << ":" << jump2->sl << "\n";
 
     const char * tmp = cur;
 
@@ -435,10 +493,9 @@ namespace aspeller_default_readonly_ws {
     } else if (level == 2) {
 
       cur = tmp = obj->word_block + jump2->loc;
-      cur += next_pos(); // next pos uses cur
       level = 3;
 
-    } else if (next_pos() == 0) {
+    } else if (get_offset(cur) == 0) {
 
       level = 2;
       ++jump2;
@@ -451,86 +508,76 @@ namespace aspeller_default_readonly_ws {
       }
       goto jquit;
 
-    } else {
+    } 
 
-      cur += next_pos();
-      
-    }
+    cur = get_next(cur); // this will be the NEXT item looked at
 
     data.word = tmp;
-    if (!sl) {
+    data.word_size = get_word_size(tmp);
+    if (invisible_soundslike) {
+      convert(tmp, data);
       data.what = WordEntry::Word;
-      data.aff  = obj->get_affix(tmp);
-    }
+    } 
     data.intr[0] = (void *)tmp;
     return &data;
 
   jquit:
     if (!*tmp) return 0;
     data.word = tmp;
+    data.word_size = !tmp[1] ? 1 : !tmp[2] ? 2 : 3;
     data.intr[0] = 0;
-    if (!sl) {
-      data.what = WordEntry::Stripped;
+    if (invisible_soundslike) {
+      data.what = WordEntry::Clean;
       data.aff  = 0;
     }
     return &data;
   }
 
-  struct ReadOnlyWS::StrippedElements : public SoundslikeEnumeration
+  struct ReadOnlyDict::CleanElements : public SoundslikeEnumeration
   {
     WordEntry data;
     const char * cur;
 
-    u16int next_pos() const {
-      return *reinterpret_cast<const unsigned char *>(cur - 2);
-    }
-
     WordEntry * next(int stopped_at);
 
-    StrippedElements(const ReadOnlyWS * o)
-      : cur(o->word_block + 2) {data.what = WordEntry::Word;}
+    CleanElements(const ReadOnlyDict * o)
+      : cur(o->word_block + 3) {data.what = WordEntry::Word;}
   };
 
-  WordEntry * ReadOnlyWS::StrippedElements::next(int) {
+  WordEntry * ReadOnlyDict::CleanElements::next(int) {
 
     const char * tmp = cur;
-    cur += next_pos();
+    cur = get_next(cur);
     if (cur == tmp) return 0;
     data.intr[0] = (void *)tmp;
-    data.word = tmp;
-    data.aff  = ReadOnlyWS::get_affix(tmp);
+    convert(tmp, data);
     return &data;
 
   }
 
-  SoundslikeEnumeration * ReadOnlyWS::soundslike_elements() const {
+  SoundslikeEnumeration * ReadOnlyDict::soundslike_elements() const {
 
     if (jump1)
       return new SoundslikeElements(this);
     else
-      return new StrippedElements(this);
+      return new CleanElements(this);
 
   }
     
   static void soundslike_next(WordEntry * w)
   {
-//FIXME what to do here if compiler complains about static cast assume
-//      some define or pragma should be set to allow this but do not 
-//      have in mind -> replace by now with good old c-ish cast;
-//      Hope to find solution before commit 
-//    const char * cur = static_cast<const char *>(w->intr[0]);
     const char * cur = (const char *)(w->intr[0]);
-    w->word = cur;
-    unsigned int len = strlen(cur);
-    cur += len + 1;
+    const char * end = (const char *)(w->intr[1]);
+    convert(cur, *w);
+    cur = get_next(cur);
     w->intr[0] = (void *)cur;
-    if (*cur == 0) w->adv_ = 0;
+    if (cur >= end) w->adv_ = 0;
   }
 
   //static 
-  //void ReadOnlyWS::stripped_next(WordEntry * w) {}
+  //void ReadOnlyDict::clean_next(WordEntry * w) {}
 
-  bool ReadOnlyWS::striped_lookup(const char * sl, WordEntry & w) const
+  bool ReadOnlyDict::clean_lookup(ParmString sl, WordEntry & w) const
   {
     w.clear();
     WordLookup::ConstFindIterator i = word_lookup.multi_find(sl);
@@ -541,109 +588,103 @@ namespace aspeller_default_readonly_ws {
     //   the lookup should point to the first one of the kind ....
   }
     
-  bool ReadOnlyWS::soundslike_lookup(const char * sl, WordEntry & w) const 
+  bool ReadOnlyDict::soundslike_lookup(const WordEntry & s, WordEntry & w) const 
   {
-    if (!have_soundslike) {
-      return ReadOnlyWS::striped_lookup(sl,w);
-    } else {
-      return false;
-    }
-  }
-
-  bool ReadOnlyWS::soundslike_lookup(const WordEntry & s, WordEntry & w) const 
-  {
-    w.clear();
-
     if (s.intr[0] == 0) {
 
       return false;
 
-    } else if (have_soundslike) {
+    } else if (!invisible_soundslike) {
       
+      w.clear();
       w.what = WordEntry::Word;
-      u16int sl_size = *reinterpret_cast<const u16int *>(s.word-4);
-      w.intr[0] = (void *)(s.word + sl_size + 1);
+      w.intr[0] = (void *)get_sl_words_begin(s.word);
+      w.intr[1] = (void *)get_sl_words_end(s.word);
       w.adv_ = soundslike_next;
       soundslike_next(&w);
       return true;
       
     } else {
 
+      w.clear();
       w.what = WordEntry::Word;
       convert(s.word, w);
       return true;
 
     }
+  }
 
+  bool ReadOnlyDict::soundslike_lookup(ParmString s, WordEntry & w) const 
+  {
+    if (invisible_soundslike) {
+      return ReadOnlyDict::clean_lookup(s,w);
+    } else {
+      return false;
+    }
   }
 
 }  
 
 namespace aspeller {
 
-  BasicWordSet * new_default_readonly_word_set() {
-    return new aspeller_default_readonly_ws::ReadOnlyWS();
+  Dictionary * new_default_readonly_dict() {
+    return new ReadOnlyDict();
   }
   
 }
 
-namespace aspeller_default_readonly_ws {
+namespace {
+
+  // Possible:
+  //   No Affix Compression:
+  //     no soundslike
+  //     invisible soundslike
+  //     with soundslike
+  //   Affix Compression:
+  //     group by root:
+  //       no soundslike
+  //       invisible soundslike
+  //       with soundslike
+  //     expand prefix:  
+  //       no soundslike
+  //       invisible soundslike
 
   using namespace aspeller;
 
   struct WordData {
-    static const int size = 3;
-    char total_size; // including null chars
-    char affix_offset;
-    char data[];
-    const char * affix_data() const {return data + affix_offset;}
+    WordData * next;
+    char * sl;
+    char * aff;
+    byte word_size;
+    byte sl_size;
+    byte data_size;
+    byte flags;
+    char word[];
   };
-  
+
+  struct SoundslikeLess {
+    bool operator() (WordData * x, WordData * y) const {
+      int res = strcmp(x->sl, y->sl);
+      if (res != 0) return res < 0;
+      return strcmp(x->word, y->word) < 0;
+    }
+  };
+
   struct WordLookupParms {
-    typedef Vector<const WordData *> Vector;
-    typedef const WordData *         Value;
-    typedef const char *             Key;
+    const char * block_begin;
+    WordLookupParms() {}
+    typedef Vector<u32int>      Vector;
+    typedef u32int              Value;
+    typedef const char *        Key;
     static const bool is_multi = true;
-    Key key(Value v) const {return v->data;}
-    InsensitiveHash hash_;
-    size_t hash(Key k) const {return hash_(k);}
-    InsensitiveEqual equal_;
-    bool equal(Key rhs, Key lhs) const {
-      return equal_(rhs, lhs);
-    }
-    bool is_nonexistent(const Value & v) const {return v == 0;}
-    void make_nonexistent(Value & v) const {v = 0;}
+    Key key(Value v) const {assert (v != u32int_max);
+                            return block_begin + v;}
+    InsensitiveHash  hash;
+    InsensitiveEqual equal;
+    bool is_nonexistent(Value v) const {return v == u32int_max;}
+    void make_nonexistent(Value & v) const {v = u32int_max;}
   };
-
-  typedef VectorHashTable<WordLookupParms> WordHash;
-  
-  struct SoundslikeList {
-    struct Word {
-      const WordData * d;
-      u32int hash_idx;
-    };
-    union {
-      Word * list;
-      Word   single;
-    } d;
-    u16int   size;
-    u16int   num_inserted;
-  };
-
-  struct SoundslikeLt
-  {
-    InsensitiveCompare cmp;
-    SoundslikeLt(const Language * l = 0)
-      : cmp(l) {}
-    bool operator()(const char * s1, const char * s2) const {
-      if (cmp)
-        return cmp(s1, s2) < 0;
-      else
-        return strcmp(s1, s2) < 0;
-    }
-  };
-
-  typedef std::multimap<const char *, SoundslikeList, SoundslikeLt> SoundMap;
+  typedef VectorHashTable<WordLookupParms> WordLookup;
 
   static inline unsigned int round_up(unsigned int i, unsigned int size) {
     return ((i + size - 1)/size)*size;
@@ -663,20 +704,31 @@ namespace aspeller_default_readonly_ws {
     assert(sizeof(u16int) == 2);
     assert(sizeof(u32int) == 4);
 
+    bool full_soundslike = (strcmp(lang.soundslike_name(), "none") != 0 && 
+                            strcmp(lang.soundslike_name(), "simple"));
+
     bool affix_compress = (lang.affix() && 
                            config.retrieve_bool("affix-compress"));
-    
-    bool use_soundslike = (lang.have_soundslike() &&
-                           config.retrieve_bool("use-soundslike"));
-   
-    bool use_jump_tables = use_soundslike || config.retrieve_bool("use-jump-tables");
 
-    CERR << (affix_compress ? "  AFFIX COMPRESS" : "")
-         << (use_soundslike ? "  USING SOUNDSLIKE" : "") 
-         << (use_jump_tables ? "  USING JUMP TABLES" : "")
-         << "\n";
+    bool partially_expand = (affix_compress &&
+                             !full_soundslike &&
+                             config.retrieve_bool("partially-expand"));
 
-    assert(!(affix_compress && use_soundslike)); // FIXME: return error
+    bool invisible_soundslike = false;
+    if (partially_expand)
+      invisible_soundslike = true;
+    else if (config.have("invisible-soundslike"))
+      invisible_soundslike = config.retrieve_bool("invisible-soundslike");
+    else if (!full_soundslike)
+      invisible_soundslike = true;
+
+    ConvEC iconv;
+    if (!config.have("norm-strict"))
+      config.replace("norm-strict", "true");
+    if (config.have("encoding"))
+      RET_ON_ERR(iconv.setup(config, config.retrieve("encoding"), lang.charmap(),NormFrom));
+    else
+      RET_ON_ERR(iconv.setup(config, lang.data_encoding(), lang.charmap(), NormFrom));
 
     String base = config.retrieve("master-path");
 
@@ -688,10 +740,8 @@ namespace aspeller_default_readonly_ws {
 
     data_head.dict_name_size = 1;
     data_head.lang_name_size = strlen(lang.name()) + 1;
-    if (use_soundslike) {
-      data_head.soundslike_name_size    = strlen(lang.soundslike_name()) + 1;
-      data_head.soundslike_version_size = strlen(lang.soundslike_version()) + 1;
-    }
+    data_head.soundslike_name_size    = strlen(lang.soundslike_name()) + 1;
+    data_head.soundslike_version_size = strlen(lang.soundslike_version()) + 1;
     data_head.head_size  = sizeof(DataHead);
     data_head.head_size += data_head.dict_name_size;
     data_head.head_size += data_head.lang_name_size;
@@ -699,45 +749,52 @@ namespace aspeller_default_readonly_ws {
     data_head.head_size += data_head.soundslike_version_size;
     data_head.head_size  = round_up(data_head.head_size, DataHead::align);
 
-    data_head.affix_info = affix_compress;
+    data_head.affix_info = affix_compress ? partially_expand ? 1 : 2 : 0;
+    data_head.invisible_soundslike = invisible_soundslike;
+    data_head.soundslike_root_only = affix_compress  && !partially_expand ? 1 : 0;
 
+//#if 0
+    CERR.printl("FLAGS:  ");
+    if (full_soundslike) CERR.printl("  full soundslike");
+    if (invisible_soundslike) CERR.printl("  invisible soundslike");
+    if (data_head.soundslike_root_only) CERR.printl("  soundslike root only");
+    if (affix_compress) CERR.printl("  affix compress");
+    if (partially_expand) CERR.printl("  partially expand");
+    CERR.printl("---");
+//#endif
+    
     String temp;
-
-    // these are the final data structures
-    CharVector     data;
-    Vector<u32int> final_hash;
-    Vector<SoundslikeJump> jump1;
-    Vector<SoundslikeJump> jump2;
 
     int num_entries = 0;
     
-    StringBuffer   buf;
-    SoundslikeLt   soundslike_lt;
-    if (!use_soundslike)
-      soundslike_lt.cmp.lang = &lang;
-    SoundMap       sound_map(soundslike_lt);
-    Vector<SoundslikeList::Word> sl_list_buf;
-    int                          sl_list_buf_size = 0;
+    ObjStack buf(16*1024);
+    String sl_buf;
 
-    StackPtr<WordHash> word_hash(new WordHash);
+    WordData * first = 0;
 
     //
-    // Read in Wordlist from stdin and create initial Word Hash
+    // Read in Wordlist
     //
     {
-      word_hash->parms().hash_ .lang = &lang;
-      word_hash->parms().equal_.cmp.lang = &lang;
       const char * w0;
-      WordHash::MutableFindIterator j;
-      StackPtr<CheckList> cl(new_check_list());
+      ObjStack exp_buf;
+      WordAff * exp_list;
+      WordAff single;
+      single.next = 0;
       Vector<WordAff> af_list;
+      WordData * * prev = &first;
 
       while ( (w0 = els->next()) != 0) {
 
 	unsigned int s = strlen(w0);
 	CharVector tstr;
 	tstr.append(w0, s+1);
-	char * w = tstr.data();
+	RET_ON_ERR_SET(iconv(tstr.data(), tstr.size()), char *, w);
+        s = strlen(w);
+
+        if (s > 240)
+          return make_err(invalid_word, MsgConv(lang)(w),
+                          _("The total word length is larger than 240 characters."));
 
         char * p0 = strchr(w, '/');
 
@@ -749,341 +806,291 @@ namespace aspeller_default_readonly_ws {
 
         const char * affixes = p0;
 
-	check_if_valid(lang,w);
+	RET_ON_ERR(check_if_valid(lang,w));
 
         if (affixes && !lang.affix())
-          abort(); // FIXME return error
+          return make_err(other_error, 
+                          _("Affix flags found in word but no affix file given."));
 
-        if (!affixes || (affixes && !affix_compress)) {
-
-          // Now expand any affix compression
-          
-          if (affixes) {
-            lang.affix()->expand(w, affixes, cl);
-          } else {
-            cl->reset();
-            CheckInfo * ci = cl->gi.add();
-            ci->word = strdup(w);
-          }
-
-          // iterate through each expanded word
-          
-          for (const CheckInfo * ci = check_list_data(cl); ci; ci = ci->next)
-          {
-            const char * w = ci->word;
-            s = strlen(w);
-          
-            bool dup = false;
-            for (j =word_hash->multi_find(w); !j.at_end(); j.adv()) {
-              if (strcmp(w, j.deref()->data)==0) {
-                dup = true;
-              }
-            }
-            if (dup) continue;
-          
-            WordData * b = (WordData *)buf.alloc(s + WordData::size + 2);
-            b->total_size = s + 2;
-            b->affix_offset = s + 1;
-            memcpy(b->data, w, s+1);
-            b->data[s+1] = '\0'; // needed to keep things simple if sl data not used
-            word_hash->insert(b);
-            ++num_entries;
-          }
-
+        if (affixes && !affix_compress) {
+          exp_buf.reset();
+          exp_list = lang.affix()->expand(w, affixes, exp_buf);
+        } else if (affixes && partially_expand) {
+          // expand any affixes which will effect the first
+          // 3 letters of a word.  This is needed so that the
+          // jump tables will function correctly
+          exp_buf.reset();
+          exp_list = lang.affix()->expand(w, affixes, exp_buf, 3);
         } else {
+          single.word.str = w;
+          single.word.size = strlen(w);
+          single.aff = (const byte *)(affixes ? affixes : "");
+          exp_list = &single;
+        }
 
-          int n;
-          WordAff * p, * end;
-          WordAff wa_buf;
+        // iterate through each expanded word
+        
+        for (WordAff * p = exp_list; p; p = p->next)
+        {
+          const char * w = p->word.str;
+          s = p->word.size;
+          
+          unsigned total_size = sizeof(WordData);
+          unsigned data_size = s + 1;
+          unsigned aff_size = strlen((const char *)p->aff);
+          if (aff_size > 0) data_size += aff_size + 1;
+          total_size += data_size;
+          lang.to_soundslike(sl_buf, w);
+          const char * sl = sl_buf.str();
+          unsigned sl_size = sl_buf.size();
+          if (strcmp(sl,w) == 0) sl = w;
+          if (sl != w) total_size += sl_size + 1;
 
-          if (use_jump_tables) {
-            // expand any affixes which will effect the first
-            // 3 letters of a word.  This is needed so that the
-            // jump tables will function correctly
-            af_list.resize(strlen(affixes) * strlen(affixes) + 1);
-            n = lang.affix()->expand(w,affixes,3,af_list.data());
-            p = af_list.data();
-            end = p + n;
+          if (total_size - sizeof(WordData) > 240)
+            return make_err(invalid_word, MsgConv(lang)(w),
+                            _("The total word length, with soundslike data, is larger than 240 characters."));
+
+          WordData * b = (WordData *)buf.alloc(total_size);
+          *prev = b;
+          b->next = 0;
+          prev = &b->next;
+          
+          b->word_size = s;
+          b->sl_size = strlen(sl);
+          b->data_size = data_size;
+          b->flags = lang.get_word_info(w);
+
+          char * z = b->word;
+
+          memcpy(z, w, s + 1);
+          z += s + 1;
+
+          if (aff_size > 0) {
+            b->flags |= HAVE_AFFIX_FLAGS;
+            b->aff = z;
+            memcpy(z, p->aff, aff_size + 1);
+            z += aff_size + 1;
           } else {
-            wa_buf.word = w;
-            wa_buf.af   = affixes;
-            p = & wa_buf;
-            end = p + 1;
+            b->aff = 0;
           }
 
-          // now interate through the list and insert
-          // the words 
-          for (; p != end; ++p)
-          {
-            //CERR << p->word << '/' << p->af << '\n';
-            s = p->word.size();
-            const char * w = p->word.c_str();
-            bool dup = false;
-            for (j =word_hash->multi_find(w); !j.at_end(); j.adv()) {
-              if (strcmp(w, j.deref()->data)==0) {
-                if (!p->af.empty())
-                  CERR << "WARNING: Ignoring duplicate: " << w << '\n';
-                dup = true;
-                // FIXME: deal with duplicates properly
-              }
-            }
-            if (dup) continue;
-
-            WordData * b;
-            b = (WordData *)buf.alloc(s + WordData::size + p->af.size() + 2);
-            b->total_size = s + 1 + p->af.size() + 1;
-            b->affix_offset = s + 1;
-
-            memcpy(b->data, w, s + 1);
-            memcpy(b->data + s + 1, p->af.c_str(), p->af.size() + 1);
-
-            word_hash->insert(b);
-            ++num_entries;
+          if (sl != w) {
+            memcpy(z, sl, sl_size + 1);
+            b->sl = z;
+          } else {
+            b->sl = b->word;
           }
+
+          ++num_entries;
         }
       }
       delete els;
     }
 
-    word_hash->resize(word_hash->size()*4/5);
+    //
+    // sort WordData linked list based on (sl, word)
+    //
+
+    first = sort(first, SoundslikeLess());
 
     //
+    // duplicate check
     // 
-    //
-    if (use_soundslike) {
-
-      for (unsigned int i = 0; i != word_hash->vector().size(); ++i) {
-        
-        const WordData * value = word_hash->vector()[i];
-        
-        if (word_hash->parms().is_nonexistent(value)) continue;
-        
-        temp = lang.to_soundslike(value->data);
-        SoundMap::iterator j = sound_map.find(temp.c_str());
-        if (j == sound_map.end()) {
-          
-          SoundMap::value_type
-            to_insert(buf.alloc(temp.size()+1), SoundslikeList());
-          strncpy(const_cast<char *>(to_insert.first),
-                  temp.c_str(),
-                  temp.size() + 1);
-          sound_map.insert(to_insert)->second.size = 1;
-          
-        } else {
-          
-          if (j->second.size == 1)
-            sl_list_buf_size++;
-          
-          j->second.size++;
-          sl_list_buf_size++;
-	  
+    WordData * prev = first;
+    WordData * cur = first->next;
+    while (cur) {
+      if (strcmp(prev->word, cur->word) == 0) {
+        // merge affix info if necessary
+        if (!prev->aff && cur->aff) {
+          prev->flags |= HAVE_AFFIX_FLAGS;
+          prev->aff = cur->aff;
+          prev->data_size += strlen(prev->aff) + 1;
+        } else if (prev->aff && cur->aff) {
+          unsigned l1 = strlen(prev->aff);
+          unsigned l2 = strlen(cur->aff);
+          char * aff = (char *)buf.alloc(l1 + l2 + 1);
+          memcpy(aff, prev->aff, l1);
+          prev->aff = aff;
+          aff += l1;
+          for (const char * p = cur->aff; *p; ++p) {
+            if (memchr(prev->aff, l1, *p)) continue;
+            *aff = *p;
+            ++aff;
+          }
+          *aff = '\0';
+          prev->data_size = prev->word_size + (aff - prev->aff) + 2;
         }
-        
+        prev->next = cur->next;
+      } else {
+        prev = cur;
       }
-
-      sl_list_buf.resize(sl_list_buf_size);
-      int p = 0;
-      
-      for (unsigned int i = 0; i != word_hash->vector().size(); ++i) {
-	
-	const WordData * value = word_hash->vector()[i];
-	
-	if (word_hash->parms().is_nonexistent(value)) continue;
-
-        SoundMap::iterator j;
-        temp = lang.to_soundslike(value->data);
-        j = sound_map.find(temp.c_str());
-        assert(j != sound_map.end());
-	if (j->second.num_inserted == 0 && j->second.size != 1) {
-	  j->second.d.list = &*sl_list_buf.begin() + p;
-	  p += j->second.size;
-	} 
-	if (j->second.size == 1) {
-	  j->second.d.single.d        = value;
-	  j->second.d.single.hash_idx = i;
-	} else {
-	  j->second.d.list[j->second.num_inserted].d        = value;
-	  j->second.d.list[j->second.num_inserted].hash_idx = i;
-	}
-	++j->second.num_inserted;
-      }
-
-      data_head.soundslike_count = sound_map.size();
-      
-    } else if (use_jump_tables) {
-      
-      for (unsigned int i = 0; i != word_hash->vector().size(); ++i) {
-
-        const WordData * value = word_hash->vector()[i];
-        
-        if (word_hash->parms().is_nonexistent(value)) continue;
-
-        SoundMap::value_type to_insert(value->data, 
-                                       SoundslikeList());
-        SoundslikeList & sl = sound_map.insert(to_insert)->second;
-        sl.size = 1;
-        sl.d.single.d        = value;
-        sl.d.single.hash_idx = i;
-        sl.num_inserted      = 1;
-      }
-
+      cur = cur->next;
     }
 
-    data_head.word_count   = word_hash->size();
-    data_head.word_buckets = word_hash->bucket_count();
-
-    final_hash.insert(final_hash.begin(), 
-		      word_hash->bucket_count(), u32int_max);
-    
     //
-    // Create the data block which includes both the word and soundlike
-    //  data
+    //
     //
 
-    if (use_jump_tables) {
-
-      word_hash.del(); // the word_hash is no longer needed so free the space
-
-      SoundMap::iterator i   = sound_map.begin();
-      SoundMap::iterator end = sound_map.end();
-
-      data.write16(0); // to avoid nasty special cases
-      data.write16(0);
-      unsigned int prev_pos = data.size();
-      data.write32(0);
-      String sl;
-      String prev_sl = "";
-
-      for (; i != end; ++i) {
-
-	if (use_soundslike) {
-
-	  sl = i->first;
-          if (data.size() % 2 != 0) data.write('\0');
-	  data.write16(sl.size());
-          data.write16(0); // place holder for offset to next item
-
-	} else {
-
-	  sl.clear();
-	  to_stripped(lang, i->first, sl);
-          data.write('\0');
-          data.write('\0');
-
-	}
-
-	if (strncmp(prev_sl.c_str(), sl.c_str(), 3) != 0) {
-
-	  SoundslikeJump jump;
-	  strncpy(jump.sl, sl.c_str(), 3);
-	  jump.loc = data.size();
-	  jump2.push_back(jump);
-
-	  if (strncmp(prev_sl.c_str(), sl.c_str(), 2) != 0) {
-	    SoundslikeJump jump;
-	    strncpy(jump.sl, sl.c_str(), 2);
-	    jump.loc = jump2.size() - 1;
-	    jump1.push_back(jump);
-	  }
-
-          if (use_soundslike)
-            data.at16(prev_pos - 2) = 0;
-          else
-            data[prev_pos - 2] = 0;
-
-	} else {
-	  
-          if (use_soundslike)
-            data.at16(prev_pos - 2) = data.size() - prev_pos;
-          else
-            data[prev_pos - 2] = (unsigned char)(data.size() - prev_pos);
-
-	}
-
-	prev_pos = data.size();
-
-	// Write soundslike
-	if (use_soundslike)
-	  data << sl << '\0';
-
-	// Write words
-	{
-	  SoundslikeList::Word * k 
-	    = i->second.size == 1 ? &(i->second.d.single) : i->second.d.list;
-	  SoundslikeList::Word * end = k + i->second.size;
-          assert(use_soundslike || i->second.size == 1);
-	  for (;k != end; ++k) {
-	    final_hash[k->hash_idx] = data.size();
-
-            if (!use_soundslike) {
-              data[prev_pos - 1] = k->d->affix_offset;
-            }
-
-            data << k->d->data << '\0';
-
-            if (!use_soundslike)
-              data << k->d->affix_data() << '\0';
-	  }
-          if (use_soundslike)
-            data << '\0';
-	}
-
-	prev_sl = sl;
-      }
-
-      // add special end case
-      if (data.size() % 2 != 0) data.write('\0');
-      data.write16(0);
-      data.write16(0);
-      if (use_soundslike)
-        data.at16(prev_pos - 2) |= data.size() - prev_pos;
-      else
-        data[prev_pos - 2] |= (unsigned char)(data.size() - prev_pos);
-      data.at32(4) = 0;
-      jump2.push_back(SoundslikeJump());
-      jump1.push_back(SoundslikeJump());
+    unsigned data_size = 16;
+    WordData * p = first;
+    if (invisible_soundslike) {
+      
+      for (; p; p = p->next)
+        data_size += 3 + p->data_size;
 
     } else {
 
-      // No jump tables, just write the words in the order that
-      // they appear in the hash table.
+      while (p)
+      {
+        unsigned ds = 2 + p->sl_size + 1;
 
-      for (unsigned int i = 0; i != word_hash->vector().size(); ++i) {
+        char * prev = p->sl;
 
-        const WordData * value = word_hash->vector()[i];
-        
-        if (word_hash->parms().is_nonexistent(value)) continue;
+        do {
+          
+          ds += 3 + p->data_size;
+          p->sl = prev;
+          p = p->next;
 
-        data.write(value->total_size + 2);
-        data.write(value->affix_offset);
+        } while (p && strcmp(prev, p->sl) == 0 && ds + 3 + p->data_size < 255);
 
-        final_hash[i] = data.size();
+        data_size += ds;
 
-        data.write(value->data, value->total_size);
-        
       }
 
-      data.write(0);
-      data.write(0);
-      data.write(0);
-
     }
+
+    //
+    // Create the final data structures
+    //
+
+    CharVector     data;
+    data.reserve(data_size);
+    data.write32(0); // to avoid nasty special cases
+    unsigned int prev_pos = data.size();
+    data.write32(0);
+
+    WordLookup lookup(num_entries * 4 / 5);
+    lookup.parms().block_begin = data.begin();
+    lookup.parms().hash .lang     = &lang;
+    lookup.parms().equal.cmp.lang = &lang;
+
+    Vector<Jump> jump1;
+    Vector<Jump> jump2;
+
+    const int head_size = invisible_soundslike ? 3 : 2;
+
+    const char * prev_sl = "";
+    p = first;
+    while (p)
+    {
+      if (invisible_soundslike) {
+
+        data.write(p->flags); // flags  
+        data.write('\0'); // place holder for offset to next item
+        data.write(p->word_size);
+
+      } else {
+
+        data.write('\0'); // place holder for offset to next item
+        data.write(p->sl_size);
+
+      }
+        
+      if (strncmp(prev_sl, p->sl, 3) != 0) {
+        
+        Jump jump;
+        strncpy(jump.sl, p->sl, 3);
+        jump.loc = data.size();
+        jump2.push_back(jump);
+        
+        if (strncmp(prev_sl, p->sl, 2) != 0) {
+          Jump jump;
+          strncpy(jump.sl, p->sl, 2);
+          jump.loc = jump2.size() - 1;
+          jump1.push_back(jump);
+        }
+
+        data[prev_pos - NEXT_O] = (byte)(data.size() - prev_pos - head_size + 1);
+        // when advanced to this position the offset byte will
+        // be null (since it will point to the null terminator
+        // of the last word) and will thus signal the end of the
+        // group
+        
+      } else {
+        
+        data[prev_pos - NEXT_O] = (byte)(data.size() - prev_pos);
+        
+      }
+        
+      prev_pos = data.size();
+      prev_sl = p->sl;
+
+      if (invisible_soundslike) {
+        
+        unsigned pos = data.size();
+        data.write(p->word, p->word_size + 1);
+        if (p->aff) data.write(p->aff, p->data_size - p->word_size - 1);
+        lookup.insert(pos);
+
+        p = p->next;
+
+      } else {
+
+        data.write(p->sl, p->sl_size + 1);
+
+        // write all word entries with the same soundslike
+
+        const char * prev;
+
+        do {
+          data.write(p->flags);
+          data.write(p->data_size + 3);
+          data.write(p->word_size);
+
+          unsigned pos = data.size();
+          data.write(p->word, p->word_size + 1);
+          if (p->aff) data.write(p->aff, p->data_size - p->word_size - 1);
+          lookup.insert(pos);
+
+          prev = p->sl;
+
+          p = p->next;
+
+        } while (p && prev == p->sl); // yes I really mean to use pointer compare here
+      }
+    }
+
+    // add special end case
+    if (data.size() % 2 != 0) data.write('\0');
+    data.write16(0);
+    data.write16(0);
+    data[prev_pos - NEXT_O] |= (byte)(data.size() - prev_pos);
+    data.at32(4) = 0;
+    
+    jump2.push_back(Jump());
+    jump1.push_back(Jump());
+    
+    data.write(0);
+    data.write(0);
+    data.write(0);
+
+    data_head.word_count   = lookup.size();
+    data_head.word_buckets = lookup.bucket_count();
 
     FStream out;
     out.open(base, "wb");
 
     advance_file(out, data_head.head_size);
 
-    if (use_jump_tables) {
-      // Write jump1 table
-      data_head.jump1_offset = out.tell() - data_head.head_size;
-      out.write(jump1.data(), jump1.size() * sizeof(SoundslikeJump));
-      
-      // Write jump2 table
-      advance_file(out, round_up(out.tell(), DataHead::align));
-      data_head.jump2_offset = out.tell() - data_head.head_size;
-      out.write(jump2.data(), jump2.size() * sizeof(SoundslikeJump));
-    } 
+    // Write jump1 table
+    data_head.jump1_offset = out.tell() - data_head.head_size;
+    out.write(jump1.data(), jump1.size() * sizeof(Jump));
+    
+    // Write jump2 table
+    advance_file(out, round_up(out.tell(), DataHead::align));
+    data_head.jump2_offset = out.tell() - data_head.head_size;
+    out.write(jump2.data(), jump2.size() * sizeof(Jump));
 
     // Write data block
     advance_file(out, round_up(out.tell(), DataHead::align));
@@ -1093,7 +1100,7 @@ namespace aspeller_default_readonly_ws {
     // Write hash
     advance_file(out, round_up(out.tell(), DataHead::align));
     data_head.hash_offset = out.tell() - data_head.head_size;
-    out.write(&final_hash.front(), final_hash.size() * 4);
+    out.write(&lookup.vector().front(), lookup.vector().size() * 4);
     
     // calculate block size
     advance_file(out, round_up(out.tell(), DataHead::align));
@@ -1104,10 +1111,8 @@ namespace aspeller_default_readonly_ws {
     out.write(&data_head, sizeof(DataHead));
     out.write(" ", 1);
     out.write(lang.name(), data_head.lang_name_size);
-    if (use_soundslike) {
-      out.write(lang.soundslike_name(), data_head.soundslike_name_size);
-      out.write(lang.soundslike_version(), data_head.soundslike_version_size);
-    }
+    out.write(lang.soundslike_name(), data_head.soundslike_name_size);
+    out.write(lang.soundslike_version(), data_head.soundslike_version_size);
 
     return no_err;
   }
@@ -1115,15 +1120,15 @@ namespace aspeller_default_readonly_ws {
 }
 
 namespace aspeller {
-  PosibErr<void> create_default_readonly_word_set(StringEnumeration * els,
-                                                  Config & config)
+  PosibErr<void> create_default_readonly_dict(StringEnumeration * els,
+                                              Config & config)
   {
     CachePtr<Language> lang;
     PosibErr<Language *> res = new_language(config);
-    if (!res) return res;
+    if (res.has_err()) return res;
     lang.reset(res.data);
     lang->set_lang_defaults(config);
-    aspeller_default_readonly_ws::create(els,*lang,config);
+    RET_ON_ERR(create(els,*lang,config));
     return no_err;
   }
 }

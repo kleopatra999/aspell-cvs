@@ -1,5 +1,8 @@
 // Copyright 2000 by Kevin Atkinson under the terms of the LGPL
 
+#ifndef ASPELLER_SUGGEST__HPP
+#define ASPELLER_SUGGEST__HPP
+
 #include "word_list.hpp"
 #include "enumeration.hpp"
 #include "parm_string.hpp"
@@ -34,7 +37,8 @@ namespace aspeller {
     virtual ~Suggest() {}
   };
   
-  Suggest * new_default_suggest(SpellerImpl *);
+  PosibErr<Suggest *> new_default_suggest(SpellerImpl *);
 }
 
 
+#endif

@@ -27,11 +27,10 @@ namespace acommon {
   // an error.  Extra accepted keys can be added with the set_extra 
   // method.
 
-  // An r in the otherdata[0] value means that when merged into
-  // a config of a different type it will be renamed to
-  // <config name>_<name>
-  // A p in the other datavalue means that is is a placeholder
-  // for when a "r" is merged.  It should start with <config name>
+  // Keys taged with KEYINFO_UTF8 are expected to be in UTF-8 format.
+  // Keys with file/dir names may contain 8-bit characters and must
+  //   remain untranslated
+  // All other keys are expected to only contain ASCII characters.
 
   class Config;
 
@@ -144,12 +143,14 @@ namespace acommon {
     
     PosibErr<void> replace (ParmString, ParmString);
     PosibErr<bool> remove  (ParmString);
+
+    void replace_internal (ParmString, ParmString);
     
     void write_to_stream(OStream & out, bool include_extra = false);
 
     PosibErr<void> read_in_settings(const Config * override = 0);
 
-    PosibErr<void> read_in(IStream & in);
+    PosibErr<void> read_in(IStream & in, ParmString id = "");
     PosibErr<void> read_in_file(ParmString file);
     PosibErr<void> read_in_string(ParmString str);
 
@@ -191,6 +192,8 @@ namespace acommon {
     virtual ~KeyInfoEnumeration() {}
   };
 
+  static const int KEYINFO_MAY_CHANGE = 1 << 0;
+  static const int KEYINFO_UTF8       = 1 << 1;
 }
 
 #endif

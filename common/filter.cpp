@@ -4,6 +4,7 @@
  * LGPL license along with this library if you did not you can find it
  * at http://www.gnu.org/.                                              */
 
+
 #include "config.hpp"
 #include "filter.hpp"
 #include "speller.hpp"
@@ -11,6 +12,7 @@
 #include "copy_ptr-t.hpp"
 #include "strtonum.hpp"
 #include "errors.hpp"
+#undef HAVE_LIBDL // FIXME
 #ifdef HAVE_LIBDL
 #include <dlfcn>
 #endif

@@ -19,18 +19,8 @@
 #include <pthread.h>
 
 namespace acommon {
-/*
- * removed for better future replace and error free compiling
- *
-#ifndef __GNUC__
- */
-#define __attribute__(x)
-/*
- * removed for better future replace and error free compiling
-#endif
- */
 
-#define LOCK(l) const Lock __attribute__((__unused__)) the_lock(l)
+#define LOCK(l) const Lock the_lock(l);
 
 #ifdef USE_POSIX_MUTEX
   class Mutex {

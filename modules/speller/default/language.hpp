@@ -1,21 +1,23 @@
-// Copyright 2000 by Kevin Atkinson under the terms of the LGPL
+// Copyright 2004 by Kevin Atkinson under the terms of the LGPL
 
-#ifndef __aspeller_language__
-#define __aspeller_language__
+#ifndef ASPELLER_LANGUAGE__HPP
+#define ASPELLER_LANGUAGE__HPP
 
 #include "affix.hpp"
 #include "cache.hpp"
 #include "config.hpp"
+#include "convert.hpp"
 #include "phonetic.hpp"
 #include "posib_err.hpp"
 #include "stack_ptr.hpp"
 #include "string.hpp"
-#include "string_buffer.hpp"
+#include "objstack.hpp"
+
+#include "iostream.hpp"
 
 using namespace acommon;
 
 namespace acommon {
-  class Config;
   struct CheckInfo;
 }
 
@@ -40,44 +42,73 @@ namespace aspeller {
     }
   };
 
+  // CharInfo
+
+  typedef unsigned int CharInfo; // 6 bits
+
+  static const CharInfo LOWER  = (1 << 0);
+  static const CharInfo UPPER  = (1 << 1);
+  static const CharInfo TITLE  = (1 << 2);
+  static const CharInfo PLAIN  = (1 << 3);
+  static const CharInfo LETTER = (1 << 4);
+  static const CharInfo CLEAN  = (1 << 5);
+
+  static const CharInfo CHAR_INFO_ALL = 0x3F;
+
+  //
+
+  enum StoreAs {Stripped, Lower};
+
   class Language : public Cacheable {
   public:
-    typedef Config  CacheConfig;
-    typedef String  CacheKey;
+    typedef const Config CacheConfig;
+    typedef String       CacheKey;
 
-    enum CharType {letter, space, other};
-
+    enum CharType {Unknown, WhiteSpace, Hyphen, Digit, 
+                   NonLetter, Modifier, Letter};
+    
     struct SpecialChar {
       bool begin;
       bool middle;
       bool end;
-      bool any() const {return begin || middle || end;}
-      SpecialChar() : begin(false), middle(false), end(false) {}
-      SpecialChar(bool b, bool m, bool e) : begin(b), middle(m), end(e) {}
+      bool any;
+      SpecialChar() : begin(false), middle(false), end(false), any(false) {}
+      SpecialChar(bool b, bool m, bool e) : begin(b), middle(m), end(e),
+                                            any(b || m || e) {}
     };
 
   private:
     String   dir_;
     String   name_;
     String   charset_;
+    String   charmap_;
+    String   data_encoding_;
+
+    ConvObj  mesg_conv_;
+    ConvObj  to_utf8_;
+    ConvObj  from_utf8_;
 
     unsigned char to_uchar(char c) const {return static_cast<unsigned char>(c);}
 
     SpecialChar special_[256];
+    CharInfo      char_info_[256];
     char          to_lower_[256];
     char          to_upper_[256];
     char          to_title_[256];
     char          to_stripped_[256];
-    unsigned char to_normalized_[256];
-    char          de_accent_[256];
-    char          to_sl_[256];
+    char          to_plain_[256];
     int           to_uni_[256];
     CharType      char_type_[256];
+    char          to_clean_[256];
+    char          de_accent_[256];
 
-    int max_normalized_;
+    StoreAs       store_as_;
 
     String      soundslike_chars_;
-    String      stripped_chars_;
+    String      clean_chars_;
+
+    bool have_soundslike_;
+    bool have_repl_;
 
     StackPtr<Soundslike> soundslike_;
     StackPtr<AffixMgr>   affix_;
@@ -89,14 +120,31 @@ namespace aspeller {
     Language(const Language &);
     void operator=(const Language &);
 
+  public: // but don't use
+
+    char          sl_first_[256];
+    char          sl_rest_[256];
+
   public:
+
     Language() {}
-    PosibErr<void> setup(const String & lang, Config * config);
-    void set_lang_defaults(Config & config);
+    PosibErr<void> setup(const String & lang, const Config * config);
+    void set_lang_defaults(Config & config) const;
 
     const char * data_dir() const {return dir_.c_str();}
     const char * name() const {return name_.c_str();}
-    const char * charset() const {return charset_.c_str();}
+    const char * charmap() const {return charmap_.c_str();}
+    const char * data_encoding() const {return data_encoding_.c_str();}
+
+    const Convert * mesg_conv() const {return mesg_conv_.ptr;}
+    const Convert * to_utf8() const {return to_utf8_.ptr;}
+    const Convert * from_utf8() const {return from_utf8_.ptr;}
+
+    int to_uni(char c) const {return to_uni_[to_uchar(c)];}
+
+    //
+    // case conversion
+    //
 
     char to_upper(char c) const {return to_upper_[to_uchar(c)];}
     bool is_upper(char c) const {return to_upper(c) == c;}
@@ -107,52 +155,196 @@ namespace aspeller {
     char to_title(char c) const {return to_title_[to_uchar(c)];}
     bool is_title(char c) const {return to_title(c) == c;}
 
-    char to_stripped(char c) const {return to_stripped_[to_uchar(c)];}
-    bool is_stripped(char c) const {return to_stripped(c) == c;}
+    char * to_lower(char * res, const char * str) const {
+      while (*str) *res++ = to_lower(*str++); *res = '\0'; return res;}
+    char * to_upper(char * res, const char * str) const {
+      while (*str) *res++ = to_upper(*str++); *res = '\0'; return res;}
 
-    char to_normalized(char c) const {return to_normalized_[to_uchar(c)];}
-    unsigned char max_normalized() const {return max_normalized_;}
-    
+    void to_lower(String & res, const char * str) const {
+      res.clear(); while (*str) res += to_lower(*str++);}
+    void to_upper(String & res, const char * str) const {
+      res.clear(); while (*str) res += to_upper(*str++);}
+
+    bool is_lower(const char * str) const {
+      while (*str) {if (!is_lower(*str++)) return false;} return true;}
+    bool is_upper(const char * str) const {
+      while (*str) {if (!is_upper(*str++)) return false;} return true;}
+
+    //
+    //
+    //
+
+    char to_plain(char c) const {return to_plain_[to_uchar(c)];}
+
     char de_accent(char c) const {return de_accent_[to_uchar(c)];}
-
-    char to_sl(char c) const {return to_sl_[to_uchar(c)];}
-  
-    int to_uni(char c) const {return to_uni_[to_uchar(c)];}
-  
+    
     SpecialChar special(char c) const {return special_[to_uchar(c)];}
   
     CharType char_type(char c) const {return char_type_[to_uchar(c)];}
-    bool is_alpha(char c) const {return char_type(c) == letter;}
+    bool is_alpha(char c) const {return char_type(c) >  NonLetter;}
+
+    CharInfo char_info(char c) const {return char_info_[to_uchar(c)];}
+
+    //
+    // stripped
+    //
+
+    char to_stripped(char c) const {return to_stripped_[to_uchar(c)];}
+
+    // return a pointer to the END of the string
+    char * to_stripped(char * res, const char * str) const {
+      for (; *str; ++str) {
+        char c = to_stripped(*str);
+        if (c) *res++ = c;
+      }
+      *res = '\0';
+      return res;
+    }
+    void to_stripped(String & res, const char * str) const {
+      res.clear();
+      for (; *str; ++str) {
+        char c = to_stripped(*str);
+        if (c) res += c;
+      }
+    }
+
+    bool is_stripped(char c) const {return to_stripped(c) == c;}
+
+    bool is_stripped(const char * str) const {
+      while (*str) {if (!is_stripped(*str++)) return false;} return true;}
+
+    //
+    // Clean
+    //
+    // The "clean" form is how words are indixed in the dictionary.
+    // It will at very least convert the word to lower case.  It may
+    // also strip accents and non-letters.
+    //
+
+    char to_clean(char c) const {return to_clean_[to_uchar(c)];}
+
+    char * to_clean(char * res, const char * str) const {
+      for (; *str; ++str) {
+        char c = to_clean(*str);
+        if (c) *res++ = c;
+      }
+      *res = '\0';
+      return res;
+    }
+    void to_clean(String & res, const char * str) const {
+      res.clear();
+      for (; *str; ++str) {
+        char c = to_clean(*str);
+        if (c) res += c;
+      }
+    }
+
+    bool is_clean(char c) const {return to_clean(c) == c;}
+
+    bool is_clean(const char * str) const {
+      while (*str) {if (!is_clean(*str++)) return false;} return true;}
+
+    bool is_clean_wi(WordInfo wi) const {
+      return false;
+      //return wi & CASE_PATTEN == AllLower && 
+    }
+
+
+    const char * clean_chars() const {return clean_chars_.c_str();}
+
+    //
+    // Soundslike
+    // 
   
-    String to_soundslike(ParmString word) const {
-      return soundslike_->to_soundslike(word);
-    }
+    bool have_soundslike() const {return have_soundslike_;}
+    
+    const char * soundslike_name() const {return soundslike_->name();}
+    const char * soundslike_version() const {return soundslike_->version();}
 
-    const char * soundslike_name() const {
-      return soundslike_->name();
-    }
-
-    const char * soundslike_version() const {
-      return soundslike_->version();
+    void to_soundslike(String & res, ParmString word) const {
+      res.resize(word.size());
+      char * e = soundslike_->to_soundslike(res.data(), word.str(), word.size());
+      res.resize(e - res.data());
     }
     
-    const char * soundslike_chars() const {return soundslike_chars_.c_str();}
-    const char * stripped_chars() const {return stripped_chars_.c_str();}
+    // returns a pointer to the END of the string
+    char * to_soundslike(char * res, const char * str, int len = -1) const { 
+      return soundslike_->to_soundslike(res,str,len);
+    }
 
-    bool have_soundslike() const {return soundslike_;}
+    char * to_soundslike(char * res, const char * str, int len, WordInfo wi) const {
+      if (!have_soundslike_ && (wi & ALL_CLEAN)) return 0;
+      else return soundslike_->to_soundslike(res,str,len);
+    }
+
+    const char * soundslike_chars() const {return soundslike_chars_.c_str();}
+
+    //
+    // Affix compression methods
+    //
 
     const AffixMgr * affix() const {return affix_;}
 
+    bool have_affix() const {return affix_;}
+
+    void munch(ParmString word, CheckList * cl) const {affix_->munch(word, cl);}
+
+    WordAff * expand(ParmString word, ParmString aff, 
+                     ObjStack & buf, int limit = INT_MAX) const {
+      return affix_->expand(word, aff, buf, limit);
+    }
+
+    //
+    // Repl
+    //
+
+    bool have_repl() const {return have_repl_;}
+
     SuggestReplEnumeration * repl() const {
       return new SuggestReplEnumeration(repls_.pbegin(), repls_.pend());}
+    
+    //
+    //
+    //
 
-    static inline PosibErr<Language *> get_new(const String & lang, Config * config) {
+    WordInfo get_word_info(ParmString str) const;
+    
+    //
+    // fix_case
+    //
+
+    CasePattern case_pattern(ParmString str) const;
+
+    void fix_case(CasePattern case_pattern, char * str)
+    {
+      if (!str[0]) return;
+      if (case_pattern == AllUpper) to_upper(str,str);
+      else if (case_pattern == FirstUpper) *str = to_title(*str);
+    }
+    void fix_case(CasePattern case_pattern, 
+                  char * res, const char * str) const;
+    const char * fix_case(CasePattern case_pattern, 
+                          const char * str, String & buf) const;
+
+    //
+    // for cache
+    //
+
+    static inline PosibErr<Language *> get_new(const String & lang, const Config * config) {
       StackPtr<Language> l(new Language());
       RET_ON_ERR(l->setup(lang, config));
       return l.release();
     }
 
     bool cache_key_eq(const String & l) const  {return name_ == l;}
+  };
+
+  typedef Language LangImpl;
+
+  struct MsgConv : public ConvP
+  {
+    MsgConv(const Language * l) : ConvP(l->mesg_conv()) {}
+    MsgConv(const Language & l) : ConvP(l.mesg_conv()) {}
   };
 
   struct InsensitiveCompare {
@@ -162,19 +354,14 @@ namespace aspeller {
     operator bool () const {return lang;}
     int operator() (const char * a, const char * b) const
     { 
-      if (lang->special(*a).begin) ++a;
-      if (lang->special(*b).begin) ++b;
-      while (*a != '\0' && *b != '\0' 
-	     && lang->to_stripped(*a) == lang->to_stripped(*b)) 
+      char x,y;
+      for (;;)
       {
-	++a, ++b;
-	if (lang->special(*a).middle) ++a;
-	if (lang->special(*b).middle) ++b;
+        while (x = lang->to_clean(*a++), !x);
+        while (y = lang->to_clean(*b++), !y);
+        if (x == 0x10 || y == 0x10 || x != y) break;
       }
-      if (lang->special(*a).end) ++a;
-      if (lang->special(*b).end) ++b;
-      return static_cast<unsigned char>(lang->to_stripped(*a)) 
-	- static_cast<unsigned char>(lang->to_stripped(*b));
+      return static_cast<unsigned char>(x) - static_cast<unsigned char>(y);
     }
   };
 
@@ -198,11 +385,9 @@ namespace aspeller {
     {
       size_t h = 0;
       for (;;) {
-	if (lang->special(*s).any()) ++s;
 	if (*s == 0) break;
-	if (lang->char_type(*s) == Language::letter)
-	  h=5*h + lang->to_stripped(*s);
-	++s;
+        unsigned char c = lang->to_clean(*s++);
+	if (c) h=5*h + c;
       }
       return h;
     }
@@ -212,138 +397,23 @@ namespace aspeller {
     const Language * lang;
     bool case_insensitive;
     bool ignore_accents;
-    bool strip_accents;
     SensitiveCompare(const Language * l = 0) 
       : lang(l), case_insensitive(false)
-      , ignore_accents(false), strip_accents(false) {}
+      , ignore_accents(false) {}
     bool operator() (const char * word, const char * inlist) const;
-    // Pre:
-    //   word == to_find as given by Language::InsensitiveEqual 
-    //   both word and inlist contain at least one letter as given by
-    //     lang->char_type
-    // Rules:
-    //   if begin inlist is a begin char then it must match begin word
-    //   if end   inlist is a end   char then it must match end word
-    //   chop all begin/end chars from the begin/end of word and inlist
-    //  unless ignore_accents
-    //   accents must match
-    //  unless case_insensitive
-    //   (note: there are 3 posssible casings lower, upper and title)
-    //   if is lower begin inlist then begin word can be any casing
-    //   if not                   then begin word must be the same case
-    //   if word is all upper than casing of inlist can be anything
-    //   otherwise the casing of tail begin and tail inlist must match
   };
-
-  struct ConvertWord {
-    const Language * lang;
-    bool strip_accents;
-    ConvertWord(const Language * l = 0)
-      : lang(l), strip_accents(false) {}
-    void convert(ParmString in, String & out) const
-    {
-      if (!strip_accents) {
-	out += in;
-      } else {
-	for (unsigned int i = 0; i != in.size(); ++i)
-	  out += lang->de_accent(in[i]);
-      }
-    }
-  };
-
-  inline String to_lower(const Language & l, ParmString word) 
-  {
-    String new_word; 
-    for (const char * i = word; *i; ++i) 
-      new_word += l.to_lower(*i); 
-    return new_word;
-  }
-  
-  inline bool is_lower(const Language & l, ParmString word)
-  {
-    for (const char * i = word; *i; ++i) 
-      if (!l.is_lower(*i))
-	return false;
-    return true;
-  }
-
-  template <class Str>
-  inline void to_stripped(const Language & l, ParmString word, Str & new_word)
-  {
-    for (const char * i = word; *i; ++i) {
-      if (l.special(*i).any()) ++i;
-      new_word.push_back(l.to_stripped(*i));
-    }
-  }
-
-  inline String to_stripped(const Language & l, ParmString word) 
-  {
-    String new_word;
-    to_stripped(l, word, new_word);
-    return new_word;
-  }
-
-  inline bool is_stripped(const Language & l, ParmString word)
-  {
-    for (const char * i = word; *i; ++i) 
-      if (!l.is_stripped(*i))
-	return false;
-    return true;
-  }
-  
-  inline String to_upper(const Language & l, ParmString word) 
-  {
-    String new_word; 
-    for (const char * i = word; *i; ++i) 
-      new_word += l.to_upper(*i); 
-    return new_word;
-  }
-  
-  inline bool is_upper(const Language & l, ParmString word)
-  {
-    for (const char * i = word; *i; ++i) 
-      if (!l.is_upper(*i))
-	return false;
-    return true;
-  }
-  
-  enum CasePattern {Other, FirstUpper, AllUpper};
-
-  inline CasePattern case_pattern(const Language & l, ParmString word) 
-  {
-    if (is_upper(l,word))
-      return AllUpper;
-    else if (!l.is_lower(word[0]))
-      return FirstUpper;
-    else
-      return Other;
-  }
-
-  inline String fix_case(const Language & l, 
-			 CasePattern case_pattern,
-			 ParmString word)
-  {
-    if (word.empty()) return word;
-    if (case_pattern == AllUpper) {
-      return to_upper(l,word);
-    } else if (case_pattern == FirstUpper) {
-      String new_word;
-      if (l.is_lower(word[0]))
-	new_word += l.to_title(word[0]);
-      else
-	new_word += word[0];
-      new_word.append(word + 1);
-      return new_word;
-    } else {
-      return word;
-    }
-  }
 
   String get_stripped_chars(const Language & l);
+
+  String get_clean_chars(const Language & l);
   
   PosibErr<void> check_if_valid(const Language & l, ParmString word);
 
-  PosibErr<Language *> new_language(Config &, ParmString lang = 0);
+  bool find_language(Config & c);
+
+  PosibErr<Language *> new_language(const Config &, ParmString lang = 0);
+
+  PosibErr<void> open_affix_file(const Config &, FStream & o);
   
 }
 

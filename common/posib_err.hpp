@@ -10,6 +10,8 @@
 #include "string.hpp"
 #include "error.hpp"
 
+#include "errors.hpp"
+
 namespace acommon {
 
   // PosibErr<type> is a special Error handling device that will make
@@ -34,9 +36,15 @@ namespace acommon {
   private:
     struct ErrPtr {
       const Error * err;
+#ifndef NDEBUG
       bool handled;
+#endif
       int refcount;
-      ErrPtr(const Error * e) : err(e), handled(false), refcount(1) {}
+      ErrPtr(const Error * e) : err(e), 
+#ifndef NDEBUG
+                                handled(false), 
+#endif
+                                refcount(1) {}
     };
     ErrPtr * err_;
   public:
@@ -62,14 +70,18 @@ namespace acommon {
 	return release();
     }
     void ignore_err() {
+#ifndef NDEBUG
       if (err_ != 0)
 	err_->handled = true;
+#endif
     }
     const Error * get_err() const {
       if (err_ == 0) {
 	return 0;
       } else {
+#ifndef NDEBUG
 	err_->handled = true;
+#endif
 	return err_->err;
       }
     }
@@ -87,7 +99,9 @@ namespace acommon {
 	return false;
       } else {
 	if (err_->err->is_a(e)) {
+#ifndef NDEBUG
 	  err_->handled = true;
+#endif
 	  return true;
 	} else {
 	  return false;
@@ -102,7 +116,7 @@ namespace acommon {
     }
 
     // This should only be called _after_ set is called
-    PosibErrBase & with_file(ParmString fn);
+    PosibErrBase & with_file(ParmString fn, int lineno = 0);
     
     PosibErrBase & set(const ErrorInfo *, 
 		       ParmString, ParmString, ParmString, ParmString);
@@ -111,8 +125,10 @@ namespace acommon {
   protected:
 
     void posib_handle_err() const {
+#ifndef NDEBUG
       if (err_ && !err_->handled)
 	handle_err();
+#endif
     }
 
     void copy(const PosibErrBase & other) {
@@ -125,15 +141,19 @@ namespace acommon {
       if (err_ == 0) return;
       -- err_->refcount;
       if (err_->refcount == 0) {
+#ifndef NDEBUG
 	if (!err_->handled)
 	  handle_err();
+#endif
 	del();
       }
     }
 
   private:
 
+#ifndef NDEBUG
     void handle_err() const;
+#endif
     Error * release();
     void del();
   };
@@ -193,6 +213,7 @@ namespace acommon {
 				      ParmString p1 = 0, ParmString p2 = 0,
 				      ParmString p3 = 0, ParmString p4 = 0)
   {
+    if (inf == cant_extend_options) abort();
     return PosibErrBase().prim_err(inf, p1, p2, p3, p4);
   }
 
@@ -201,21 +222,26 @@ namespace acommon {
   //
   //
   //
-
+#ifndef __SUNPRO_CC
   inline String::String(const PosibErr<String> & other)
-    : std::string(other.data) {}
-
+  {
+    assign_only(other.data.data(), other.data.size());
+  }
+#endif
   inline String & String::operator= (const PosibErr<const char *> & s)
   {
-    std::string::operator=(s.data);
+    *this = s.data;
     return *this;
   }
 
-  //inline String & String::operator= (const PosibErr<String> & s)
-  //{
-  //  std::string::operator=(s.data);
-  //  return *this;
-  //}
+  inline bool operator== (const PosibErr<String> & x, const char * y)
+  {
+    return x.data == y;
+  }
+  inline bool operator!= (const PosibErr<String> & x, const char * y)
+  {
+    return x.data != y;
+  }
 
   inline ParmString::ParmString(const PosibErr<const char *> & s)
     : str_(s.data) {}

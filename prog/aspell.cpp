@@ -17,11 +17,10 @@
 #include <deque>
 #include <ctype.h>
 #include "settings.h"
-#include <stdio.h>
-#define DEBUG {fprintf(stderr,"File: %s(%i)\n",__FILE__,__LINE__);}
 
 #ifdef USE_LOCALE
 # include <locale.h>
+# include <langinfo.h>
 #endif
 
 #include "aspell.h"
@@ -29,9 +28,17 @@
 #include <sys/types.h>
 #include <regex.h>
 
+#ifdef USE_FILE_INO
+# include <sys/types.h>
+# include <sys/stat.h>
+# include <unistd.h>
+# include <fcntl.h>
+#endif
+
 #include "asc_ctype.hpp"
 #include "check_funs.hpp"
 #include "config.hpp"
+#include "convert.hpp"
 #include "document_checker.hpp"
 #include "enumeration.hpp"
 #include "errors.hpp"
@@ -52,6 +59,8 @@
 
 using namespace acommon;
 
+using aspeller::Conv;
+
 // action functions declarations
 
 void print_ver();
@@ -59,11 +68,12 @@ void print_help();
 void expand_expression(Config * config);
 void config();
 
-void check(bool interactive);
+void check();
 void pipe();
+void convt();
+void normlz();
 void filter();
-//FIXME removed as conflicts with std::list
-//      did me add this ???? void list();
+void list();
 void dicts();
 
 void master();
@@ -72,19 +82,19 @@ void repl();
 void soundslike();
 void munch();
 void expand();
+void combine();
+void dump_affix();
 
 void print_error(ParmString msg)
 {
-  fputs(_("Error: "), stderr);
-  fputs(msg, stderr);
-  fputs("\n", stderr);
+  CERR.printf(_("Error: %s\n"), msg.str());
 }
 
 void print_error(ParmString msg, ParmString str)
 {
-  fputs(_("Error: "), stderr);
-  fprintf(stderr, msg.str(), str.str());
-  fputs("\n", stderr);
+  CERR.put(_("Error: "));
+  CERR.printf(msg.str(), str.str());
+  CERR.put('\n');
 }
 
 #define EXIT_ON_ERR(command) \
@@ -93,7 +103,7 @@ void print_error(ParmString msg, ParmString str)
   } while(false)
 #define EXIT_ON_ERR_SET(command, type, var)\
   type var;\
-  do{PosibErr<type> pe(command);\
+  do{PosibErr< type > pe(command);\
   if(pe.has_err()){print_error(pe.get_err()->mesg); exit(1);}\
   else {var=pe.data;}\
   } while(false)
@@ -103,7 +113,7 @@ void print_error(ParmString msg, ParmString str)
   } while(false)
 #define BREAK_ON_ERR_SET(command, type, var)\
   type var;\
-  do{PosibErr<type> pe(command);\
+  do{PosibErr< type > pe(command);\
   if(pe.has_err()){print_error(pe.get_err()->mesg); break;}\
   else {var=pe.data;}\
   } while(false)
@@ -150,10 +160,13 @@ const PossibleOption possible_options[] = {
   COMMAND("config",    '\0', 0),
   COMMAND("check",     'c', 0),
   COMMAND("pipe",      'a', 0),
+  COMMAND("conv",      '\0', 2),
+  COMMAND("norm",      '\0', 1),
   COMMAND("filter",    '\0', 0),
   COMMAND("soundslike",'\0', 0),
   COMMAND("munch",     '\0', 0),
   COMMAND("expand",    '\0', 0),
+  COMMAND("combine",   '\0', 0),
   COMMAND("list",      'l', 0),
   COMMAND("dicts",     '\0', 0),
 
@@ -218,10 +231,6 @@ int main (int argc, const char *argv[])
 #ifdef USE_LOCALE
   setlocale (LC_ALL, "");
 #endif
-#ifdef ENABLE_NLS
-  bindtextdomain (PACKAGE, LOCALEDIR);
-  textdomain (PACKAGE);
-#endif
 
   EXIT_ON_ERR(intialize_filter_modes(options));
   EXIT_ON_ERR(options->read_in_settings());
@@ -231,6 +240,8 @@ int main (int argc, const char *argv[])
   int i = 1;
   const PossibleOption * o;
   const char           * parm;
+
+  Vector<StringPair> utf8_opts;
 
   //
   // process command line options by setting the appropriate options
@@ -246,8 +257,8 @@ int main (int argc, const char *argv[])
 	while(*c != '=' && *c != '\0') ++c;
 	o = find_option(argv[i] + 2, c);
 	if (o == possible_options_end) {
-	  option_name.assign(argv[i] + 2, 0, c - argv[i] - 2);
-	  const char * base_name = Config::base_name(option_name.c_str());
+	  option_name.assign(argv[i] + 2, c - argv[i] - 2);
+	  const char * base_name = Config::base_name(option_name);
 	  PosibErr<const KeyInfo *> ki = options->keyinfo(base_name);
           if (!ki.has_err(unknown_key)) {
             other_opt.name    = option_name.c_str();
@@ -263,13 +274,11 @@ int main (int argc, const char *argv[])
 	while (j != mode_abrvs_end && j->abrv != argv[i][1]) ++j;
 	if (j == mode_abrvs_end) {
 	  o = find_option(argv[i][1]);
-	  if (argv[i][1] == 'v' && argv[i][2] == 'v') {
+	  if (argv[i][1] == 'v' && argv[i][2] == 'v')
 	    // Hack for -vv
 	    parm = argv[i] + 3;
-          }
-	  else {
+	  else
 	    parm = argv[i] + 2;
-          }
 	} else {
 	  other_opt.name = "mode";
 	  other_opt.num_arg = 1;
@@ -306,7 +315,10 @@ int main (int argc, const char *argv[])
 	  args.push_back(parm);
       } else {
 	if (o->name[0] != '\0') {
-	  EXIT_ON_ERR(options->replace(o->name, parm));
+          if (options->keyinfo(Config::base_name(o->name)).data->flags & KEYINFO_UTF8)
+            utf8_opts.push_back(StringPair(strdup(o->name), strdup(parm)));
+          else
+            EXIT_ON_ERR(options->replace(o->name, parm));
 	}
       }
     } else {
@@ -319,6 +331,31 @@ int main (int argc, const char *argv[])
     print_error(_("You must specify an action"));
     return 1;
   }
+
+  const char * codeset = 0;
+#ifdef HAVE_LANGINFO_CODESET
+  codeset = nl_langinfo(CODESET);
+  if (is_ascii_enc(codeset)) codeset = 0;
+#endif
+  if (!utf8_opts.empty()) {
+    Conv to_utf8;
+#ifdef USE_LOCALE
+    EXIT_ON_ERR(to_utf8.setup(*options, codeset, "utf-8", NormTo));
+#endif
+    for (Vector<StringPair>::iterator i = utf8_opts.begin(); 
+         i != utf8_opts.end();
+         ++i)
+    {
+      EXIT_ON_ERR(options->replace(i->first, to_utf8(i->second)));
+      free((char *)i->first);
+      free((char *)i->second);
+    }
+    utf8_opts.clear();
+  }
+// #ifdef USE_LOCALE
+//   if (!options->have("encoding") && codeset)
+//     EXIT_ON_ERR(options->replace("encoding", codeset));
+// #endif
 
   //
   // perform the requested action
@@ -334,11 +371,15 @@ int main (int argc, const char *argv[])
   else if (action_str == "dicts")
     dicts();
   else if (action_str == "check")
-    check(true);
+    check();
   else if (action_str == "pipe")
     pipe();
   else if (action_str == "list")
-    check(false);
+    list();
+  else if (action_str == "conv")
+    convt();
+  else if (action_str == "norm")
+    normlz();
   else if (action_str == "filter")
     filter();
   else if (action_str == "soundslike")
@@ -347,6 +388,8 @@ int main (int argc, const char *argv[])
     munch();
   else if (action_str == "expand")
     expand();
+  else if (action_str == "combine")
+    combine();
   else if (action_str == "dump")
     action = do_dump;
   else if (action_str == "create")
@@ -375,6 +418,8 @@ int main (int argc, const char *argv[])
       personal();
     else if (what_str == "repl")
       repl();
+    else if (what_str == "affix")
+      dump_affix();
     else {
       print_error(_("Unknown Action: %s"),
 		  String(action_str + " " + what_str));
@@ -385,11 +430,44 @@ int main (int argc, const char *argv[])
   return 0;
 }
 
+
 /////////////////////////////////////////////////////////
 //
 // Action Functions
 //
 //
+
+  
+static Convert * setup_conv(const aspeller::Language * lang,
+                                      Config * config)
+{
+  if (config->retrieve("encoding") != "none") {
+    PosibErr<Convert *> pe = new_convert_if_needed(*config,
+                                                   lang->charmap(),
+                                                   config->retrieve("encoding"),
+                                                   NormTo);
+    if (pe.has_err()) {print_error(pe.get_err()->mesg); exit(1);}
+    return pe.data;
+  } else {
+    return 0;
+  }
+}
+ 
+static Convert * setup_conv(Config * config,
+                            const aspeller::Language * lang)
+{
+  if (config->retrieve("encoding") != "none") {
+    PosibErr<Convert *> pe = new_convert_if_needed(*config,
+                                                   config->retrieve("encoding"),
+                                                   lang->charmap(),
+                                                   NormFrom);
+    if (pe.has_err()) {print_error(pe.get_err()->mesg); exit(1);}
+    return pe.data;
+  } else {
+    return 0;
+  }
+}
+
 
 ///////////////////////////
 //
@@ -484,13 +562,13 @@ void print_elements(const AspellWordList * wl) {
     line += ", ";
   }
   line.resize(line.size() - 2);
-  COUT << count << ": " << line << "\n";
+  COUT.printf("%u: %s\n", count, line.c_str());
 }
 
 void status_fun(void * d, Token, int correct)
 {
   if (*static_cast<bool *>(d) && correct)
-    COUT << "*\n";
+    COUT.put("*\n");
 }
 
 DocumentChecker * new_checker(AspellSpeller * speller, 
@@ -529,7 +607,13 @@ void pipe()
     exit(1);
   }
   AspellSpeller * speller = to_aspell_speller(ret);
-  Config * config = reinterpret_cast<Speller *>(speller)->config();
+  aspeller::SpellerImpl * real_speller = reinterpret_cast<aspeller::SpellerImpl *>(speller);
+  Config * config = real_speller->config();
+  Conv iconv(setup_conv(config, &real_speller->lang()));
+  Conv oconv(setup_conv(&real_speller->lang(), config));
+  MBLen mb_len;
+  if (!config->retrieve_bool("byte-offsets")) 
+    mb_len.setup(*config, config->retrieve("encoding"));
   if (do_time)
     COUT << _("Time to load word list: ")
          << (clock() - start)/(double)CLOCKS_PER_SEC << "\n";
@@ -539,6 +623,7 @@ void pipe()
   const char * w;
   CharVector buf;
   char * line;
+  char * line0;
   char * word;
   char * word2;
   int    ignore;
@@ -568,7 +653,7 @@ void pipe()
       word = trim_wspace(line + 1);
       aspell_speller_add_to_personal
 	(speller, 
-	 reinterpret_cast<Speller *>(speller)->to_lower(word), -1);
+	 real_speller->to_lower(word), -1);
       BREAK_ON_SPELLER_ERR;
       break;
     case '@':
@@ -585,13 +670,13 @@ void pipe()
       err = config->replace("mode", word);
       if (err.get_err())
 	config->replace("mode", "tex");
-      reload_filters(reinterpret_cast<Speller *>(speller));
+      reload_filters(real_speller);
       checker.del();
       checker = new_checker(speller, print_star);
       break;
     case '-':
       config->remove("filter");
-      reload_filters(reinterpret_cast<Speller *>(speller));
+      reload_filters(real_speller);
       checker.del();
       checker = new_checker(speller, print_star);
       break;
@@ -623,11 +708,15 @@ void pipe()
 	      BREAK_ON_ERR(err = config->replace(word, word2));
             if (strcmp(word,"suggest") == 0)
               suggest = config->retrieve_bool("suggest");
+            else if (strcmp(word,"time") == 0)
+              do_time = config->retrieve_bool("time");
+            else if (strcmp(word,"guess") == 0)
+              include_guesses = config->retrieve_bool("guess");
 	    break;
 	  case 'r':
 	    word = trim_wspace(line + 4);
-	    BREAK_ON_ERR_SET(config->retrieve(word), 
-			     PosibErr<String>, ret);
+	    BREAK_ON_ERR_SET(config->retrieve(word), String, ret);
+            COUT.printl(ret);
 	    break;
 	  }
 	  break;
@@ -642,7 +731,7 @@ void pipe()
 	  }
 	  break;
 	case 'l':
-	  COUT << config->retrieve("lang") << "\n";
+	  COUT.printl(config->retrieve("lang"));
 	  break;
 	}
 	break;
@@ -652,26 +741,30 @@ void pipe()
     case '^':
       ignore = 1;
     default:
+      line0 = line;
       line += ignore;
       checker->process(line, strlen(line));
       while (Token token = checker->next_misspelling()) {
 	word = line + token.offset;
 	word[token.len] = '\0';
+        const char * cword = iconv(word);
         String guesses, guess;
-        const CheckInfo * ci = reinterpret_cast<Speller *>(speller)->check_info();
+        const CheckInfo * ci = real_speller->check_info();
         aspeller::CasePattern casep 
-          = aspeller::case_pattern(reinterpret_cast<aspeller::SpellerImpl *>
-                                   (speller)->lang(), word);
+          = real_speller->lang().case_pattern(cword);
         while (ci) {
           guess.clear();
-          if (ci->pre_add && ci->pre_add[0])      guess << ci->pre_add << "+";
-          guess << ci->word;
-          if (ci->pre_strip && ci->pre_strip[0]) guess << "-" << ci->pre_strip;
-          if (ci->suf_strip && ci->suf_strip[0]) guess << "-" << ci->suf_strip;
-          if (ci->suf_add   && ci->suf_add[0])   guess << "+" << ci->suf_add;
-          guesses << ", " 
-                  << aspeller::fix_case(reinterpret_cast<aspeller::SpellerImpl * >(speller)->lang(),
-                                        casep, guess);
+          if (ci->pre_add && ci->pre_add[0])
+            guess.append(ci->pre_add, ci->pre_add_len).append('+');
+          guess.append(ci->word);
+          if (ci->pre_strip_len > 0) 
+            guess.append('-').append(ci->word.str(), ci->pre_strip_len);
+          if (ci->suf_strip_len > 0) 
+            guess.append('-').append(ci->word.str() - ci->suf_strip_len, ci->suf_strip_len);
+          if (ci->suf_add && ci->suf_add[0])
+            guess.append('+').append(ci->suf_add, ci->suf_add_len);
+          real_speller->lang().fix_case(casep, guess.data(), guess.data());
+          guesses << ", " << oconv(guess.str());
           ci = ci->next;
         }
 	start = clock();
@@ -679,12 +772,11 @@ void pipe()
         if (suggest) 
           suggestions = aspell_speller_suggest(speller, word, -1);
 	finish = clock();
+        unsigned offset = mb_len(line0, token.offset + ignore);
 	if (suggestions && !aspell_word_list_empty(suggestions)) 
         {
-	  COUT << "& " << word 
-	       << " " << aspell_word_list_size(suggestions) 
-	       << " " << token.offset + ignore
-	       << ":";
+          COUT.printf("& %s %u %u:", word, 
+                      aspell_word_list_size(suggestions), offset);
 	  AspellStringEnumeration * els 
 	    = aspell_word_list_elements(suggestions);
 	  if (options->retrieve_bool("reverse")) {
@@ -694,37 +786,33 @@ void pipe()
 	      sugs.push_back(w);
 	    Vector<String>::reverse_iterator i = sugs.rbegin();
 	    while (true) {
-	      COUT << " " << *i;
+              COUT.printf(" %s", i->c_str());
 	      ++i;
 	      if (i == sugs.rend()) break;
-	      COUT << ",";
+              COUT.put(',');
 	    }
 	  } else {
 	    while ( ( w = aspell_string_enumeration_next(els)) != 0) {
-	      COUT << " " << w;
-	      if (!aspell_string_enumeration_at_end(els))
-		COUT << ",";
+              COUT.printf(" %s%s", w, 
+                          aspell_string_enumeration_at_end(els) ? "" : ",");
 	    }
 	  }
 	  delete_aspell_string_enumeration(els);
           if (include_guesses)
-            COUT << guesses;
-	  COUT << "\n";
+            COUT.put(guesses);
+	  COUT.put('\n');
 	} else {
           if (guesses.empty())
-            COUT << "# " << word << " " 
-                 << token.offset + ignore
-                 << "\n";
+            COUT.printf("# %s %u\n", word, offset);
           else
-            COUT << "? " << word << " 0 " 
-                 << token.offset + ignore
-                 << ": " << guesses.c_str() + 2;
+            COUT.printf("? %s 0 %u: %s", word, offset,
+                        guesses.c_str() + 2);
 	}
 	if (do_time)
-          COUT << _("Suggestion Time: ")
-               << (finish-start)/(double)CLOCKS_PER_SEC << "\n";
+          COUT.printf(_("Suggestion Time: %f\n"), 
+                      (finish-start)/(double)CLOCKS_PER_SEC);
       }
-      COUT << "\n";
+      COUT.put('\n');
     }
     if (c == EOF) break;
   }
@@ -752,51 +840,56 @@ struct Mapping {
 
 void abort_check();
 
-void check(bool interactive)
+void check()
 {
   String file_name;
   String new_name;
   FILE * in = 0;
   FILE * out = 0;
   Mapping mapping;
+  bool changed = false;
 
-  if (interactive) {
-    if (args.size() == 0) {
-      print_error(_("You must specify a file name."));
-      exit(-1);
-    }
+  if (args.size() == 0) {
+    print_error(_("You must specify a file name."));
+    exit(-1);
+  }
     
-    file_name = args[0];
-    new_name = file_name;
-    new_name += ".new";
+  file_name = args[0];
+  new_name = file_name;
+  new_name += ".new";
 
-    in = fopen(file_name.c_str(), "r");
-    if (!in) {
-      print_error(_("Could not open the file \"%s\" for reading"), file_name);
-      exit(-1);
-    }
+  in = fopen(file_name.c_str(), "r");
+  if (!in) {
+    print_error(_("Could not open the file \"%s\" for reading"), file_name);
+    exit(-1);
+  }
     
-    out = fopen(new_name.c_str(), "w");
-    if (!out) {
-      print_error(_("Could not open the file \"%s\"  for writing. File not saved."), file_name);
-      exit(-1);
-    }
+#ifdef USE_FILE_INO
+  {
+    struct stat st;
+    fstat(fileno(in), &st);
+    int fd = open(new_name.c_str(), O_WRONLY | O_CREAT | O_TRUNC, st.st_mode);
+    if (fd >= 0) out = fdopen(fd, "w");
+  }
+#else
+  out = fopen(new_name.c_str(), "w");
+#endif
+  if (!out) {
+    print_error(_("Could not open the file \"%s\"  for writing. File not saved."), file_name);
+    exit(-1);
+  }
 
-    if (!options->have("mode"))
-      set_mode_from_extension(options, file_name);
+  if (!options->have("mode"))
+    set_mode_from_extension(options, file_name);
     
-    String m = options->retrieve("keymapping");
-    if (m == "aspell")
-      mapping.to_aspell();
-    else if (m == "ispell")
-      mapping.to_ispell();
-    else {
-      print_error(_("Invalid keymapping: %s"), m);
-      exit(-1);
-    }
-
-  } else {
-    in = stdin;
+  String m = options->retrieve("keymapping");
+  if (m == "aspell")
+    mapping.to_aspell();
+  else if (m == "ispell")
+    mapping.to_ispell();
+  else {
+    print_error(_("Invalid keymapping: %s"), m);
+    exit(-1);
   }
 
   AspellCanHaveError * ret 
@@ -821,128 +914,119 @@ void check(bool interactive)
   menu_choices->push_back(Choice(mapping[Abort],      _("Abort")));
   menu_choices->push_back(Choice(mapping[Exit],       _("Exit")));
 
-  String new_word;
+  String word0, new_word;
   Vector<String> sug_con;
   StackPtr<StringMap> replace_list(new_string_map());
   const char * w;
 
-  if (interactive)
-    begin_check();
+  begin_check();
 
   while (state->next_misspelling()) {
 
-    CharVector word0;
     char * word = state->get_word(word0);
 
-    if (interactive) {
+    //
+    // check if it is in the replace list
+    //
 
-      //
-      // check if it is in the replace list
-      //
+    if ((w = replace_list->lookup(word)) != 0) {
+      state->replace(w);
+      continue;
+    }
 
-      if ((w = replace_list->lookup(word)) != 0) {
-	state->replace(w);
-	continue;
-      }
+    //
+    // print the line with the misspelled word highlighted;
+    //
 
-      //
-      // print the line with the misspelled word highlighted;
-      //
+    display_misspelled_word();
 
-      display_misspelled_word();
+    //
+    // print the suggestions and menu choices
+    //
 
-      //
-      // print the suggestions and menu choices
-      //
+    const AspellWordList * suggestions = aspell_speller_suggest(speller, word, -1);
+    AspellStringEnumeration * els = aspell_word_list_elements(suggestions);
+    sug_con.resize(0);
+    while (sug_con.size() != 10 
+           && (w = aspell_string_enumeration_next(els)) != 0)
+      sug_con.push_back(w);
+    delete_aspell_string_enumeration(els);
 
-      const AspellWordList * suggestions = aspell_speller_suggest(speller, 
-								  word, -1);
-      AspellStringEnumeration * els = aspell_word_list_elements(suggestions);
-      sug_con.resize(0);
-      while (sug_con.size() != 10 
-	     && (w = aspell_string_enumeration_next(els)) != 0)
-	sug_con.push_back(w);
-      delete_aspell_string_enumeration(els);
+    // disable suspend
+    unsigned int suggestions_size = sug_con.size();
+    unsigned int suggestions_mid = suggestions_size / 2;
+    if (suggestions_size % 2) suggestions_mid++; // if odd
+    word_choices->resize(0);
+    for (unsigned int j = 0; j != suggestions_mid; ++j) {
+      word_choices->push_back(Choice('0' + j+1, sug_con[j]));
+      if (j + suggestions_mid != suggestions_size) 
+        word_choices
+          ->push_back(Choice(j+suggestions_mid+1 == 10 
+                             ? '0' 
+                             : '0' + j+suggestions_mid+1,
+                             sug_con[j+suggestions_mid]));
+    }
+    //enable suspend
+    display_menu();
 
-      // disable suspend
-      unsigned int suggestions_size = sug_con.size();
-      unsigned int suggestions_mid = suggestions_size / 2;
-      if (suggestions_size % 2) suggestions_mid++; // if odd
-      word_choices->resize(0);
-      for (unsigned int j = 0; j != suggestions_mid; ++j) {
-	word_choices->push_back(Choice('0' + j+1, sug_con[j]));
-	if (j + suggestions_mid != suggestions_size) 
-	  word_choices
-	    ->push_back(Choice(j+suggestions_mid+1 == 10 
-			       ? '0' 
-			       : '0' + j+suggestions_mid+1,
-			       sug_con[j+suggestions_mid]));
-      }
-      //enable suspend
-      display_menu();
+  choice_prompt:
 
-    choice_prompt:
+    prompt("? ");
 
-      prompt("? ");
+  choice_loop:
 
-    choice_loop:
+    //
+    // Handle the users choice
+    //
 
-      //
-      // Handle the users choice
-      //
-
-      int choice;
-      get_choice(choice);
+    int choice;
+    get_choice(choice);
       
-      if (choice == '0') choice = '9' + 1;
+    if (choice == '0') choice = '9' + 1;
     
-      switch (mapping[choice]) {
-      case Exit:
-	goto exit_loop;
-      case Abort:
-	prompt(_("Are you sure you want to abort? "));
-	get_choice(choice);
-	if (choice == 'y' || choice == 'Y')
-	  goto abort_loop;
-	goto choice_prompt;
-      case Ignore:
-	break;
-      case IgnoreAll:
-	aspell_speller_add_to_session(speller, word, -1);
-	break;
-      case Add:
-	aspell_speller_add_to_personal(speller, word, -1);
-	break;
-      case AddLower:
-	aspell_speller_add_to_personal
-	  (speller, 
-	   reinterpret_cast<Speller *>(speller)->to_lower(word), -1);
-	break;
-      case Replace:
-      case ReplaceAll:
-	prompt(_("With: "));
-	get_line(new_word);
-	if (new_word.size() == 0)
-	  goto choice_prompt;
-	if (new_word[0] >= '1' && new_word[0] < (char)suggestions_size + '1')
-	  new_word = sug_con[new_word[0]-'1'];
-	state->replace(new_word);
-	if (mapping[choice] == ReplaceAll)
-	  replace_list->replace(word, new_word);
-	break;
-      default:
-	if (choice >= '1' && choice < (char)suggestions_size + '1') { 
-	  state->replace(sug_con[choice-'1']);
-	} else {
-	  error(_("Sorry that is an invalid choice!"));
-	  goto choice_loop;
-	}
+    switch (mapping[choice]) {
+    case Exit:
+      goto exit_loop;
+    case Abort:
+      prompt(_("Are you sure you want to abort? "));
+      get_choice(choice);
+      if (choice == 'y' || choice == 'Y')
+        goto abort_loop;
+      goto choice_prompt;
+    case Ignore:
+      break;
+    case IgnoreAll:
+      aspell_speller_add_to_session(speller, word, -1);
+      break;
+    case Add:
+      aspell_speller_add_to_personal(speller, word, -1);
+      break;
+    case AddLower:
+      aspell_speller_add_to_personal
+        (speller, 
+         reinterpret_cast<Speller *>(speller)->to_lower(word), -1);
+      break;
+    case Replace:
+    case ReplaceAll:
+      prompt(_("With: "));
+      get_line(new_word);
+      if (new_word.size() == 0)
+        goto choice_prompt;
+      if (new_word[0] >= '1' && new_word[0] < (char)suggestions_size + '1')
+        new_word = sug_con[new_word[0]-'1'];
+      state->replace(new_word);
+      changed = true;
+      if (mapping[choice] == ReplaceAll)
+        replace_list->replace(word, new_word);
+      break;
+    default:
+      if (choice >= '1' && choice < (char)suggestions_size + '1') { 
+        state->replace(sug_con[choice-'1']);
+        changed = true;
+      } else {
+        error(_("Sorry that is an invalid choice!"));
+        goto choice_loop;
       }
-
-    } else { // !interactive
-      
-      COUT << word << "\n";
-      
     }
   }
 exit_loop:
@@ -950,13 +1034,22 @@ exit_loop:
     aspell_speller_save_all_word_lists(speller);
     state.del(); // to close the file handles
     delete_aspell_speller(speller);
-    
-    bool keep_backup = options->retrieve_bool("backup");
-    String backup_name = file_name;
-    backup_name += ".bak";
-    if (keep_backup)
-      rename_file(file_name, backup_name);
-    rename_file(new_name, file_name);
+
+    if (changed) {
+
+      bool keep_backup = options->retrieve_bool("backup");
+      if (keep_backup) {
+        String backup_name = file_name;
+        backup_name += ".bak";
+        rename_file(file_name, backup_name);
+      }
+      rename_file(new_name, file_name);
+
+    } else {
+
+      remove_file(new_name);
+
+    }
     
     //end_check();
     
@@ -1050,6 +1143,101 @@ void Mapping::to_ispell()
 
 ///////////////////////////
 //
+// list
+//
+
+void list()
+{
+  AspellCanHaveError * ret 
+    = new_aspell_speller(reinterpret_cast<AspellConfig *>(options.get()));
+  if (aspell_error(ret)) {
+    print_error(aspell_error_message(ret));
+    exit(1);
+  }
+  AspellSpeller * speller = to_aspell_speller(ret);
+
+  state = new CheckerString(speller,stdin,0,64);
+
+  String word;
+ 
+  while (state->next_misspelling()) {
+
+    state->get_word(word);
+    COUT.printl(word);
+
+  }
+  
+  state.del(); // to close the file handles
+  delete_aspell_speller(speller);
+}
+
+///////////////////////////
+//
+// convt
+//
+
+void convt()
+{
+  Conv conv;
+  String buf1, buf2;
+  const char * from = fix_encoding_str(args[0], buf1);
+  const char * to   = fix_encoding_str(args[1], buf2);
+  Normalize norm = NormNone;
+  if (strcmp(from, "utf-8") == 0 && strcmp(to, "utf-8") != 0)
+    norm = NormFrom;
+  else if (strcmp(from, "utf-8") != 0 && strcmp(to, "utf-8") == 0)
+    norm = NormTo;
+  if (args.size() > 2) {
+    for (String::iterator i = args[2].begin(); i != args[2].end(); ++i)
+      *i = asc_tolower(*i);
+    options->replace("normalize", "true");
+    if (args[2] == "none")
+      options->replace("normalize", "false");
+    else if (args[2] == "internal")
+      options->replace("norm-strict", "false");
+    else if (args[2] == "strict")
+      options->replace("norm-strict", "true");
+    else
+      EXIT_ON_ERR(options->replace("norm-form", args[2]));
+  }
+  EXIT_ON_ERR(conv.setup(*options, args[0], args[1], norm));
+  String line;
+  while (CIN.getline(line))
+    COUT.printl(conv(line));
+}
+
+void normlz()
+{
+  options->replace("normalize", "true");
+  const char * from = args.size() < 3 ? "utf-8" : args[0].str();
+  const char * to   = args.size() < 3 ? "utf-8" : args[2].str();
+  const char * intr = args.size() < 3 ? args[0].str() : args[1].str();
+  String * form = (args.size() == 2   ? &args[1] 
+                   : args.size() == 4 ? &args[3]
+                   : 0);
+  Normalize decode_norm = NormTo;
+  if (form) {
+    for (String::iterator i = form->begin(); i != form->end(); ++i)
+      *i = asc_tolower(*i);
+    if (*form == "internal") {
+      options->replace("norm-strict", "false");
+      decode_norm = NormNone;
+    } else if (*form == "strict") {
+      options->replace("norm-strict", "true");
+      decode_norm = NormNone;
+    }
+    if (decode_norm == NormTo) EXIT_ON_ERR(options->replace("norm-form", *form));
+  }
+  Conv encode,decode;
+  EXIT_ON_ERR(encode.setup(*options, from, intr, NormFrom));
+  EXIT_ON_ERR(decode.setup(*options, intr, to, decode_norm));
+  String line;
+  while (CIN.getline(line))
+    COUT.printl(decode(encode(line)));
+}
+
+///////////////////////////
+//
 // filter
 //
 
@@ -1068,8 +1256,8 @@ void filter()
 //
 
 void print_ver () {
-  COUT << "@(#) International Ispell Version 3.1.20 " 
-       << "(but really Aspell " << VERSION << ")" << "\n";
+  COUT.put("@(#) International Ispell Version 3.1.20 " 
+           "(but really Aspell " VERSION ")\n");
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -1095,34 +1283,34 @@ public:
     *this = *static_cast<const IstreamVirEnumeration *>(other);
   }
   Value next() {
-    *in >> data;
-    if (!*in) return 0;
+    if (!in->getline(data)) return 0;
     else return data.c_str();
   }
   bool at_end() const {return *in;}
 };
 
-void dump (aspeller::LocalWordSet lws) 
+void dump (aspeller::LocalDict lws, Convert * conv) 
 {
   using namespace aspeller;
 
-  switch (lws.word_set->basic_type) {
-  case DataSet::basic_word_set:
+  switch (lws.dict->basic_type) {
+  case Dict::basic_dict:
     {
-      BasicWordSet * ws = static_cast<BasicWordSet *>(lws.word_set);
+      Dictionary * ws = static_cast<Dictionary *>(lws.dict);
       StackPtr<WordEntryEnumeration> els(ws->detailed_elements());
       WordEntry * wi;
-      while (wi = els->next(), wi)
-	wi->write(COUT,*(ws->lang()), lws.local_info.convert) << "\n";
+      while (wi = els->next(), wi) {
+        wi->write(COUT,*ws->lang(), conv);
+        COUT << '\n';
+      }
     }
     break;
-  case DataSet::basic_multi_set:
+  case Dict::multi_dict:
     {
-      StackPtr<BasicMultiSet::Enum> els 
-	(static_cast<BasicMultiSet *>(lws.word_set)->detailed_elements());
-      LocalWordSet ws;
+      StackPtr<DictsEnumeration> els(lws.dict->dictionaries());
+      const LocalDict * ws;
       while (ws = els->next(), ws) 
-	dump (ws);
+	dump (*ws, conv);
     }
     break;
   default:
@@ -1142,7 +1330,8 @@ void master () {
 
   if (action == do_create) {
     
-    EXIT_ON_ERR(create_default_readonly_word_set
+    find_language(*config);
+    EXIT_ON_ERR(create_default_readonly_dict
                 (new IstreamVirEnumeration(CIN),
                  *config));
 
@@ -1153,14 +1342,10 @@ void master () {
     
   } else if (action == do_dump) {
 
-    EXIT_ON_ERR_SET(add_data_set(config->retrieve("master-path"), 
-                                 *config),
-                    LoadableDataSet *, mas);
-    LocalWordSetInfo wsi;
-    wsi.set(mas->lang(), config);
-    dump(LocalWordSet(mas,wsi));
-    delete mas;
-    
+    LocalDict d;
+    EXIT_ON_ERR(add_data_set(config->retrieve("master-path"), *config, d));
+    StackPtr<Convert> conv(setup_conv(d.dict->lang(), config));
+    dump(d, conv);
   }
 }
 
@@ -1173,7 +1358,7 @@ void personal () {
   using namespace aspeller;
 
   if (args.size() != 0) {
-    EXIT_ON_ERR(options->replace("personal", args[0].c_str()));
+    EXIT_ON_ERR(options->replace("personal", args[0]));
   }
   options->replace("module", "aspeller");
   if (action == do_create || action == do_merge) {
@@ -1202,18 +1387,21 @@ void personal () {
 
   } else { // action == do_dump
 
+    // FIXME: This is currently broken
+
     StackPtr<Config> config(new_basic_config());
     EXIT_ON_ERR(config->read_in_settings(options));
-
-    WritableWordSet * per = new_default_writable_word_set();
-    per->load(config->retrieve("personal-path"), config);
+    Dictionary * per = new_default_writable_dict();
+    per->load(config->retrieve("personal-path"), *config);
     StackPtr<WordEntryEnumeration> els(per->detailed_elements());
-    LocalWordSetInfo wsi;
-    wsi.set(per->lang(), config);
+    LocalDictInfo wsi;
+    wsi.set(per->lang(), *config);
+    StackPtr<Convert> conv(setup_conv(per->lang(), config));
+
     WordEntry * wi;
     while (wi = els->next(), wi) {
-      wi->write(COUT,*(per->lang()), wsi.convert);
-      COUT << "\n";
+      wi->write(COUT,*(per->lang()), conv);
+      COUT.put('\n');
     }
     delete per;
   }
@@ -1265,19 +1453,22 @@ void repl() {
 
   } else if (action == do_dump) {
 
+    // FIXME: This is currently broken
+
     StackPtr<Config> config(new_basic_config());
     EXIT_ON_ERR(config->read_in_settings());
 
-     WritableReplacementSet * repl = new_default_writable_replacement_set();
-     repl->load(config->retrieve("repl-path"), config);
+     ReplacementDict * repl = new_default_replacement_dict();
+     repl->load(config->retrieve("repl-path"), *config);
      StackPtr<WordEntryEnumeration> els(repl->detailed_elements());
  
      WordEntry * rl = 0;
      WordEntry words;
+     Conv conv(setup_conv(repl->lang(), config));
      while ((rl = els->next())) {
        repl->repl_lookup(*rl, words);
        do {
-         COUT << rl->word << ": " << words.word << "\n";
+         COUT << conv(rl->word) << ": " << conv(words.word) << "\n";
        } while (words.adv());
      }
      delete repl;
@@ -1292,13 +1483,19 @@ void repl() {
 void soundslike() {
   using namespace aspeller;
   CachePtr<Language> lang;
+  find_language(*options);
   PosibErr<Language *> res = new_language(*options);
   if (!res) {print_error(res.get_err()->mesg); exit(1);}
   lang.reset(res.data);
+  Conv iconv(setup_conv(options, lang));
+  Conv oconv(setup_conv(lang, options));
   String word;
-  while (CIN >> word) {
-    COUT << word << '\t' << lang->to_soundslike(word) << "\n";
-  } 
+  String sl;
+  while (CIN.getline(word)) {
+    const char * w = iconv(word);
+    lang->LangImpl::to_soundslike(sl, w);
+    printf("%s\t%s\n", word.str(), oconv(sl));
+  }
 }
 
 //////////////////////////
@@ -1310,19 +1507,22 @@ void munch()
 {
   using namespace aspeller;
   CachePtr<Language> lang;
+  find_language(*options);
   PosibErr<Language *> res = new_language(*options);
   if (!res) {print_error(res.get_err()->mesg); exit(1);}
   lang.reset(res.data);
+  Conv iconv(setup_conv(options, lang));
+  Conv oconv(setup_conv(lang, options));
   String word;
   CheckList * cl = new_check_list();
-  while (CIN >> word) {
-    lang->affix()->munch(word, cl);
+  while (CIN.getline(word)) {
+    lang->munch(iconv(word), cl);
     COUT << word;
     for (const aspeller::CheckInfo * ci = check_list_data(cl); ci; ci = ci->next)
     {
-      COUT << ' ' << ci->word << '/';
-      if (ci->pre_flag != 0) COUT << static_cast<char>(ci->pre_flag);
-      if (ci->suf_flag != 0) COUT << static_cast<char>(ci->suf_flag);
+      COUT << ' ' << oconv(ci->word) << '/';
+      if (ci->pre_flag != 0) COUT << oconv(static_cast<char>(ci->pre_flag));
+      if (ci->suf_flag != 0) COUT << oconv(static_cast<char>(ci->suf_flag));
     }
     COUT << '\n';
   }
@@ -1337,41 +1537,156 @@ void munch()
 void expand() 
 {
   int level = 1;
-  if (args.size() != 0)
-    level = atoi(args[0].c_str());
+  if (args.size() > 0)
+    level = atoi(args[0].c_str()); //FIXME: More verbose
+  int limit = INT_MAX;
+  if (args.size() > 1)
+    limit = atoi(args[1].c_str());
   
   using namespace aspeller;
   CachePtr<Language> lang;
+  find_language(*options);
   PosibErr<Language *> res = new_language(*options);
   if (!res) {print_error(res.get_err()->mesg); exit(1);}
   lang.reset(res.data);
-  String word;
-  CheckList * cl = new_check_list();
-  while (CIN >> word) {
-    CharVector buf; buf.append(word.c_str(), word.size() + 1);
-    char * w = buf.data();
+  Conv iconv(setup_conv(options, lang));
+  Conv oconv(setup_conv(lang, options));
+  String word, buf;
+  ObjStack exp_buf;
+  WordAff * exp_list;
+  while (CIN.getline(word)) {
+    buf = word;
+    char * w = iconv(buf.mstr(), buf.size());
     char * af = strchr(w, '/');
-    af[0] = '\0';
-    lang->affix()->expand(ParmString(w, af-w), ParmString(af + 1), cl);
-    const aspeller::CheckInfo * ci = check_list_data(cl);
+    size_t s;
+    if (af != 0) {
+      s = af - w;
+      *af++ = '\0';
+    } else {
+      s = strlen(w);
+      af = w + s;
+    }
+    exp_buf.reset();
+    exp_list = lang->expand(w, af, exp_buf, limit);
     if (level <= 2) {
       if (level == 2) 
         COUT << word << ' ';
-      while (ci) {
-        COUT << ci->word;
-        ci = ci->next;
-        if (ci) COUT << ' ';
+      WordAff * p = exp_list;
+      while (p) {
+        COUT << oconv(p->word);
+        if (p->aff[0]) COUT << '/' << oconv((const char *)p->aff);
+        p = p->next;
+        if (p) COUT << ' ';
       }
       COUT << '\n';
     } else if (level >= 3) {
-      while (ci) {
-        COUT << word << ' ' << ci->word << '\n';
-        ci = ci->next;
+      double ratio = 0;
+      if (level >= 4) {
+        for (WordAff * p = exp_list; p; p = p->next)
+          ratio += p->word.size;
+        ratio /= exp_list->word.size; // it is assumed the first
+                                      // expansion is just the root
+      }
+      for (WordAff * p = exp_list; p; p = p->next) {
+        COUT << word << ' ' << oconv(p->word);
+        if (p->aff[0]) COUT << '/' << oconv((const char *)p->aff);
+        if (level >= 4) COUT.printf(" %f\n", ratio);
+        else COUT << '\n';
       }
     }
   }
-  delete_check_list(cl);
 }
+
+//////////////////////////
+//
+// combine
+//
+
+static void combine_aff(String & aff, const char * app)
+{
+  for (; *app; ++app) {
+    if (!memchr(aff.c_str(),*app,aff.size()))
+      aff.push_back(*app);
+  }
+}
+
+static void print_wordaff(const String & base, const String & affs, Conv & oconv)
+{
+  if (base.empty()) return;
+  COUT << oconv(base);
+  if (affs.empty())
+    COUT << '\n';
+  else
+    COUT.printf("/%s\n", oconv(affs));
+}
+
+static bool lower_equal(aspeller::Language * l, ParmString a, ParmString b)
+{
+  if (a.size() != b.size()) return false;
+  if (l->to_lower(a[0]) != l->to_lower(b[0])) return false;
+  return memcmp(a + 1, b + 1, a.size() - 1) == 0;
+}
+
+void combine() 
+{
+  using namespace aspeller;
+  CachePtr<Language> lang;
+  find_language(*options);
+  PosibErr<Language *> res = new_language(*options);
+  if (!res) {print_error(res.get_err()->mesg); exit(1);}
+  lang.reset(res.data);
+  Conv iconv(setup_conv(options, lang));
+  Conv oconv(setup_conv(lang, options));
+  String word;
+  String base;
+  String affs;
+  while (CIN.getline(word)) {
+    word = iconv(word);
+
+    CharVector buf; buf.append(word.c_str(), word.size() + 1);
+    char * w = buf.data();
+    char * af = strchr(w, '/');
+    size_t s;
+    if (af != 0) {
+      s = af - w;
+      *af++ = '\0';
+    } else {
+      s = strlen(w);
+      af = w + s;
+    }
+
+    if (lower_equal(lang, base, w)) {
+      if (lang->is_lower(base.str())) {
+        combine_aff(affs, af);
+      } else {
+        base = w;
+        combine_aff(affs, af);
+      }
+    } else {
+      print_wordaff(base, affs, oconv);
+      base = w;
+      affs = af;
+    }
+
+  }
+  print_wordaff(base, affs, oconv);
+}
+
+//////////////////////////
+//
+// dump affix
+//
+
+void dump_affix()
+{
+  FStream in;
+  EXIT_ON_ERR(aspeller::open_affix_file(*options, in));
+  
+  String line;
+  while (in.getline(line))
+    COUT << line << '\n';
+}
+
 
 
 ///////////////////////////////////////////////////////////////////////
@@ -1404,7 +1719,7 @@ void print_help_line(char abrv, char dont_abrv, const char * name,
     command += "=<str>";
   if (type == KeyInfoInt)
     command += "=<int>";
-  const char * tdesc = gettext(desc);
+  const char * tdesc = _(desc);
   printf("  %-27s %s\n", command.c_str(), tdesc); // FIXME: consider word wrapping
 }
 
@@ -1434,32 +1749,30 @@ void expand_expression(Config * config){
       return;
     }
     while (filterpath.expand_file_part(&seekfor,candidate)) {
-      if (((locate_ending=candidate.rfind("-filter.so")) !=
-           candidate.length() - 10)) {
+
+      if (!candidate.suffix("-filter.so")) continue;
+
+      candidate.pop_back(10);
+      eliminate_path=0;
+      while ((hold_eliminator=candidate.find('/',eliminate_path)) < 
+             candidate.size() && hold_eliminator >= 0) {
+        eliminate_path=hold_eliminator+1;
+      }
+      if (!candidate.prefix("lib",eliminate_path)) {
         continue;
       }
-      else {
-        candidate.erase(locate_ending,10);
-        eliminate_path=0;
-        while ( (hold_eliminator=candidate.find('/',eliminate_path)) < 
-                candidate.length() && hold_eliminator >= 0 ) {
-          eliminate_path=hold_eliminator+1;
-        }
-        if (candidate.find("lib",eliminate_path) != eliminate_path) {
-          continue;
-        }
-        candidate.erase(0,eliminate_path);
-        candidate.erase(0,3);
-        locate_ending=candidate.length();
-        toload=candidate;
-        if (regexec(&seekfor,toload.c_str(),0,NULL,0)) {
-          continue;
-        }
-        candidate+="-filter.opt";
-        if (!optionpath.expand_filename(candidate)) {
-          continue;
-        }
+      candidate.erase(0,eliminate_path);
+      candidate.erase(0,3);
+      locate_ending=candidate.size();
+      toload=candidate;
+      if (regexec(&seekfor,toload.c_str(),0,NULL,0)) {
+        continue;
       }
+      candidate+="-filter.opt";
+      if (!optionpath.expand_filename(candidate)) {
+        continue;
+      }
+      
       config->replace("add-filter",toload.c_str());
     }
     regfree(&seekfor);
@@ -1490,7 +1803,7 @@ void print_help () {
     "  dump|create|merge master|personal|repl [word list]\n"
     "    dumps, creates or merges a master, personal, or replacement word list.\n"
     "\n"
-    "  <expr>           regular expression matching filtername(s) or `all'\n"
+    "  <expr>           regular expression matching filtername(s) or \"all\"\n"
     "\n"
     "[options] is any of the following:\n"
     "\n"), VERSION);
@@ -1498,15 +1811,11 @@ void print_help () {
   const KeyInfo * k;
   while (k = els->next(), k) {
     if (k->desc == 0) continue;
-//FIXME obsolete code as module description resides now in ConfigModule Remove comment
-//    if (k->type == KeyInfoDescript && !strncmp(k->name,"filter-",7)) {
-    
     if (els->active_filter_module_changed()) {
       printf(_("\n"
                "  %s filter: %s\n"
-               "    NOTE: in ambiguous case prefix following options by `filter-'\n"),
-               els->active_filter_module_name(),els->active_filter_module_desc());
-//      continue;
+               "    NOTE: in ambiguous case prefix following options by \"filter-\"\n"),
+             els->active_filter_module_name(),els->active_filter_module_desc());
     }
     const PossibleOption * o = find_option(k->name);
     const char * name = k->name;

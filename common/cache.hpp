@@ -1,7 +1,6 @@
-#ifndef __ACOMMON_CACHE__
-#define __ACOMMON_CACHE__
+#ifndef ACOMMON_CACHE__HPP
+#define ACOMMON_CACHE__HPP
 
-#include "string.hpp"
 #include "posib_err.hpp"
 
 namespace acommon {
@@ -13,23 +12,31 @@ template <class Data>
 PosibErr<Data *> get_cache_data(GlobalCache<Data> *, 
                                 typename Data::CacheConfig *, 
                                 const typename Data::CacheKey &);
+template <class Data>
+PosibErr<Data *> get_cache_data(GlobalCache<Data> *, 
+                                typename Data::CacheConfig *, 
+                                typename Data::CacheConfig2 *, 
+                                const typename Data::CacheKey &);
 
-template <class Data>
-void release_cache_data(GlobalCache<Data> *, const Data *);
-template <class Data>
-static inline void release_cache_data(GlobalCache<const Data> * c, const Data * d)
+class Cacheable;
+void release_cache_data(GlobalCacheBase *, const Cacheable *);
+static inline void release_cache_data(const GlobalCacheBase * c, const Cacheable * d)
 {
-  release_cache_data((GlobalCache<Data> *)c,d);
+  release_cache_data(const_cast<GlobalCacheBase *>(c),d);
 }
 
 class Cacheable
 {
 public: // but don't use
   Cacheable * next;
+  Cacheable * * prev;
   mutable int refcount;
-  void * cache;
+  GlobalCacheBase * cache;
+  bool attached() {return prev;}
   void copy() const;
-  Cacheable() : next(0), refcount(0), cache(0) {}
+  void release() const {release_cache_data(cache,this);}
+  Cacheable(GlobalCacheBase * c = 0) : next(0), prev(0), refcount(1), cache(c) {}
+  virtual ~Cacheable() {}
 };
 
 template <class Data>
@@ -39,8 +46,7 @@ class CachePtr
 
 public:
   void reset(Data * p) {
-    if (ptr)
-      release_cache_data(static_cast<GlobalCache<Data> *>(ptr->cache), ptr);
+    if (ptr) ptr->release();
     ptr = p;
   }
   void copy(Data * p) {p->copy(); reset(p);}
@@ -55,13 +61,20 @@ public:
   CachePtr(const CachePtr & other) {ptr = other.ptr; ptr->copy();}
   void operator=(const CachePtr & other) {copy(other.ptr);}
   ~CachePtr() {reset(0);}
-
-  void setup(GlobalCache<Data> * cache, 
-             typename Data::CacheConfig * config, 
-             const typename Data::CacheKey & key) {
-    reset(get_cache_data(cache, config, key));
-  }
 };
+
+template <class Data>
+PosibErr<void> setup(CachePtr<Data> & res,
+                     GlobalCache<Data> * cache, 
+                     typename Data::CacheConfig * config, 
+                     const typename Data::CacheKey & key) {
+  PosibErr<Data *> pe = get_cache_data(cache, config, key);
+  if (pe.has_err()) return pe;
+  res.reset(pe.data);
+  return no_err;
+}
+
+bool reset_cache(const char * = 0);
 
 }
 

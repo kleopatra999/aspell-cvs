@@ -1,82 +1,52 @@
-#ifndef __ACOMMON_CACHE_T__
-#define __ACOMMON_CACHE_T__
+#ifndef ACOMMON_CACHE_T__HPP
+#define ACOMMON_CACHE_T__HPP
 
-#define NDEBUG
-
-#include <assert.h>
-#include <vector>
-
-#include "string.hpp"
 #include "lock.hpp"
 #include "cache.hpp"
 
-#include "iostream.hpp"
+//#include "iostream.hpp"
 
 namespace acommon {
 
 class GlobalCacheBase
 {
-public: // but don't use
+public:
   mutable Mutex lock;
+public: // but don't use
+  const char * name;
+  GlobalCacheBase * next;
+  GlobalCacheBase * * prev;
+protected:
+  Cacheable * first;
+  void del(Cacheable * d);
+  void add(Cacheable * n);
+  GlobalCacheBase(const char * n);
+  ~GlobalCacheBase();
+public:
+  void release(Cacheable * d);
+  void detach(Cacheable * d);
+  void detach_all();
 };
 
-template <class Data>
+template <class D>
 class GlobalCache : public GlobalCacheBase
 {
 public:
-  typedef typename Data::CacheKey    Key;
-  typedef typename Data::CacheConfig Config;
-private:
-  class List
-  {
-    Data * first;
-  public:
-    List() : first(0) {}
-    Data * find(const Key & id) {
-      Data * cur = first;
-      while (cur && !cur->cache_key_eq(id))
-        cur = static_cast<Data *>(cur->next);
-      return cur;
-    }
-    void add(Data * node) {
-      node->next = first;
-      first = node;
-    }
-    void del(Data * d) {
-      assert(d->refcount == 0);
-      Cacheable * * cur = (Cacheable * *)(&first);
-      while (*cur && *cur != d) cur = &((*cur)->next);
-      assert(*cur);
-      *cur = (*cur)->next;
-    }
-  };
-  List list;
+  typedef D Data;
+  typedef typename Data::CacheKey Key;
 public:
-  PosibErr<Data *> get(const Key & key, Config * config) {
-    LOCK(&lock);
-    //CERR << "Getting " << key << "\n";
-    Data * n = list.find(key);
-    if (n) {/*CERR << "FOUND IN CACHE\n";*/ goto ret;}
-    { PosibErr<Data *> res = Data::get_new(key, config);
-      if (!res) {/*CERR << "ERROR\n";*/ return res;}
-      n = res.data;}
-    list.add(n);
-    n->cache = this;
-    //CERR << "LOADED FROM DISK\n";
-  ret:
-    n->refcount++;
-    return n;
+  GlobalCache(const char * n) : GlobalCacheBase(n) {}
+  // "find" and "add" will _not_ acquire a lock
+  Data * find(const Key & key) {
+    D * cur = static_cast<D *>(first);
+    while (cur && !cur->cache_key_eq(key))
+      cur = static_cast<D *>(cur->next);
+    return cur;
   }
-  void release(Data * d) {
-    //CERR << "RELEASE\n";
-    LOCK(&lock);
-    d->refcount--;
-    assert(d->refcount >= 0);
-    if (d->refcount != 0) return;
-    //CERR << "DEL\n";
-    list.del(d);
-    delete d;
-  }
+  void add(Data * n) {GlobalCacheBase::add(n);}
+  // "release" and "detach" _will_ acquire a lock
+  void release(Data * d) {GlobalCacheBase::release(d);}
+  void detach(Data * d) {GlobalCacheBase::detach(d);}
 };
 
 template <class Data>
@@ -84,13 +54,46 @@ PosibErr<Data *> get_cache_data(GlobalCache<Data> * cache,
                                 typename Data::CacheConfig * config, 
                                 const typename Data::CacheKey & key)
 {
-  return cache->get(key, config);
+  LOCK(&cache->lock);
+  Data * n = cache->find(key);
+  //CERR << "Getting " << key << "\n";
+  if (n) {
+    n->refcount++;
+    return n;
+  }
+  PosibErr<Data *> res = Data::get_new(key, config);
+  if (res.has_err()) {
+    //CERR << "ERROR\n"; 
+    return res;
+  }
+  n = res.data;
+  cache->add(n);
+  //CERR << "LOADED FROM DISK\n";
+  return n;
 }
 
 template <class Data>
-void release_cache_data(GlobalCache<Data> * cache, const Data * d)
+PosibErr<Data *> get_cache_data(GlobalCache<Data> * cache, 
+                                typename Data::CacheConfig * config, 
+                                typename Data::CacheConfig2 * config2,
+                                const typename Data::CacheKey & key)
 {
-  cache->release(const_cast<Data *>(d));
+  LOCK(&cache->lock);
+  Data * n = cache->find(key);
+  //CERR << "Getting " << key << "\n";
+  if (n) {
+    n->refcount++;
+    return n;
+  }
+  PosibErr<Data *> res = Data::get_new(key, config, config2);
+  if (res.has_err()) {
+    //CERR << "ERROR\n"; 
+    return res;
+  }
+  n = res.data;
+  cache->add(n);
+  //CERR << "LOADED FROM DISK\n";
+  return n;
 }
 
 }

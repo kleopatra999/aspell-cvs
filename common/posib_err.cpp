@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <assert.h>
 
+#include "iostream.hpp"
+
 #include "settings.h" // needed for NLS support
 
 #include "posib_err.hpp"
@@ -16,7 +18,7 @@ namespace acommon {
 
   String & String::operator= (const PosibErr<String> & s)
   {
-    std::string::operator=(s.data);
+    operator=(s.data);
     return *this;
   }
 
@@ -31,7 +33,7 @@ namespace acommon {
 				   ParmString p1, ParmString p2, 
 				   ParmString p3, ParmString p4)
   {
-    const char * s0 = inf->mesg ? gettext(inf->mesg) : "";
+    const char * s0 = inf->mesg ? _(inf->mesg) : "";
     const char * s;
     ParmString p[4] = {p1,p2,p3,p4};
     StrSize m[10];
@@ -60,7 +62,7 @@ namespace acommon {
     unsigned int size = 0;
     for (i = 0; m[i].str != 0; ++i)
       size += m[i].size;
-    char * str = new char[size + 1];
+    char * str = (char *)malloc(size + 1);
     s0 = str;
     for (i = 0; m[i].str != 0; str+=m[i].size, ++i)
       strncpy(str, m[i].str, m[i].size);
@@ -72,34 +74,33 @@ namespace acommon {
     return *this;
   }
 
-  PosibErrBase & PosibErrBase::with_file(ParmString fn)
+  PosibErrBase & PosibErrBase::with_file(ParmString fn, int line_num)
   {
     assert(err_ != 0);
     assert(err_->refcount == 1);
     char * m = const_cast<char *>(err_->err->mesg);
-    const char * mesg = gettext (m);
-    unsigned int orig_len = strlen(mesg);
-    unsigned int new_len = fn.size() + 2 + orig_len + 1;
-    char * s = new char[new_len];
-    char * p = s;
-    memcpy(p, fn.str(), fn.size());
-    p += fn.size();
-    memcpy(p, ": ", 2);
-    p += 2;
-    memcpy(p, mesg, orig_len + 1);
-    delete[] m;
-    m = s;
+    unsigned int orig_len = strlen(m);
+    unsigned int new_len = fn.size() + (line_num ? 10 : 0) + 2 + orig_len + 1;
+    char * s = (char *)malloc(new_len);
+    if (line_num)
+      snprintf(s, new_len, "%s:%d: %s", fn.str(), line_num, m);
+    else
+      snprintf(s, new_len, "%s: %s", fn.str(), m);
+    free(m);
+    const_cast<Error *>(err_->err)->mesg = s;
     return *this;
   }
   
+#ifndef NDEBUG
   void PosibErrBase::handle_err() const {
     assert (err_);
     assert (!err_->handled);
     fputs(_("Unhandled Error: "), stderr);
-    fputs(gettext (err_->err->mesg), stderr);
+    fputs(err_->err->mesg, stderr);
     fputs("\n", stderr);
     abort();
   }
+#endif
 
   Error * PosibErrBase::release() {
     assert (err_);

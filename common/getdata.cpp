@@ -6,46 +6,38 @@
 
 #include <string.h>
 
-#include "istream.hpp"
 #include "getdata.hpp"
+#include "string.hpp"
 #include "asc_ctype.hpp"
+
+#include "iostream.hpp"
 
 namespace acommon {
   unsigned int linenumber = 0 ;
 
-  unsigned int getReadLines() {
-    // deactivate counting to keep old source working and to ensure that
-    // resetLineNumber is called with proper initial value for each file
-    // linecounting is dersired for
-    return linenumber;
-  }
-
-
-  bool getdata_pair(IStream & in, DataPair & d, const Buffer & buf)
+  bool getdata_pair(IStream & in, DataPair & d, String & buf)
   {
-    buf.data[0] = '\0'; // to avoid some special cases
     char * p;
-    char * end;
 
     // get first non blank line and count all read ones
-    linenumber = 0;
     do {
-        p = buf.data + 1;
-        end = in.getline(p, buf.size-1);
-        if (end == 0) return false;
-        linenumber++;
-        while (*p == ' ' || *p == '\t') ++p;
+      buf.clear();
+      buf.append('\0'); // to avoid some special cases
+      if (!in.append_line(buf)) return false;
+      d.line_num++;
+      p = buf.mstr() + 1;
+      while (*p == ' ' || *p == '\t') ++p;
     } while (*p == '#' || *p == '\0');
 
     // get key
-    d.key.str_ = p;
+    d.key.str = p;
     while (*p != '\0' &&
            ((*p != ' ' && *p != '\t' && *p != '#') || *(p-1) == '\\')) ++p;
-    d.key.size_ = p - d.key.str_;
+    d.key.size = p - d.key.str;
 
     // figure out if there is a value and add terminate key
-    d.value.str_ = p; // in case there is no value
-    d.value.size_ = 0;
+    d.value.str = p; // in case there is no value
+    d.value.size = 0;
     if (*p == '#' || *p == '\0') {*p = '\0'; return true;}
     *p = '\0';
 
@@ -55,7 +47,7 @@ namespace acommon {
     if (*p == '\0' || *p == '#') {return true;}
 
     // get value
-    d.value.str_ = p;
+    d.value.str = p;
     while (*p != '\0' && (*p != '#' || *(p-1) == '\\')) ++p;
     
     // remove trailing white space and terminate value
@@ -63,31 +55,13 @@ namespace acommon {
     while (*p == ' ' || *p == '\t') --p;
     if (*p == '\\' && *(p + 1) != '\0') ++p;
     ++p;
-    d.value.size_ = p - d.value.str_;
+    d.value.size = p - d.value.str;
     *p = '\0';
 
     return true;
   }
 
-  bool split(DataPair & d)
-  {
-    char * p   = d.value;
-    char * end = p + d.value.size();
-    d.key.str_ = p;
-    while (p != end) {
-      ++p;
-      if ((*p == ' ' || *p == '\t') && *(p-1) != '\\') break;
-    }
-    d.key.size_ = p - d.key.str_;
-    *p = 0;
-    ++p;
-    while (p < end && (*p == ' ' || *p == '\t')) ++p;
-    d.value.str_ = p;
-    d.value.size_ = end - p;
-    return d.key.size_ != 0;
-  }
-
-  void unescape(char * dest, const char * src)
+  char * unescape(char * dest, const char * src)
   {
     while (*src) {
       if (*src == '\\') {
@@ -107,6 +81,7 @@ namespace acommon {
       ++dest;
     }
     *dest = '\0';
+    return dest;
   }
 
   bool escape(char * dest, const char * src, size_t limit, const char * others)
@@ -136,6 +111,65 @@ namespace acommon {
   void to_lower(char * str)
   {
     for (; *str; str++) *str = asc_tolower(*str);
+  }
+
+  bool split(DataPair & d)
+  {
+    char * p   = d.value;
+    char * end = p + d.value.size;
+    d.key.str = p;
+    while (p != end) {
+      ++p;
+      if ((*p == ' ' || *p == '\t') && *(p-1) != '\\') break;
+    }
+    d.key.size = p - d.key.str;
+    *p = 0;
+    if (p != end) {
+      ++p;
+      while (p != end && (*p == ' ' || *p == '\t')) ++p;
+    }
+    d.value.str = p;
+    d.value.size = end - p;
+    return d.key.size != 0;
+  }
+
+  void init(ParmString str, DataPair & d, String & buf)
+  {
+    const char * s = str;
+    while (*s == ' ' || *s == '\t') ++s;
+    size_t l = str.size() - (s - str);
+    buf.assign(s, l);
+    d.value.str  = buf.mstr();
+    d.value.size = l;
+  }
+
+  bool getline(IStream & in, DataPair & d, String & buf)
+  {
+    if (!in.getline(buf)) return false;
+    d.value.str  = buf.mstr();
+    d.value.size = buf.size();
+    return true;
+  }
+
+  char * get_nb_line(IStream & in, String & buf)
+  {
+    char * p;
+    // get first non blank line
+    do {
+      if (!in.getline(buf)) return 0;
+      p = buf.mstr();
+      while (*p == ' ' || *p == '\t') ++p;
+    } while (*p == '#' || *p == '\0');
+    return p;
+  }
+
+  void remove_comments(String & buf)
+  {
+    buf.ensure_null_end();
+    char * p = buf.data();
+    while (*p && *p != '#') ++p;
+    if (*p == '#') {--p; while (p >= buf.data() && asc_isspace(*p)) --p; ++p;}
+    buf.resize(p - buf.data());
   }
 
 }

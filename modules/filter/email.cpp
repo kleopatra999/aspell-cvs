@@ -4,6 +4,7 @@
 // license along with this library if you did not you can find
 // it at http://www.gnu.org/.
 
+#include "convert.hpp"
 #include "config.hpp"
 #include "indiv_filter.hpp"
 #include "mutable_container.hpp"
@@ -20,24 +21,33 @@ namespace acommon {
     int n;
 
     class QuoteChars : public MutableContainer {
-      bool data[256];
     public:
+      typedef FilterChar::Chr Value;
+      Vector<Value> data;
+      Conv conv;
+      bool have(Value c) {
+        Value * i = data.pbegin();
+        Value * end = data.pend();
+        for (; i != end && *i != c; ++i);
+        return i != end;
+      }
       PosibErr<bool> add(ParmString s) {
-        data[static_cast<unsigned char>(s[0])] = true;
+        Value c = *(Value *)conv(s);
+        if (!have(c)) data.push_back(c);
         return true;
       }
       PosibErr<bool> remove(ParmString s) {
-        data[static_cast<unsigned char>(s[0])] = false;
+        Value c = *(Value *)conv(s);
+        Vector<Value>::iterator i = data.begin();
+        Vector<Value>::iterator end = data.end();
+        for (; i != end && *i != c; ++i);
+        if (i != end) data.erase(i);
         return true;
       }
       PosibErr<void> clear() {
-        memset(data, 0, sizeof(bool)*256);
+        data.clear();
 	return no_err;
       }
-      bool have(char c) {
-        return data[static_cast<unsigned char>(c)];
-      }
-      QuoteChars() {clear();}
     };
     QuoteChars is_quote_char;
     
@@ -51,6 +61,7 @@ namespace acommon {
   {
     name_ = "email-filter";
     order_num_ = 0.85;
+    is_quote_char.conv.setup(*opts, "utf-8", "utf-32", NormNone);
     opts->retrieve_list("filter-email-quote", &is_quote_char);
     margin = opts->retrieve_int("filter-email-margin");
     reset();

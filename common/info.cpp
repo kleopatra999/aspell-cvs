@@ -216,10 +216,10 @@ namespace acommon {
     
     PosibErr<void> err;
 
-    FixedBuffer<> buf; DataPair d;
+    String buf; DataPair d;
     while (getdata_pair(in, d, buf)) {
       if (d.key == "order-num") {
-	to_add->c_struct.order_num = strtod_c(d.value.str(), NULL);
+	to_add->c_struct.order_num = strtod_c(d.value.str, NULL);
 	if (!(0 < to_add->c_struct.order_num && 
 	      to_add->c_struct.order_num < 1)) 
 	  {
@@ -228,7 +228,7 @@ namespace acommon {
 	    goto RETURN_ERROR;
 	  }
       } else if (d.key == "lib-dir") {
-	to_add->lib_dir = d.value.str();
+	to_add->lib_dir = d.value.str;
 	to_add->c_struct.lib_dir = to_add->lib_dir.c_str();
       } else if (d.key == "dict-dir" || d.key == "dict-dirs") {
 	to_add->c_struct.dict_dirs = &(to_add->dict_dirs);
@@ -448,7 +448,7 @@ namespace acommon {
     } else {
       FStream f;
       RET_ON_ERR(f.open(node->info_file, "r"));
-      FixedBuffer<> buf; DataPair dp; // FIXME
+      String buf; DataPair dp;
       bool res = getdata_pair(f, dp, buf);
       main_wl = dp.key; flags = dp.value;
       f.close();

@@ -14,6 +14,11 @@
 #include "dirs.h"
 #include "settings.h"
 
+#ifdef USE_LOCALE
+# include <locale.h>
+# include <langinfo.h>
+#endif
+
 #include "asc_ctype.hpp"
 #include "config.hpp"
 #include "errors.hpp"
@@ -26,6 +31,7 @@
 #include "string_map.hpp"
 #include "stack_ptr.hpp"
 #include "char_vector.hpp"
+#include "convert.hpp"
 
 //#include "iostream.hpp"
 
@@ -239,7 +245,7 @@ namespace acommon {
     const char * value = data_.lookup(key);
 
     if (value != 0) {
-      if (value[0] == '\x01')
+      if (value[0] == '\x01') //FIXME: Why?
 	++value;
       return String(value);
     } else {
@@ -412,6 +418,24 @@ namespace acommon {
 
 #endif
 
+#if defined USE_LOCALE && defined HAVE_LANGINFO_CODESET
+
+  static inline void get_encoding(String & final_str)
+  {
+    const char * codeset = nl_langinfo(CODESET);
+    if (is_ascii_enc(codeset)) codeset = "none";
+    final_str = codeset;
+  }
+
+#else
+
+  static inline void get_encoding(String & final_str)
+  {
+    final_str = "none";
+  }
+
+#endif
+
   PosibErr<String> Config::get_default(ParmString key) const
   {
     RET_ON_ERR_SET(keyinfo(key), const KeyInfo *, ki);
@@ -425,19 +449,17 @@ namespace acommon {
     
       if (strcmp(i, "lang") == 0) {
 
-	if (have("master")) {
+        if (have("actual-lang")) {
+          final_str = data_.lookup("actual-lang");
+        } else if (have("master")) {
 	  final_str = "<unknown>";
 	} else {
 	  get_lang(final_str);
 	}
 	
-      } else if (strcmp(i, "actual-lang") == 0) {
-	
-	unsigned int len = 0;
-	final_str = retrieve("lang");
-	while (len < final_str.size() && final_str[len] != '_')
-	  ++len;
-	final_str.resize(len);
+      } else if (strcmp(i, "encoding") == 0) {
+
+        get_encoding(final_str);
 
       } else if (strcmp(i, "special") == 0) {
 
@@ -478,7 +500,7 @@ namespace acommon {
 	    assert(second.size() == 1);
 	    unsigned int s = 0;
 	    while (s != s1.size() && s1[s] != second[0]) ++s;
-	    final_str.append(s1, s, String::npos);
+	    final_str.append(s1, s);
 	  } else if (sep == '^') {
 	    String s1 = retrieve(replace);
 	    String s2 = retrieve(second);
@@ -493,7 +515,7 @@ namespace acommon {
 
 	} else if (*i == '>') {
 
-	  final_str += retrieve(replace);
+	  final_str += retrieve(replace).data;
 	  replace = "";
 	  in_replace = false;
 
@@ -519,7 +541,6 @@ namespace acommon {
       ++i;                                                    \
     }                                                         \
   } while (false)
-
 
   class NotifyListBlockChange : public MutableContainer 
   {
@@ -551,6 +572,10 @@ namespace acommon {
     return no_err;
   }
 
+  void Config::replace_internal(ParmString k, ParmString v) {
+    data_.replace(k, v);
+  }
+
   PosibErr<void> Config::replace(ParmString k, ParmString value) {
     if (strcmp(value,"<default>") == 0)
       return remove(k);
@@ -577,7 +602,7 @@ namespace acommon {
     RET_ON_ERR_SET(keyinfo(key), const KeyInfo *, ki);
     key = ki->name;
 
-    if (ki->otherdata[1] && attached_)
+    if (attached_ && !(ki->flags & KEYINFO_MAY_CHANGE))
       return make_err(cant_change_value, key);
   
     assert(ki->def != 0); // if null this key should never have values
@@ -701,7 +726,7 @@ namespace acommon {
     RET_ON_ERR_SET(keyinfo(k), const KeyInfo *, ki);
     const char * key = ki->name;
 
-    if (ki->otherdata[1] && attached_)
+    if (attached_ && !(ki->flags & KEYINFO_MAY_CHANGE))
       return make_err(cant_change_value, key);
   
     assert(ki->def != 0); // if null this key should never have values
@@ -867,7 +892,7 @@ namespace acommon {
         int prefix_end = 0;
         if(strncmp(i->name,"filter-",7) == 0)
           prefix_end = 7;
-        out << "###  " << &(i->name)[prefix_end] << " Filter: " << gettext(i->desc)
+        out << "###  " << &(i->name)[prefix_end] << " Filter: " << _(i->desc)
             << "\n###    " << _("configured as follows") << "\n\n\n";
         continue;
       }*/
@@ -880,7 +905,7 @@ namespace acommon {
       }
 
       out << "# " << (i->type ==  KeyInfoList ? "add|rem-" : "") << i->name
-	  << " descrip: " << (i->def == 0 ? "(action option) " : "") << gettext(i->desc)
+	  << " descrip: " << (i->def == 0 ? "(action option) " : "") << _(i->desc)
 	  << '\n';
       if (i->def != 0) {
 	buf.resize(strlen(i->def) * 2 + 1);
@@ -906,13 +931,19 @@ namespace acommon {
     delete els;
   }
 
-  PosibErr<void> Config::read_in(IStream & in) 
+  PosibErr<void> Config::read_in(IStream & in, ParmString id) 
   {
-    FixedBuffer<> buf;
+    String buf;
     DataPair dp;
     while (getdata_pair(in, dp, buf)) {
       unescape(dp.value);
-      RET_ON_ERR(replace(dp.key, dp.value));
+      PosibErrBase pe = replace(dp.key, dp.value);
+      if (pe.has_err()) {
+        if (id.empty())
+          return pe;
+        else
+          return pe.with_file(id, dp.line_num);
+      }
     }
     return no_err;
   }
@@ -920,7 +951,7 @@ namespace acommon {
   PosibErr<void> Config::read_in_file(ParmString file) {
     FStream in;
     RET_ON_ERR(in.open(file, "r"));
-    return read_in(in);
+    return read_in(in, file);
   }
 
   PosibErr<void> Config::read_in_string(ParmString str) {
@@ -930,7 +961,6 @@ namespace acommon {
 
   void Config::merge(const Config & other) {
     StackPtr<KeyInfoEnumeration> els(possible_elements());
-    bool diff_name = strcmp(name(), other.name()) != 0;
     const KeyInfo * k;
     const KeyInfo * other_k;
     const char * other_name;
@@ -939,18 +969,8 @@ namespace acommon {
     while ( (k = els->next()) != 0) {
 //      if (k->type == KeyInfoDescript) continue; // FIXME: strip obsolete hack
 
-      if (diff_name && k->otherdata[0] == 'p'
-          && strncmp(k->name, other.name_.c_str(), other.name_.size())
-          && k->name[other.name_.size()] == '_')
-        other_name = k->name + other.name_.size();
-      else
-        other_name = k->name;
-
+      other_name = k->name;
       other_k = other.keyinfo(other_name);
-      if (diff_name && other_k && other_k->otherdata[0] == 'r') continue;
-      // the other key is a prefix key so skip it
-      // when this is a prefix key than this key
-      // would be prefix_
 
       if (other_k != 0 &&
           strcmp(k->def, other_k->def) == 0
@@ -1014,16 +1034,14 @@ namespace acommon {
   }
 
 
-#define CANT_CHANGE 1
-
 #ifdef ENABLE_WIN32_RELOCATABLE
 #  define HOME_DIR "<prefix>"
-#  define PERSONAL "<actual-lang>.pws"
-#  define REPL     "<actual-lang>.prepl"
+#  define PERSONAL "<lang>.pws"
+#  define REPL     "<lang>.prepl"
 #else
 #  define HOME_DIR "<$HOME|./>"
-#  define PERSONAL ".aspell.<actual-lang>.pws"
-#  define REPL     ".aspell.<actual-lang>.prepl"
+#  define PERSONAL ".aspell.<lang>.pws"
+#  define REPL     ".aspell.<lang>.prepl"
 #endif
 
   char mode_string[128] = "filter mode";
@@ -1033,40 +1051,41 @@ namespace acommon {
   static const KeyInfo config_keys[] = {
     // the description should be under 50 chars
     {"actual-dict-dir", KeyInfoString, "<dict-dir^master>", 0}
-    , {"actual-lang",     KeyInfoString, "!actual-lang", 0}
+    , {"actual-lang",     KeyInfoString, "", 0} 
     , {"conf",     KeyInfoString, "aspell.conf",
        /* TRANSLATORS: The remaing strings in config.cpp should be kept
           under 50 characters, begin with a lower case character and not
           include any trailing punctuation marks. */
-       N_("main configuration file")             , {0, CANT_CHANGE}}
+       N_("main configuration file")}
     , {"conf-dir", KeyInfoString, CONF_DIR,
-       N_("location of main configuration file") ,{0, CANT_CHANGE}}
-    , {"conf-path",     KeyInfoString, "<conf-dir/conf>",     0}
+       N_("location of main configuration file")}
+    , {"conf-path",     KeyInfoString, "<conf-dir/conf>", 0}
     , {"data-dir", KeyInfoString, DATA_DIR,
-       N_("location of language data files"), "r"}
+       N_("location of language data files")}
     , {"dict-dir", KeyInfoString, DICT_DIR,
-       N_("location of the main word list")      }
-    , {"encoding",   KeyInfoString, "iso8859-1",
+       N_("location of the main word list")}
+    , {"encoding",   KeyInfoString, "!encoding",
        N_("encoding to expect data to be in")}
     , {"filter",   KeyInfoList  , "url",
-       N_("add or removes a filter")}
-    , {"filter-path", KeyInfoList, FILTER_DIR,
+       N_("add or removes a filter"), KEYINFO_MAY_CHANGE}
+    , {"filter-path", KeyInfoList, DICT_DIR,
        N_("path(es) aspell looks for filters")}
-    , {"option-path", KeyInfoList, FILTER_OPT_DIR,
+    , {"option-path", KeyInfoList, DATA_DIR,
        N_("path(es) aspell looks for options descriptions")}
-    , {"mode",     KeyInfoString, "url",             mode_string }
+    , {"mode",     KeyInfoString, "url",
+       mode_string}
     , {"extra-dicts", KeyInfoList, "",
        N_("extra dictionaries to use")}
     , {"home-dir", KeyInfoString, HOME_DIR,
-       N_("location for personal files") }
+       N_("location for personal files")}
     , {"ignore",   KeyInfoInt   , "1",
-       N_("ignore words <= n chars")             }
+       N_("ignore words <= n chars"), KEYINFO_MAY_CHANGE}
     , {"ignore-accents" , KeyInfoBool, "false",
-       N_("ignore accents when checking words")}
+       N_("ignore accents when checking words"), KEYINFO_MAY_CHANGE}
     , {"ignore-case", KeyInfoBool  , "false",
-       N_("ignore case when checking words")}
+       N_("ignore case when checking words"), KEYINFO_MAY_CHANGE}
     , {"ignore-repl", KeyInfoBool  , "false",
-       N_("ignore commands to store replacement pairs")}
+       N_("ignore commands to store replacement pairs"), KEYINFO_MAY_CHANGE}
     , {"jargon",     KeyInfoString, "",
        N_("extra information for the word list")}
     , {"keyboard", KeyInfoString, "standard",
@@ -1077,7 +1096,7 @@ namespace acommon {
        N_("deprecated, use lang instead")}
     , {"local-data-dir", KeyInfoString, "<actual-dict-dir>",
        N_("location of local language data files")     }
-    , {"master",        KeyInfoString, "",
+    , {"master",        KeyInfoString, "<lang>",
        N_("base name of the main dictionary to use")}
     , {"master-flags",  KeyInfoString, "", 0}
     , {"master-path",   KeyInfoString, "<dict-dir/master>",   0}
@@ -1086,60 +1105,69 @@ namespace acommon {
     , {"module-search-order", KeyInfoList, "",
        N_("search order for modules")}
     , {"per-conf", KeyInfoString, ".aspell.conf",
-       N_("personal configuration file"),{0, CANT_CHANGE}}
+       N_("personal configuration file")}
     , {"per-conf-path", KeyInfoString, "<home-dir/per-conf>", 0}
     , {"personal", KeyInfoString, PERSONAL,
        N_("personal dictionary file name")}
     , {"personal-path", KeyInfoString, "<home-dir/personal>", 0}
     , {"prefix",   KeyInfoString, PREFIX,
-       N_("prefix directory"), {0, CANT_CHANGE}}
+       N_("prefix directory")}
     , {"repl",     KeyInfoString, REPL,
        N_("replacements list file name") }
     , {"repl-path",     KeyInfoString, "<home-dir/repl>",     0}
     , {"run-together",        KeyInfoBool,  "false",
-       N_("consider run-together words legal")}
-    , {"run-together-limit",  KeyInfoInt,   "8",
-       N_("maxium numbers that can be strung together")}
+       N_("consider run-together words legal"), KEYINFO_MAY_CHANGE}
+    , {"run-together-limit",  KeyInfoInt,   "2",
+       N_("maximum number that can be strung together"), KEYINFO_MAY_CHANGE}
     , {"run-together-min",    KeyInfoInt,   "3",
-       N_("minimal length of interior words")}
+       N_("minimal length of interior words"), KEYINFO_MAY_CHANGE}
     , {"save-repl", KeyInfoBool  , "true",
-       N_("save replacement pairs on save all")}
+       N_("save replacement pairs on save all"), KEYINFO_MAY_CHANGE}
     , {"set-prefix", KeyInfoBool, "true",
-       N_("set the prefix based on executable location"), {0, CANT_CHANGE}} 
+       N_("set the prefix based on executable location")}
     , {"size",          KeyInfoString, "+60",
        N_("size of the word list")}
     , {"spelling",   KeyInfoString, "",
        N_("no longer used")}
-    , {"strip-accents" , KeyInfoBool, "false",
-       N_("strip accents from word lists")}
     , {"sug-mode",   KeyInfoString, "normal",
-       N_("suggestion mode")}
+       N_("suggestion mode"), KEYINFO_MAY_CHANGE}
     , {"sug-edit-dist", KeyInfoInt, "1",
        N_("edit distance to use, override sug-mode default")}
     , {"sug-typo-analysis", KeyInfoBool, "true",
        N_("use typo analysis, override sug-mode default")}
     , {"sug-repl-table", KeyInfoBool, "true",
        N_("use replacement tables, override sug-mode default")}
-    , {"sug-split-chars", KeyInfoString, " -",
-       N_("characters to insert when a word is split")}
+    , {"sug-split-chars", KeyInfoString, " -", // FIXME: Problem with specifying
+       N_("characters to insert when a word is split"), KEYINFO_UTF8}
     , {"word-list-path", KeyInfoList, DATA_DIR,
        N_("search path for word list information files")}
-    , {"affix-char",          KeyInfoString, "/", 
-       N_("indicator for affix flags in word lists")}
-    , {"flag-char",           KeyInfoString, ":",
-       N_("indicator for additional flags in word lists")}
+    , {"affix-char",          KeyInfoString, "/", // FIXME: Implement
+       N_("indicator for affix flags in word lists"), KEYINFO_UTF8}
+    , {"flag-char",           KeyInfoString, ":", // FIXME: Implement
+       N_("indicator for additional flags in word lists"), KEYINFO_UTF8}
+    , {"use-other-dicts", KeyInfoBool, "true",
+       N_("use personal, replacement & session dictionaries")}
+    , {"warn", KeyInfoBool, "false", // FIXME: Implement
+       N_("enable warnings")}
+    , {"normalize", KeyInfoBool, "true",
+       N_("enable Unicode normalization")}
+    , {"norm-required", KeyInfoBool, "false",
+       N_("Unicode normalization required for the current lang")}
+    , {"norm-form", KeyInfoString, "nfc",
+       N_("Unicode normalization form: none, nfd, nfc, comp")}
+    , {"norm-strict", KeyInfoBool, "false",
+       N_("avoid lossy conversions")}
     
     //
     // These options are only used when creating dictionaries
     // and may also be specified in the language data file
     //
-    , {"use-soundslike", KeyInfoBool, "true",
-       N_("encode soundslike information when creating dicts")}
-    , {"use-jump-tables", KeyInfoBool, "true",
-       N_("use jump tables when creating dictionaries")}
+    , {"invisible-soundslike", KeyInfoBool, "false",
+       N_("compute the soundslike on demand rather than storing")} 
     , {"affix-compress", KeyInfoBool, "false",
        N_("use affix compression when creating dictionaries")}
-    
+    , {"partially-expand",  KeyInfoBool, "false",
+       N_("partially expand affixes for better suggestions")}
     //
     // These options are specific to the "aspell" utility.  They are
     // here so that they can be specified in configuration files.
@@ -1147,19 +1175,18 @@ namespace acommon {
     , {"backup",  KeyInfoBool, "true",
        N_("create a backup file by appending \".bak\"")}
     , {"guess", KeyInfoBool, "false",
-       // FIXME: shorten description -> how about 
-       //        N_("create missing root/affix combinations")}
-       N_("make possible root/affix combinations not in the dictionary")} 
+       N_("create missing root/affix combinations"), KEYINFO_MAY_CHANGE}
     , {"keymapping", KeyInfoString, "aspell",
        N_("keymapping for check mode, aspell or ispell")}
     , {"reverse", KeyInfoBool, "false",
        N_("reverse the order of the suggest list")}
     , {"suggest", KeyInfoBool, "true",
-       N_("suggest possible replacements")}
+       N_("suggest possible replacements"), KEYINFO_MAY_CHANGE}
     , {"time"   , KeyInfoBool, "false",
-       N_("time load time and suggest time in pipe mode")}
-    
-  };
+       N_("time load time and suggest time in pipe mode"), KEYINFO_MAY_CHANGE}
+    , {"byte-offsets", KeyInfoBool, "false",
+       N_("use byte offsets instead of character offsets")}
+    };
 
   const KeyInfo * config_impl_keys_begin = config_keys;
   const KeyInfo * config_impl_keys_end   

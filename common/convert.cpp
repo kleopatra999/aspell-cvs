@@ -4,7 +4,9 @@
 // license along with this library if you did not you can find
 // it at http://www.gnu.org/.
 
+#include <assert.h>
 #include <string.h>
+#include <math.h>
 
 #include "asc_ctype.hpp"
 #include "convert.hpp"
@@ -13,9 +15,15 @@
 #include "config.hpp"
 #include "errors.hpp"
 #include "stack_ptr.hpp"
+#include "cache-t.hpp"
+#include "file_data_util.hpp"
+#include "vararray.hpp"
+
+#include "iostream.hpp"
 
 namespace acommon {
 
+  typedef unsigned char  byte;
   typedef unsigned char  Uni8;
   typedef unsigned short Uni16;
   typedef unsigned int   Uni32;
@@ -67,7 +75,7 @@ namespace acommon {
   // Assumes that the maximum number of items in the table is 256
   // Also assumes (unsigned char)i == i % 256
 
-  // Based on the iso8859-* character sets it is very fast, almost all
+  // Based on the iso-8859-* character sets it is very fast, almost all
   // lookups involving no more than 2 comparisons.
   // NO looks ups involved more than 3 compassions.
   // Also, no division (or modules) is done whatsoever.
@@ -81,7 +89,6 @@ namespace acommon {
   class FromUniLookup 
   {
   private:
-    char unknown;
     static const Uni32 npos = (Uni32)(-1);
     UniItem * overflow_end;
   
@@ -90,20 +97,20 @@ namespace acommon {
     UniItem overflow[256]; // you can never be too careful;
   
   public:
-    FromUniLookup(char u = '?') : unknown(u) {}
+    FromUniLookup() {}
     void reset();
-    inline char operator[] (Uni32 key) const;
+    inline char operator() (Uni32 key, char unknown = '?') const;
     bool insert(Uni32 key, char value);
   };
 
   void FromUniLookup::reset()
   {
-    for (unsigned int i = 0; i != 256*4; ++i)
+    for (unsigned i = 0; i != 256*4; ++i)
       data[i].key = npos;
     overflow_end = overflow;
   }
 
-  inline char FromUniLookup::operator[] (Uni32 k) const
+  inline char FromUniLookup::operator() (Uni32 k, char unknown) const
   {
     const UniItem * i = data + (unsigned char)k * 4;
 
@@ -129,12 +136,12 @@ namespace acommon {
     UniItem * e = i + 4;
     while (i != e && i->key != npos) {
       if (i->key == k)
-	return false;
+        return false;
       ++i;
     }
     if (i == e) {
       for(i = overflow; i != overflow_end; ++i)
-	if (i->key == k) return false;
+        if (i->key == k) return false;
     }
     i->key = k;
     i->value = v;
@@ -169,50 +176,303 @@ namespace acommon {
     return true;
   }
 
+  //////////////////////////////////////////////////////////////////////
+  //
+  // NormLookup
+  //
 
+  template <class T>
+  struct NormTable
+  {
+    unsigned mask;
+    unsigned height;
+    unsigned width;
+    unsigned size;
+    T * end;
+    T data[];
+  };
+
+  template <class T, class From>
+  struct NormLookupRet
+  {
+    const typename T::To   * to;
+    const From * last;
+    NormLookupRet(const typename T::To * t, From * l) 
+      : to(t), last(l) {}
+  };
+  
+  // s is null end: with this no special cases
+  template <class T, class From>
+  static inline NormLookupRet<T,From> norm_lookup(const NormTable<T> * d, 
+                                                  From * s, 
+                                                  const typename T::To * def,
+                                                  From * prev) 
+  {
+  loop:
+    const T * i = d->data + (static_cast<typename T::From>(*s) & d->mask);
+    for (;;) {
+      if (i->from == static_cast<typename T::From>(*s)) {
+        if (i->sub_table) {
+          // really tail recursion
+          if (i->to[1] != T::to_non_char) {def = i->to; prev = s;}
+          d = static_cast<const NormTable<T> *>(i->sub_table);
+          s++;
+          goto loop;
+        } else {
+          return NormLookupRet<T,From>(i->to, s);
+        }
+      } else {
+        i += d->height;
+        if (i >= d->end) break;
+      }
+    }
+    return NormLookupRet<T,From>(def, prev);
+  }
+
+  template <class T>
+  static void free_norm_table(NormTable<T> * d)
+  {
+    for (T * cur = d->data; cur != d->end; ++cur) {
+      if (cur->sub_table) 
+        free_norm_table<T>(static_cast<NormTable<T> *>(cur->sub_table));
+    }
+    free(d);
+  }
+
+  struct FromUniNormEntry
+  {
+    typedef Uni32 From;
+    Uni32 from;
+    typedef byte To;
+    byte  to[4];
+    static const From from_non_char = (From)(-1);
+    static const To   to_non_char   = 0x10;
+    static const unsigned max_to = 4;
+    void * sub_table;
+  } __attribute__ ((aligned (16)));
+
+  struct ToUniNormEntry
+  {
+    typedef byte From;
+    byte from;
+    typedef Uni16 To;
+    Uni16 to[3];
+    static const From from_non_char = 0x10;
+    static const To   to_non_char   = 0x10;
+    static const unsigned max_to = 3;
+    void * sub_table;
+  } __attribute__ ((aligned (16)));
+  
   //////////////////////////////////////////////////////////////////////
   //
   // read in char data
   //
 
-  PosibErr<void> read_in_char_data (Config & config,
-				    ParmString encoding,
-				    ToUniLookup & to,
-				    FromUniLookup & from)
+  PosibErr<void> read_in_char_data (const Config & config,
+                                    ParmString encoding,
+                                    ToUniLookup & to,
+                                    FromUniLookup & from)
   {
     to.reset();
     from.reset();
-    String file_name = config.retrieve("data-dir");
-    file_name += '/';
-    file_name += encoding;
-    file_name += ".dat";
+    
+    String dir1,dir2,file_name;
+    fill_data_dir(&config, dir1, dir2);
+    find_file(file_name,dir1,dir2,encoding,".cset");
+
     FStream data;
     PosibErrBase err = data.open(file_name, "r");
     if (err.get_err()) { 
-      String mesg;
-      mesg  = " This could also mean that the file \"";
-      mesg += file_name;
-      mesg += "\" could not be opened for reading or does not exist.";
+      char mesg[300];
+      snprintf(mesg, 300, _("This could also mean that the file \"%s\" could not be opened for reading or does not exist."),
+               file_name.c_str());
       return make_err(unknown_encoding, encoding, mesg);
     }
-    unsigned int chr;
+    unsigned chr;
     Uni32 uni;
-    int c;
-    while (c = data.get(), c != EOF && c != '\n');
-    while (c = data.get(), c != EOF && c != '\n');
+    String line;
+    char * p;
+    do {
+      p = get_nb_line(data, line);
+    } while (*p != '/');
     for (chr = 0; chr != 256; ++chr) {
-      data >> uni;
-
-      if (!data)
-	return make_err(bad_file_format, file_name);
-
-      while (c = data.get(), c != EOF && c != '\n');
-
+      p = get_nb_line(data, line);
+      if (strtoul(p, 0, 16) != chr)
+        return make_err(bad_file_format, file_name);
+      uni = strtoul(p + 3, 0, 16);
       to.insert(chr, uni);
       from.insert(uni, chr);
     }
   
     return no_err;
+  }
+
+  //////////////////////////////////////////////////////////////////////
+  //
+  // read in norm data
+  //
+
+  struct Tally 
+  {
+    int size;
+    Uni32 mask;
+    int max;
+    int * data;
+    Tally(int s, int * d) : size(s), mask(s - 1), max(0), data(d) {
+      memset(data, 0, sizeof(int)*size);
+    }
+    void add(Uni32 chr) {
+      Uni32 p = chr & mask;
+      data[p]++;
+      if (data[p] > max) max = data[p];
+    }
+  };
+
+  template <class T>
+  static PosibErr< NormTable<T> * > create_norm_table(IStream & in, String & buf)
+  {
+    const char * p = get_nb_line(in, buf);
+    assert(*p == 'N');
+    ++p;
+    int size = strtoul(p, (char **)&p, 10);
+    VARARRAY(T, d, size);
+    memset(d, 0, sizeof(T) * size);
+    int sz = (int)exp2(floor(log2(size <= 1 ? 1 : size - 1)));
+    VARARRAY(int, tally0_d, sz);   Tally tally0(sz,   tally0_d);
+    VARARRAY(int, tally1_d, sz*2); Tally tally1(sz*2, tally1_d);
+    VARARRAY(int, tally2_d, sz*4); Tally tally2(sz*4, tally2_d);
+    T * cur = d;
+    while (p = get_nb_line(in, buf), *p != '.') {
+      Uni32 f = strtoul(p, (char **)&p, 16);
+      cur->from = static_cast<typename T::From>(f);
+      assert(f == cur->from);
+      tally0.add(f);
+      tally1.add(f);
+      tally2.add(f);
+      ++p;
+      assert(*p == '>');
+      ++p;
+      assert(*p == ' ');
+      ++p;
+      unsigned i = 0;
+      if (*p != '-') {
+        for (;; ++i) {
+          const char * q = p;
+          Uni32 t = strtoul(p, (char **)&p, 16);
+          if (q == p) break;
+          assert(i < d->max_to);
+          cur->to[i] = static_cast<typename T::To>(t);
+          assert(t == static_cast<Uni32>(cur->to[i]));
+        } 
+      } else {
+        cur->to[0] = 0;
+        cur->to[1] = T::to_non_char;
+      }
+      if (*p == ' ') ++p;
+      if (*p == '/') cur->sub_table = create_norm_table<T>(in,buf);
+      ++cur;
+    }
+    assert(cur - d == size);
+    Tally * which = &tally0;
+    if (tally1.max < which->max) which = &tally1;
+    if (tally2.max < which->max) which = &tally2;
+    NormTable<T> * final = (NormTable<T> *)calloc(1, sizeof(NormTable<T>) + 
+                                                  sizeof(T) * which->size * which->max);
+    memset(final, 0, sizeof(NormTable<T>) + sizeof(T) * which->size * which->max);
+    final->mask = which->size - 1;
+    final->height = which->size;
+    final->width = which->max;
+    final->end = final->data + which->size * which->max;
+    final->size = size;
+    for (cur = d; cur != d + size; ++cur) {
+      T * dest = final->data + (cur->from & final->mask);
+      while (dest->from != 0) dest += final->height;
+      *dest = *cur;
+      if (dest->from == 0) dest->from = T::from_non_char;
+    }
+    for (T * dest = final->data; dest < final->end; dest += final->height) {
+      if (dest->from == 0 || dest->from == T::from_non_char && dest->to[0] == 0) {
+        dest->from = T::from_non_char;
+        dest->to[0] = T::to_non_char;
+      }
+    }
+    return final;
+  }
+
+  PosibErr<NormTables *> NormTables::get_new(const String & encoding, 
+                                             const Config * config)
+  {
+    String dir1,dir2,file_name;
+    fill_data_dir(config, dir1, dir2);
+    find_file(file_name,dir1,dir2,encoding,".cmap");
+    
+    FStream in;
+    PosibErrBase err = in.open(file_name, "r");
+    if (err.get_err()) { 
+      char mesg[300];
+      snprintf(mesg, 300, _("This could also mean that the file \"%s\" could not be opened for reading or does not exist."),
+               file_name.c_str());
+      return make_err(unknown_encoding, encoding, mesg); // FIXME
+    }
+
+    NormTables * d = new NormTables;
+    d->key = encoding;
+    String l;
+    get_nb_line(in, l);
+    remove_comments(l);
+    assert (l == "INTERNAL");
+    get_nb_line(in, l);
+    remove_comments(l);
+    assert (l == "/");
+    d->internal = create_norm_table<FromUniNormEntry>(in, l);
+    get_nb_line(in, l);
+    remove_comments(l);
+    assert (l == "STRICT");
+    char * p = get_nb_line(in, l);
+    remove_comments(l);
+    if (l == "/") {
+      d->strict_d = create_norm_table<FromUniNormEntry>(in, l);
+      d->strict = d->strict_d;
+    } else {
+      assert(*p == '=');
+      ++p; ++p;
+      assert(strcmp(p, "INTERNAL") == 0);
+      d->strict = d->internal;
+    }
+    while (get_nb_line(in, l)) {
+      remove_comments(l);
+      d->to_uni.push_back(ToUniTable());
+      ToUniTable & e = d->to_uni.back();
+      e.name.resize(l.size());
+      for (unsigned i = 0; i != l.size(); ++i)
+        e.name[i] = asc_tolower(l[i]);
+      char * p = get_nb_line(in, l);
+      remove_comments(l);
+      if (l == "/") {
+        e.ptr = e.data = create_norm_table<ToUniNormEntry>(in,l);
+      } else {
+        assert(*p == '=');
+        ++p; ++p;
+        for (char * q = p; *q; ++q) *q = asc_tolower(*q);
+        Vector<ToUniTable>::iterator i = d->to_uni.begin();
+        while (i->name != p && i != d->to_uni.end()) ++i;
+        assert(i != d->to_uni.end());
+        e.ptr = i->ptr;
+        get_nb_line(in, l);
+      }
+    }  
+    return d;
+  }
+
+  NormTables::~NormTables()
+  {
+    free_norm_table<FromUniNormEntry>(internal);
+    if (strict_d)
+      free_norm_table<FromUniNormEntry>(strict_d);
+    for (unsigned i = 0; i != to_uni.size(); ++i) {
+      if (to_uni[i].data)
+        free_norm_table<ToUniNormEntry>(to_uni[i].data);
+    }
   }
 
   //////////////////////////////////////////////////////////////////////
@@ -241,13 +501,18 @@ namespace acommon {
     void decode(const char * in0, int size, FilterCharVector & out) const {
       const Chr * in = reinterpret_cast<const Chr *>(in0);
       if (size == -1) {
-	for (;*in; ++in)
-	  out.append(*in);
+        for (;*in; ++in)
+          out.append(*in);
       } else {
-	const Chr * stop = reinterpret_cast<const Chr *>(in0 +size);
-	for (;in != stop; ++in)
-	  out.append(*in);
+        const Chr * stop = reinterpret_cast<const Chr *>(in0 +size);
+        for (;in != stop; ++in)
+          out.append(*in);
       }
+    }
+    PosibErr<void> decode_ec(const char * in0, int size, 
+                             FilterCharVector & out, ParmString) const {
+      DecodeDirect::decode(in0, size, out);
+      return no_err;
     }
   };
 
@@ -255,28 +520,47 @@ namespace acommon {
   struct EncodeDirect : public Encode
   {
     void encode(const FilterChar * in, const FilterChar * stop, 
-		CharVector & out) const {
+                CharVector & out) const {
       for (; in != stop; ++in) {
-	Chr c = in->chr;
-	out.append(&c, sizeof(Chr));
+        Chr c = in->chr;
+        if (c != in->chr) c = '?';
+        out.append(&c, sizeof(Chr));
       }
     }
-    bool encode_direct(FilterChar *, FilterChar *) const {
+    PosibErr<void> encode_ec(const FilterChar * in, const FilterChar * stop, 
+                             CharVector & out, ParmString orig) const {
+      for (; in != stop; ++in) {
+        Chr c = in->chr;
+        if (c != in->chr) {
+          char m[70];
+          snprintf(m, 70, _("The Unicode code point U+%04X is unsupported."), in->chr);
+          return make_err(invalid_string, orig, m);
+        }
+        out.append(&c, sizeof(Chr));
+      }
+      return no_err;
+    }
+    bool encode(FilterChar * &, FilterChar * &, FilterCharVector &) const {
       return true;
     }
   };
 
   template <typename Chr>
-  struct ConvDirect : public Conv
+  struct ConvDirect : public DirectConv
   {
     void convert(const char * in0, int size, CharVector & out) const {
       if (size == -1) {
-	const Chr * in = reinterpret_cast<const Chr *>(in0);
-	for (;*in != 0; ++in)
-	  out.append(in, sizeof(Chr));
+        const Chr * in = reinterpret_cast<const Chr *>(in0);
+        for (;*in != 0; ++in)
+          out.append(in, sizeof(Chr));
       } else {
-	out.append(in0, size);
+        out.append(in0, size);
       }
+    }
+    PosibErr<void> convert_ec(const char * in0, int size, 
+                              CharVector & out, ParmString) const {
+      ConvDirect::convert(in0, size, out);
+      return no_err;
     }
   };
 
@@ -288,36 +572,150 @@ namespace acommon {
   struct DecodeLookup : public Decode 
   {
     ToUniLookup lookup;
-    PosibErr<void> init(ParmString code, Config & c) 
-      {FromUniLookup unused;
-      return read_in_char_data(c, code, lookup, unused);}
+    PosibErr<void> init(ParmString code, const Config & c) {
+      FromUniLookup unused;
+      return read_in_char_data(c, code, lookup, unused);
+    }
     void decode(const char * in, int size, FilterCharVector & out) const {
       if (size == -1) {
-	for (;*in; ++in)
-	  out.append(lookup[*in]);
+        for (;*in; ++in)
+          out.append(lookup[*in]);
       } else {
-	const char * stop = in + size;
-	for (;in != stop; ++in)
-	  out.append(lookup[*in]);
+        const char * stop = in + size;
+        for (;in != stop; ++in)
+          out.append(lookup[*in]);
       }
+    }
+    PosibErr<void> decode_ec(const char * in, int size, 
+                             FilterCharVector & out, ParmString) const {
+      DecodeLookup::decode(in, size, out);
+      return no_err;
+    }
+  };
+
+  struct DecodeNormLookup : public Decode 
+  {
+    typedef ToUniNormEntry E;
+    NormTable<E> * data;
+    DecodeNormLookup(NormTable<E> * d) : data(d) {}
+    // must be null terminated
+    void decode(const char * in, int size, FilterCharVector & out) const {
+      if (size == -1) size = strlen(in);
+      const char * stop = in + size;
+      while (in < stop) {
+        if (*in == 0) {
+          out.append(0);
+          ++in;
+        } else {
+          NormLookupRet<E,const char> ret = norm_lookup<E>(data, in, 0, in);
+          for (unsigned i = 0; ret.to[i] && i < E::max_to; ++i)
+            out.append(ret.to[i]);
+          in = ret.last + 1;
+        }
+      }
+    }
+    PosibErr<void> decode_ec(const char * in, int size, 
+                             FilterCharVector & out, ParmString) const {
+      DecodeNormLookup::decode(in, size, out);
+      return no_err;
     }
   };
 
   struct EncodeLookup : public Encode 
   {
     FromUniLookup lookup;
-    PosibErr<void> init(ParmString code, Config & c) 
+    PosibErr<void> init(ParmString code, const Config & c) 
       {ToUniLookup unused;
       return read_in_char_data(c, code, unused, lookup);}
     void encode(const FilterChar * in, const FilterChar * stop, 
-		CharVector & out) const {
+                CharVector & out) const {
       for (; in != stop; ++in) {
-	out.append(lookup[*in]);
+        out.append(lookup(*in));
       }
     }
-    bool encode_direct(FilterChar * in, FilterChar * stop) const {
+    PosibErr<void> encode_ec(const FilterChar * in, const FilterChar * stop, 
+                             CharVector & out, ParmString orig) const {
+      for (; in != stop; ++in) {
+        char c = lookup(*in, '\0');
+        if (c == '\0' && in->chr != 0) {
+          char m[70];
+          snprintf(m, 70, _("The Unicode code point U+%04X is unsupported."), in->chr);
+          return make_err(invalid_string, orig, m);
+        }
+        out.append(c);
+      }
+      return no_err;
+    }
+    bool encode(FilterChar * & in0, FilterChar * & stop,
+                FilterCharVector & out) const {
+      FilterChar * in = in0;
       for (; in != stop; ++in)
-	*in = lookup[*in];
+        *in = lookup(*in);
+      return true;
+    }
+  };
+
+  struct EncodeNormLookup : public Encode 
+  {
+    typedef FromUniNormEntry E;
+    NormTable<E> * data;
+    EncodeNormLookup(NormTable<E> * d) : data(d) {}
+    // *stop must equal 0
+    void encode(const FilterChar * in, const FilterChar * stop, 
+                CharVector & out) const {
+      while (in < stop) {
+        if (*in == 0) {
+          out.append('\0');
+          ++in;
+        } else {
+          NormLookupRet<E,const FilterChar> ret = norm_lookup<E>(data, in, (const byte *)"?", in);
+          for (unsigned i = 0; i < E::max_to && ret.to[i]; ++i)
+            out.append(ret.to[i]);
+          in = ret.last + 1;
+        }
+      }
+    }
+    PosibErr<void> encode_ec(const FilterChar * in, const FilterChar * stop, 
+                             CharVector & out, ParmString orig) const {
+      while (in < stop) {
+        if (*in == 0) {
+          out.append('\0');
+          ++in;
+        } else {
+          NormLookupRet<E,const FilterChar> ret = norm_lookup<E>(data, in, 0, in);
+          if (ret.to == 0) {
+            char m[70];
+            snprintf(m, 70, _("The Unicode code point U+%04X is unsupported."), in->chr);
+            return make_err(invalid_string, orig, m);
+          }
+          for (unsigned i = 0; i < E::max_to && ret.to[i]; ++i)
+            out.append(ret.to[i]);
+          in = ret.last + 1;
+        }
+      }
+      return no_err;
+    }
+    bool encode(FilterChar * & in, FilterChar * & stop,
+                FilterCharVector & buf) const {
+      buf.clear();
+      while (in < stop) {
+        if (*in == 0) {
+          buf.append(FilterChar(0));
+          ++in;
+        } else {
+          NormLookupRet<E,FilterChar> ret = norm_lookup<E>(data, in, (const byte *)"?", in);
+          const FilterChar * end = ret.last + 1;
+          unsigned width = 0;
+          for (; in != end; ++in) width += in->width;
+          buf.append(FilterChar(ret.to[0], width));
+          for (unsigned i = 1; i < E::max_to && ret.to[i]; ++i) {
+            buf.append(FilterChar(ret.to[i],0));
+          }
+        }
+      }
+      buf.append(0);
+      in = buf.pbegin();
+      stop = buf.pend();
       return true;
     }
   };
@@ -328,14 +726,16 @@ namespace acommon {
   //
   
 #define get_check_next \
-  c = *in;                                                       \
-  if ((c & 0xC0) != 0x80 || in == stop) return FilterChar('?',u);\
-  ++in;                                                          \
-  u <<= 6;                                                       \
-  u |= c & 0x3F;                                                 \
+  if (in == stop) goto error;          \
+  c = *in;                             \
+  if ((c & 0xC0) != 0x80) goto error;  \
+  ++in;                                \
+  u <<= 6;                             \
+  u |= c & 0x3F;                       \
   ++w;
 
-  static inline FilterChar from_utf8 (const char * & in, const char * stop)
+  static inline FilterChar from_utf8 (const char * & in, const char * stop, 
+                                      Uni32 err_char = '?')
   {
     Uni32 u = (Uni32)(-1);
     FilterChar::Width w = 1;
@@ -343,7 +743,8 @@ namespace acommon {
     // the first char is guaranteed not to be off the end
     char c = *in;
     ++in;
-    while ((c & 0xC0) == 0x80) {c = *in; ++in; ++w;}
+
+    while (in != stop && (c & 0xC0) == 0x80) {c = *in; ++in; ++w;}
     if ((c & 0x80) == 0x00) { // 1-byte wide
       u = c;
     } else if ((c & 0xE0) == 0xC0) { // 2-byte wide
@@ -354,15 +755,19 @@ namespace acommon {
       get_check_next;
       get_check_next;
     } else if ((c & 0xF8) == 0xF0) { // 4-byte wide
-      u  = c & 0x0E;
+      u  = c & 0x07;
       get_check_next;
       get_check_next;
       get_check_next;
+    } else {
+      goto error;
     }
 
     return FilterChar(u, w);
+  error:
+    return FilterChar(err_char, w);
   }
-  
+
   static inline void to_utf8 (FilterChar in, CharVector & out)
   {
     FilterChar::Chr c = in;
@@ -386,15 +791,30 @@ namespace acommon {
       out.append(0x80 | c & 0x3F);
     }
   }
-
+  
   struct DecodeUtf8 : public Decode 
   {
     ToUniLookup lookup;
     void decode(const char * in, int size, FilterCharVector & out) const {
       const char * stop = in + size; // this is OK even if size == -1
       while (*in && in != stop) {
-	out.append(from_utf8(in, stop));
+        out.append(from_utf8(in, stop));
       }
+    }
+    PosibErr<void> decode_ec(const char * in, int size, 
+                             FilterCharVector & out, ParmString orig) const {
+      const char * begin = in;
+      const char * stop = in + size; // this is OK even if size == -1
+      while (*in && in != stop) {
+        FilterChar c = from_utf8(in, stop, (Uni32)-1);
+        if (c == (Uni32)-1) {
+          char m[70];
+          snprintf(m, 70, _("Invalid UTF-8 sequence at position %d."), in - begin);
+          return make_err(invalid_string, orig, m);
+        }
+        out.append(c);
+      }
+      return no_err;
     }
   };
 
@@ -402,27 +822,41 @@ namespace acommon {
   {
     FromUniLookup lookup;
     void encode(const FilterChar * in, const FilterChar * stop, 
-		CharVector & out) const {
+                CharVector & out) const {
       for (; in != stop; ++in) {
-	to_utf8(*in, out);
+        to_utf8(*in, out);
       }
+    }
+    PosibErr<void> encode_ec(const FilterChar * in, const FilterChar * stop, 
+                             CharVector & out, ParmString) const {
+      for (; in != stop; ++in) {
+        to_utf8(*in, out);
+      }
+      return no_err;
     }
   };
 
+  //////////////////////////////////////////////////////////////////////
+  //
+  // Cache
+  //
+
+  static GlobalCache<Decode> decode_cache("decode");
+  static GlobalCache<Encode> encode_cache("encode");
+  static GlobalCache<NormTables> norm_tables_cache("norm_tables");
   
   //////////////////////////////////////////////////////////////////////
   //
   // new_aspell_convert
   //
 
-  void Convert::generic_convert(const char * in, int size, 
-				CharVector & out)
+  void Convert::generic_convert(const char * in, int size, CharVector & out)
   {
-    buf.clear();
-    decode_->decode(in, size, buf);
-    buf.append(0);
-    FilterChar * start = buf.pbegin();
-    FilterChar * stop = buf.pend();
+    buf_.clear();
+    decode_->decode(in, size, buf_);
+    buf_.append(0);
+    FilterChar * start = buf_.pbegin();
+    FilterChar * stop = buf_.pend();
     if (!filter.empty()) {
       filter.decode(start, stop);
       filter.process(start, stop);
@@ -431,68 +865,114 @@ namespace acommon {
     encode_->encode(start, stop, out);
   }
 
-  PosibErr<Convert *> new_convert(Config & c,
-				  ParmString in, 
-				  ParmString out) 
+  const char * fix_encoding_str(ParmString enc, String & buf)
   {
-    String in_s  = in;
-    String out_s = out;
+    buf.clear();
+    buf.reserve(enc.size() + 1);
+    for (size_t i = 0; i != enc.size(); ++i)
+      buf.push_back(asc_tolower(enc[i]));
 
-    unsigned int i;
-    for (i = 0; i != in_s.size(); ++i)
-      in_s[i] = asc_tolower(in_s[i]);
-    for (i = 0; i != out_s.size(); ++i)
-      out_s[i] = asc_tolower(out_s[i]);
-    in  = in_s .c_str();
-    out = out_s.c_str();
+    if (strncmp(buf.c_str(), "iso8859", 7) == 0)
+      buf.insert(buf.begin() + 3, '-'); // For backwards compatibility
+    
+    if (buf == "ascii" || buf == "ansi_x3.4-1968")
+      return "iso-8859-1";
+    else if (buf == "machine unsigned 16" || buf == "utf-16")
+      return "ucs-2";
+    else if (buf == "machine unsigned 32" || buf == "utf-32")
+      return "ucs-4";
+    else
+      return buf.c_str();
+  }
 
-    if (in == "ascii") 
-      in = "iso8859-1";
-    if (out == "ascii") 
-      out = "iso8859-1";
+  bool is_ascii_enc(ParmString enc)
+  {
+    return (enc == "ASCII" || enc == "ascii" 
+            || enc == "ANSI_X3.4-1968");
+  }
+
+
+  PosibErr<Convert *> internal_new_convert(const Config & c,
+                                           ParmString in, 
+                                           ParmString out,
+                                           bool if_needed,
+                                           Normalize norm)
+  {
+    String in_s;
+    in = fix_encoding_str(in, in_s);
+
+    String out_s;
+    out = fix_encoding_str(out, out_s); 
+
+    if (if_needed && in == out) return 0;
 
     StackPtr<Convert> conv(new Convert);
-    RET_ON_ERR(conv->init(c, in, out));
+    switch (norm) {
+    case NormNone:
+      RET_ON_ERR(conv->init(c, in, out)); break;
+    case NormFrom:
+      RET_ON_ERR(conv->init_norm_from(c, in, out)); break;
+    case NormTo:
+      RET_ON_ERR(conv->init_norm_to(c, in, out)); break;
+    }
     return conv.release();
-    
   }
-  
-  PosibErr<void> Convert::init(Config & c, ParmString in, ParmString out)
-  {
-    in_code_ = in;
-    out_code_ = out;
-    
-    if (in_code_ == "iso8859-1")
-      decode_ = new DecodeDirect<Uni8>;
-    else if (in_code_ == "machine unsigned 16")
-      decode_ = new DecodeDirect<Uni16>;
-    else if (in_code_ == "machine unsigned 32")
-      decode_ = new DecodeDirect<Uni32>;
-    else if (in_code_ == "utf-8")
-      decode_ = new DecodeUtf8;
-    else
-      decode_ = new DecodeLookup;
-    RET_ON_ERR(decode_->init(in_code_, c));
-    
-    if (out_code_ == "iso8859-1")
-      encode_ = new EncodeDirect<Uni8>;
-    else if (out_code_ == "machine unsigned 16")
-      encode_ = new EncodeDirect<Uni16>;
-    else if (out_code_ == "machine unsigned 32")
-      encode_ = new EncodeDirect<Uni32>;
-    else if (out_code_ == "utf-8")
-      encode_ = new EncodeUtf8;
-    else
-      encode_ = new EncodeLookup;
-    RET_ON_ERR(encode_->init(out_code_, c));
 
-    if (in_code_ == out_code_) {
-      if (in_code_ == "machine unsigned 16")
-	conv_ = new ConvDirect<Uni16>;
-      else if (in_code_ == "machine unsigned 32")
-	conv_ = new ConvDirect<Uni32>;
-      else
-	conv_ = new ConvDirect<char>;
+  PosibErr<Decode *> Decode::get_new(const String & key, const Config * c)
+  {
+    StackPtr<Decode> ptr;
+    if (key == "iso-8859-1")
+      ptr.reset(new DecodeDirect<Uni8>);
+    else if (key == "ucs-2")
+      ptr.reset(new DecodeDirect<Uni16>);
+    else if (key == "ucs-4")
+      ptr.reset(new DecodeDirect<Uni32>);
+    else if (key == "utf-8")
+      ptr.reset(new DecodeUtf8);
+    else
+      ptr.reset(new DecodeLookup);
+    RET_ON_ERR(ptr->init(key, *c));
+    ptr->key = key;
+    return ptr.release();
+  }
+
+  PosibErr<Encode *> Encode::get_new(const String & key, const Config * c)
+  {
+    StackPtr<Encode> ptr;
+    if (key == "iso-8859-1")
+      ptr.reset(new EncodeDirect<Uni8>);
+    else if (key == "ucs-2")
+      ptr.reset(new EncodeDirect<Uni16>);
+    else if (key == "ucs-4")
+      ptr.reset(new EncodeDirect<Uni32>);
+    else if (key == "utf-8")
+      ptr.reset(new EncodeUtf8);
+    else
+      ptr.reset(new EncodeLookup);
+    RET_ON_ERR(ptr->init(key, *c));
+    ptr->key = key;
+    return ptr.release();
+  }
+
+  PosibErr<void> Convert::init(const Config & c, ParmString in, ParmString out)
+  {
+    RET_ON_ERR(setup(decode_d, &decode_cache, &c, in));
+    decode_ = decode_d.get();
+    RET_ON_ERR(setup(encode_d, &encode_cache, &c, out));
+    encode_ = encode_d.get();
+
+    conv_ = 0;
+    if (in == out) {
+      if (in == "ucs-2") {
+        assert(sizeof(ConvDirect<Uni16>) <= memory_size);
+        conv_ = new (memory) ConvDirect<Uni16>;
+      } else if (in == "ucs-4") {
+        assert(sizeof(ConvDirect<Uni32>) <= memory_size);
+        conv_ = new (memory) ConvDirect<Uni32>;
+      } else {
+        assert(sizeof(ConvDirect<char>) <= memory_size);
+        conv_ = new (memory) ConvDirect<char>;
+      }
     }
 
     if (conv_)
@@ -501,4 +981,89 @@ namespace acommon {
     return no_err;
   }
 
+  
+  PosibErr<void> Convert::init_norm_from(const Config & c, ParmString in, ParmString out)
+  {
+    if (!c.retrieve_bool("normalize") && !c.retrieve_bool("norm-required")) 
+      return init(c,in,out);
+
+    RET_ON_ERR(setup(norm_tables_, &norm_tables_cache, &c, out));
+
+    RET_ON_ERR(setup(decode_d, &decode_cache, &c, in));
+    decode_ = decode_d.get();
+
+    assert(sizeof(EncodeNormLookup) <= memory_size);
+    if (c.retrieve_bool("norm-strict")) {
+      encode_ = new (memory) EncodeNormLookup(norm_tables_->strict);
+      encode_->key = out;
+      encode_->key += ":strict";
+    } else {
+      encode_ = new (memory) EncodeNormLookup(norm_tables_->internal);
+      encode_->key = out;
+      encode_->key += ":internal";
+    }
+    conv_ = 0;
+
+    return no_err;
+  }
+
+  PosibErr<void> Convert::init_norm_to(const Config & c, ParmString in, ParmString out)
+  {
+    String norm_form = c.retrieve("norm-form");
+    if ((!c.retrieve_bool("normalize") || norm_form == "none")
+        && !c.retrieve_bool("norm-required"))
+      return init(c,in,out);
+    if (norm_form == "none" && c.retrieve_bool("norm-required"))
+      norm_form = "nfc";
+
+    RET_ON_ERR(setup(norm_tables_, &norm_tables_cache, &c, in));
+
+    RET_ON_ERR(setup(encode_d, &encode_cache, &c, out));
+    encode_ = encode_d.get();
+
+    assert(sizeof(DecodeNormLookup) <= memory_size);
+    NormTables::ToUni::const_iterator i = norm_tables_->to_uni.begin();
+    for (; i != norm_tables_->to_uni.end() && i->name != norm_form; ++i);
+    assert(i != norm_tables_->to_uni.end());
+
+    decode_ = new (memory) DecodeNormLookup(i->ptr);
+    decode_->key = in;
+    decode_->key += ':';
+    decode_->key += i->name;
+
+    conv_ = 0;
+
+    return no_err;
+  }
+
+  PosibErr<void> MBLen::setup(const Config &, ParmString enc0)
+  {
+    String buf;
+    const char * enc = fix_encoding_str(enc0,buf);
+    if      (strcmp(enc, "utf-8") == 0) encoding = UTF8;
+    else if (strcmp(enc, "ucs-2") == 0) encoding = UCS2;
+    else if (strcmp(enc, "ucs-4") == 0) encoding = UCS4;
+    else                                encoding = Other;
+    return no_err;
+  }
+
+  unsigned MBLen::operator()(const char * str, const char * stop)
+  {
+    unsigned size = 0;
+    switch (encoding) {
+    case Other: 
+      return stop - str;
+    case UTF8:
+      for (; str != stop; ++str) {
+        if ((*str & 0x80) == 0 || (*str & 0xC0) == 0xC0) ++size;
+      }
+      return size;
+    case UCS2:
+      return (stop - str)/2;
+    case UCS4:
+      return (stop - str)/4;
+    }
+    return 0;
+  }
+  
 }

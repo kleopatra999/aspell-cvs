@@ -1,6 +1,6 @@
 AUTOMAKE_OPTIONS = foreign subdir-objects
 SUBDIRS = . po manual
-DIST_SUBDIRS = ${SUBDIRS} examples 
+DIST_SUBDIRS = ${SUBDIRS} examples myspell
 
 # These are needed due to a bug in Automake
 pkgdatadir = @pkgdatadir@
@@ -25,7 +25,11 @@ EXTRA_DIST =
 # libaspell and friends
 #
 
-lib_LTLIBRARIES = libaspell.la libpspell.la
+lib_LTLIBRARIES = libaspell.la 
+
+if PSPELL_COMPATIBILITY
+lib_LTLIBRARIES += libpspell.la
+endif
 
 libaspell_la_SOURCES =\
   common/cache.cpp\
@@ -33,7 +37,6 @@ libaspell_la_SOURCES =\
   common/getdata.cpp\
   common/itemize.cpp\
   common/file_util.cpp\
-  common/string_buffer.cpp\
   common/string_map.cpp\
   common/string_list.cpp\
   common/config.cpp\
@@ -49,28 +52,25 @@ libaspell_la_SOURCES =\
   common/speller.cpp\
   common/document_checker.cpp\
   common/filter.cpp\
+  common/objstack.cpp \
   common/strtonum.cpp\
   common/directory.cpp\
+  common/gettext_init.cpp\
+  common/file_data_util.cpp\
   modules/speller/default/readonly_ws.cpp\
   modules/speller/default/suggest.cpp\
   modules/speller/default/data.cpp\
   modules/speller/default/multi_ws.cpp\
   modules/speller/default/phonetic.cpp\
-  modules/speller/default/writable_ws.cpp\
-  modules/speller/default/writable_base.cpp\
-  modules/speller/default/file_data_util.cpp\
+  modules/speller/default/writable.cpp\
   modules/speller/default/speller_impl.cpp\
-  modules/speller/default/writable_repl.cpp\
   modules/speller/default/phonet.cpp\
   modules/speller/default/typo_editdist.cpp\
   modules/speller/default/editdist.cpp\
   modules/speller/default/primes.cpp\
-  modules/speller/default/l2editdist.cpp\
   modules/speller/default/language.cpp\
   modules/speller/default/leditdist.cpp\
-  modules/speller/default/split.cpp\
   modules/speller/default/affix.cpp\
-  modules/speller/default/affentry.cpp\
   modules/tokenizer/basic.cpp\
   lib/filter-c.cpp\
   lib/word_list-c.cpp\
@@ -94,13 +94,15 @@ libaspell_la_SOURCES =\
 
 libaspell_la_LIBADD =  $(LIBINTL)
 
-libaspell_la_LDFLAGS = ${extra_ldflags} -version-info 15:5:0
+libaspell_la_LDFLAGS = -version-info 16:0:1
 
+if PSPELL_COMPATIBILITY
 libpspell_la_SOURCES = lib/dummy.cpp
 
 libpspell_la_LIBADD = libaspell.la
 
-libpspell_la_LDFLAGS = ${extra_ldflags} -version-info 15:5:0
+libpspell_la_LDFLAGS = -version-info 16:0:1
+endif
 
 EXTRA_DIST += common/*.hpp common/*.h\
               modules/speller/default/*.hpp\
@@ -113,13 +115,15 @@ EXTRA_DIST += common/*.hpp common/*.h\
 
 AM_CPPFLAGS += -DLOCALEDIR=\"$(localedir)\"
 
-bin_PROGRAMS = word-list-compress aspell
+bin_PROGRAMS = word-list-compress aspell prezip-bin
 
 word_list_compress_SOURCES = prog/compress.c
 
 aspell_SOURCES = prog/aspell.cpp prog/check_funs.cpp prog/checker_string.cpp
 
 aspell_LDADD = libaspell.la $(CURSES_LIB)
+
+prezip_bin_SOURCES = prog/prezip.c
 
 EXTRA_DIST += prog/*.hpp
 
@@ -233,42 +237,41 @@ CLEANFILES = gen/static_filters.src.cpp
 
 common/config.cpp: gen/dirs.h
 
-noinst_PROGRAMS = gen/mk-dirs_h
-noinst_DATA += gen/dirs.h
+gen/dirs.h: gen/mk-dirs_h.pl
+	cd gen; perl mk-dirs_h.pl ${prefix} ${pkgdatadir} ${pkglibdir}  ${sysconfdir} >  dirs.h
 
-gen/dirs.h: gen/mk-dirs_h
-	cd gen; echo '#define PREFIX "${prefix}"'            >  dirs.h
-	cd gen; ./mk-dirs_h ${prefix} DICT_DIR ${pkglibdir}  >> dirs.h
-	cd gen; ./mk-dirs_h ${prefix} DATA_DIR ${pkgdatadir} >> dirs.h
-	cd gen; ./mk-dirs_h ${prefix} CONF_DIR ${sysconfdir} >> dirs.h
-	cd gen; ./mk-dirs_h ${prefix} FILTER_DIR ${pkglibdir} >> dirs.h
-	cd gen; ./mk-dirs_h ${prefix} FILTER_OPT_DIR ${pkgdatadir} >> dirs.h
-
-gen_mk_dirs_h_SOURCES = gen/mk-dirs_h.cpp
-
+EXTRA_DIST += gen/mk-dirs_h.pl
 CLEANFILES += gen/dirs.h
-
 
 ########################################################################
 #
 # Scripts
 #
 
-bin_SCRIPTS = scripts/pspell-config scripts/run-with-aspell scripts/aspell-import
+bin_SCRIPTS = scripts/run-with-aspell scripts/aspell-import \
+              scripts/prezip scripts/preunzip scripts/precat 
+
 pkgdata_SCRIPTS = scripts/spell scripts/ispell
 
 scripts/run-with-aspell: scripts/run-with-aspell.create
 	sh ${srcdir}/scripts/run-with-aspell.create ${pkgdatadir} > scripts/run-with-aspell
 	chmod 755 scripts/run-with-aspell
 
+
+if PSPELL_COMPATIBILITY
+
+bin_SCRIPTS += scripts/pspell-config 
 scripts/pspell-config: scripts/mkconfig
 	sh ${srcdir}/scripts/mkconfig ${VERSION} ${datadir} ${pkgdatadir}
+CLEANFILES += scripts/pspell-config
 
-CLEANFILES += scripts/pspell-config scripts/run-with-aspell
+endif
+
+CLEANFILES += scripts/run-with-aspell
 
 EXTRA_DIST += scripts/mkconfig scripts/spell scripts/ispell \
-              scripts/run-with-aspell.create scripts/aspell-import
-
+              scripts/run-with-aspell.create scripts/aspell-import\
+              scripts/prezip scripts/preunzip scripts/precat
 
 ########################################################################
 #
@@ -288,10 +291,10 @@ mksrc = \
  auto/MkSrc/Info.pm            auto/MkSrc/ProcCxx.pm\
  auto/MkSrc/ProcNative.pm      auto/MkSrc/Util.pm
 
-auto: @MAINTAINER_MODE_TRUE@ ${mksrc}
-	cd auto; perl mk-src.pl
-	cd auto; perl auto/mk-doc.pl
-	touch auto/auto
+#auto: @MAINTAINER_MODE_TRUE@ ${mksrc}
+#	cd auto; perl mk-src.pl
+#	cd auto; perl auto/mk-doc.pl
+#	touch auto/auto
 
 EXTRA_DIST += auto/auto auto/mk-src.txt ${mksrc}
 
@@ -303,23 +306,27 @@ EXTRA_DIST += auto/auto auto/mk-src.txt ${mksrc}
 
 include_HEADERS = interfaces/cc/aspell.h
 
+if PSPELL_COMPATIBILITY
+
 pspell_includedir = ${includedir}/pspell
 
 pspell_include_HEADERS = interfaces/cc/pspell.h
 
+endif
 
 ########################################################################
 #
 # Misc Top level
 #
 
-pkgdata_DATA = ${top_srcdir}/data/*.dat ${top_srcdir}/data/*.kbd
+pkgdata_DATA = ${top_srcdir}/data/*.cset ${top_srcdir}/data/*.cmap \
+               ${top_srcdir}/data/*.kbd
 
 EXTRA_DIST += config.rpath  README ${pkgdata_DATA} m4/*.m4 \
               misc/po-filter.c
 
-README: manual/aspell.texi
-	cd manual; perl mk-readme.pl; mv README ..; cd ..
+README: manual/readme.texi
+	makeinfo --no-validate --no-headers $< > README
 
 maintainer-clean-local:
 	@find . \( -name '*.?pp' -o -name '*.h' -o -name '*.opt' \) -print |\

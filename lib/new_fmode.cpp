@@ -22,6 +22,7 @@
 #include "directory.hpp"
 #include "strtonum.hpp"
 #include "asc_ctype.hpp"
+#include "iostream.hpp"
 #include <stdio.h>
 
 #define DEBUG {fprintf(stderr,"File: %s(%i)\n",__FILE__,__LINE__);}
@@ -355,7 +356,7 @@ using namespace std;//needed for vector
       }
 
       char regError[256];
-
+      CERR.printl(magicRegExp.c_str());
       regerror(regsucess,&seekMagic,&regError[0],256);
       return make_err(bad_magic,mode.c_str(),magic.c_str(),regError);
     }
@@ -392,8 +393,6 @@ using namespace std;//needed for vector
 
   PosibErr<void> FilterMode::expand(Config * config) {
 
-    bool troubles;
-
     config->replace("rem-all-filter","");
     for ( vector< vector< String > >::iterator it = expansion.begin() ;
           it != expansion.end() ; it++ ) {
@@ -402,27 +401,25 @@ using namespace std;//needed for vector
       String value((*it)[1]);
       String occursInAt((*it)[2]);
       String lineNumber(occursInAt);
-      unsigned int split = occursInAt.rfind(":");
+      unsigned int split = occursInAt.rfind(':');
 
-      occursInAt.replace(split,occursInAt.length() - split,"");
-      lineNumber.replace(0,split,"");
+      occursInAt.erase(split,occursInAt.length() - split);
+      lineNumber.erase(0,split);
 
       if ( value == "" ) {
 
         bool haveremall = false;
-        int findaddremall = -1;
         String rmKey(key);
 
-        if ( ( findaddremall = rmKey.find("rem-all-") ) == 0 ) {
-          rmKey.replace(0,8,"");
+        if (rmKey.prefix("rem-all-")) {
+          rmKey.erase(0,8);
           haveremall = true;
         }
-        else if (    ( ( findaddremall = rmKey.find("rem-") ) == 0 )
-                  || ( ( findaddremall = rmKey.find("add-") ) == 0 ) ) {
-          rmKey.replace(0,4,"");
+        else if (rmKey.prefix("rem-") || rmKey.prefix("add-")) {
+          rmKey.erase(0,4);
         }
-        else if ( ( findaddremall = rmKey.find("dont-") ) == 0) {
-          rmKey.replace(0,5,"");
+        else if (rmKey.prefix("dont-")) {
+          rmKey.erase(0,5);
         }
 
         PosibErr<const KeyInfo *> kte = config->keyinfo(rmKey.c_str());
@@ -448,23 +445,23 @@ using namespace std;//needed for vector
     return no_err;  
   }
 
-  PosibErr<void> FilterMode::build(FILE * in,Config * config, int line,const char * name) {
+  PosibErr<void> FilterMode::build(FILE * in,Config * config, int line0, const char * name) {
 
-    FixedBuffer<> buf;
+    String buf;
     DataPair dp;
+    dp.line_num = line0;
     vector<String> filters;
     FStream toParse(in,false);
 
     while ( getdata_pair(toParse, dp, buf) ) {
-      line += getReadLines() ;
       to_lower(dp.key);
       if ( dp.key == "filter" ) {
         to_lower(dp.value);
-        filters.push_back(dp.value.str());
+        filters.push_back(dp.value.str);
             
         char lineNumber[12];
 
-        sprintf(&lineNumber[0],"%i",line);
+        sprintf(&lineNumber[0],"%i",dp.line_num);
 
         String line_and_file(name);
 
@@ -483,12 +480,12 @@ using namespace std;//needed for vector
         to_lower(dp.value);
         for ( vector<String>::iterator it = filters.begin() ;
               it != filters.end() ; it ++ ) {
-          if ( *it == dp.value.str() ) {
+          if ( *it == dp.value.str ) {
             filters.erase(it);
             
             char lineNumber[12];
 
-            sprintf(&lineNumber[0],"%i",line);
+            sprintf(&lineNumber[0],"%i",dp.line_num);
 
             String line_and_file(name);
 
@@ -511,7 +508,7 @@ using namespace std;//needed for vector
 
         char * optionBegin = dp.value;
         char * option = optionBegin;
-        char * optionEnd = dp.value + dp.value.size();
+        char * optionEnd = dp.value + dp.value.size;
 
         while (    ( option != optionEnd )
                 && ( *option != '\0' )
@@ -522,7 +519,7 @@ using namespace std;//needed for vector
 
           char lineNumber[12];
 
-          sprintf(&lineNumber[0],"%i",line);
+          sprintf(&lineNumber[0],"%i",dp.line_num);
           return make_err(mode_option_name,name,lineNumber);
         }
 
@@ -541,29 +538,29 @@ using namespace std;//needed for vector
         String optFilter(optionBegin);
         String optSubstValue;
 
-        if ( optFilter.find("rem-") == 0 ) { 
-          optFilter.replace(0,4,"");
+        if ( optFilter.prefix("rem-") ) { 
+          optFilter.erase(0,4);
           optSubstValue = "rem";
         }
-        else if ( optFilter.find("add-") == 0 ) {
-          optFilter.replace(0,4,"");
+        else if ( optFilter.prefix("add-") ) {
+          optFilter.erase(0,4);
           optSubstValue = "add";
         }
-        else if ( optFilter.find("dont-") == 0 ) {
-          optFilter.replace(0,5,"");
+        else if ( optFilter.prefix("dont-") ) {
+          optFilter.erase(0,5);
           optSubstValue = "dont";
         }
-        if ( optFilter.find("all-") == 0 ) {
-          optFilter.replace(0,4,"");
+        if ( optFilter.prefix("all-") ) {
+          optFilter.erase(0,4);
           optSubstValue += "-all";
         }
-        if ( optFilter.find("filter-") == 0 ) {
-          optFilter.replace(0,7,"");
+        if ( optFilter.prefix("filter-") ) {
+          optFilter.erase(0,7);
         }
         
         for ( vector<String>::iterator filtNIt = filters.begin() ;
               filtNIt != filters.end() ; filtNIt++ ) {
-          if ( optFilter.find(*filtNIt) == 0 ) {
+          if ( optFilter.prefix(*filtNIt) ) {
             while (    ( optVal != optValEnd )
                     && ( *optVal != '\0' )
                     && asc_isspace(*optVal) ) {
@@ -593,7 +590,7 @@ using namespace std;//needed for vector
             
             char lineNumber[12];
 
-            sprintf(&lineNumber[0],"%i",line);
+            sprintf(&lineNumber[0],"%i",dp.line_num);
 
             String line_and_file(name);
 
@@ -601,11 +598,8 @@ using namespace std;//needed for vector
             line_and_file += lineNumber;
 
             String optionValue(optVal);
-            int dehash = 0;
+            unescape(optionValue);
 
-            while ( ( dehash = optionValue.find("\\#") ) >= 0 ) {
-              optionValue.replace(dehash,2,"#");
-            }
             vector<String> expander;
             expander.push_back(optionBegin);
             expander.push_back(optionValue);
@@ -617,7 +611,7 @@ using namespace std;//needed for vector
 
         char lineNumber[12];
 
-        sprintf(&lineNumber[0],"%i",line);
+        sprintf(&lineNumber[0],"%i",dp.line_num);
         return make_err(no_filter_to_option,name,lineNumber,optionBegin);
 fine_next_line:
         continue;
@@ -625,7 +619,7 @@ fine_next_line:
 
       char lineNumber[12];
 
-      sprintf(&lineNumber[0],"%i",line);
+      sprintf(&lineNumber[0],"%i",dp.line_num);
       return make_err(bad_mode_key,name,lineNumber,dp.key);
     }
     return no_err;
@@ -786,7 +780,7 @@ fine_next_line:
       int pathPos = 0;
       int pathPosEnd = 0;
 
-      while (    ( (pathPosEnd = possMode.find("/",pathPos)) < possMode.length() )
+      while (    ( (pathPosEnd = possMode.find('/',pathPos)) < possMode.length() )
               && ( pathPosEnd >= 0 ) ) {
         pathPos = pathPosEnd + 1;
       }
@@ -812,15 +806,13 @@ fine_next_line:
         continue;
       }
 
-      FixedBuffer<> buf;
+      String buf;
       DataPair dp;
-      int line_count = 0;
 
       FStream toParse(in,false);
 
       bool get_sucess = getdata_pair(toParse, dp, buf);
       
-      line_count += getReadLines();
       to_lower(dp.key);
       to_lower(dp.value);
       if (    !get_sucess
@@ -831,11 +823,10 @@ fine_next_line:
 
           char lineNumber[12];
 
-          sprintf(&lineNumber[0],"%i",line_count);
+          sprintf(&lineNumber[0],"%i",dp.line_num);
         return make_err(exspect_mode_key,possModeFile.c_str(),lineNumber,"mode");
       }
       get_sucess = getdata_pair(toParse, dp, buf);
-      line_count += getReadLines();
       to_lower(dp.key);
       if (    !get_sucess
            || ( dp.key != "aspell" )
@@ -846,11 +837,11 @@ fine_next_line:
 
           char lineNumber[12];
 
-          sprintf(&lineNumber[0],"%i",line_count);
+          sprintf(&lineNumber[0],"%i",dp.line_num);
         return make_err(mode_version_requirement,possModeFile.c_str(),lineNumber);
       }
 
-      char * requirement = dp.value.str();
+      char * requirement = dp.value.str;
       char * relop = requirement;
       char swap = '\0';
 
@@ -908,7 +899,7 @@ fine_next_line:
 
         char lineNumber[12];
 
-        sprintf(&lineNumber[0],"%i",line_count);
+        sprintf(&lineNumber[0],"%i",dp.line_num);
         return make_err(confusing_mode_version,possModeFile.c_str(),lineNumber);
       }
       if ( peb == false ) {
@@ -918,14 +909,13 @@ fine_next_line:
 
         char lineNumber[12];
 
-        sprintf(&lineNumber[0],"%i",line_count);
+        sprintf(&lineNumber[0],"%i",dp.line_num);
         return make_err(bad_mode_version,possModeFile.c_str(),lineNumber);
       }
       
       FilterMode collect(possMode);
       
       while ( getdata_pair(toParse,dp,buf) ) {
-        line_count += getReadLines();
         to_lower(dp.key);
         if (    ( dp.key == "des" )
              || ( dp.key == "desc" ) 
@@ -950,7 +940,7 @@ fine_next_line:
 
             char lineNumber[12];
 
-            sprintf(&lineNumber[0],"%i",line_count);
+            sprintf(&lineNumber[0],"%i",dp.line_num);
             return make_err(missing_magic_expression,possModeFile.c_str(),lineNumber);
           }
           
@@ -976,7 +966,7 @@ fine_next_line:
 
             char lineNumber[12];
 
-            sprintf(&lineNumber[0],"%i",line_count);
+            sprintf(&lineNumber[0],"%i",dp.line_num);
             return make_err(missing_magic_expression,possModeFile.c_str(),lineNumber);
           }
 
@@ -1005,7 +995,7 @@ fine_next_line:
               char lineNumber[12];
               char charCount[64];
 
-              sprintf(&lineNumber[0],"%i",line_count);
+              sprintf(&lineNumber[0],"%i",dp.line_num);
               sprintf(&charCount[0],"%i",regbegin - (char *)dp.value);
               return  make_err(empty_file_ext,possModeFile.c_str(),lineNumber,charCount);
             }
@@ -1028,7 +1018,7 @@ fine_next_line:
               char lineNumber[12];
               char charCount[64];
 
-              sprintf(&lineNumber[0],"%i",line_count);
+              sprintf(&lineNumber[0],"%i",dp.line_num);
               sprintf(&charCount[0],"%i",regbegin - (char *)dp.value);
               return  make_err(empty_file_ext,possModeFile.c_str(),lineNumber,charCount);
             }
@@ -1039,11 +1029,17 @@ fine_next_line:
 
             *regend = swap;
 
-
-            int slashme = -1;
-            while ( ( slashme = magic.find("\\/") ) >= 0 ) {
-              magic.replace(slashme,1,"");
+            // partially unescape magic
+            
+            magic.ensure_null_end();
+            char * dest = magic.data();
+            const char * src  = magic.data();
+            while (*src) {
+              if (*src == '\\' && src[1] == '/' || src[1] == '#')
+                ++src;
+              *dest++ = *src++;
             }
+            magic.resize(dest - magic.data());
 
             PosibErr<bool> pe;
 
@@ -1059,7 +1055,7 @@ fine_next_line:
 
               char lineNumber[12];
 
-              sprintf(&lineNumber[0],"%i",line_count);
+              sprintf(&lineNumber[0],"%i",dp.line_num);
               return make_err(error_on_line,possModeFile.c_str(),lineNumber,
                               pe.get_err()->mesg);
             }
@@ -1073,7 +1069,7 @@ fine_next_line:
           char lineNumber[12];
           char charCount[64];
 
-          sprintf(&lineNumber[0],"%i",line_count);
+          sprintf(&lineNumber[0],"%i",dp.line_num);
           sprintf(&charCount[0],"%i",strlen((char *)dp.value));
           return  make_err(empty_file_ext,possModeFile.c_str(),lineNumber,charCount);
         }
@@ -1082,12 +1078,12 @@ fine_next_line:
 
         char lineNumber[12];
 
-        sprintf(&lineNumber[0],"%i",line_count);
+        sprintf(&lineNumber[0],"%i",dp.line_num);
         return make_err(exspect_mode_key,possModeFile.c_str(),lineNumber,
                         "ext[tension]/magic/desc[ription]/rel[ation]");
       }//while getdata_pair
       
-      PosibErr<void> pe = collect.build(in,config,line_count,possMode.c_str());
+      PosibErr<void> pe = collect.build(in,config,dp.line_num,possMode.c_str());
 
       fclose(in);
       if ( pe.has_err() ) {
@@ -1144,14 +1140,14 @@ fine_next_line:
         
         String prDesc(desc);
 
-        prDesc.replace(locate,prDesc.length() - locate,"");
+        prDesc.erase(locate,prDesc.length() - locate);
         fprintf(helpScreen,"%s\n             ",prDesc.c_str());
-        desc.replace(0,locate,"");
+        desc.erase(0,locate);
         if (    ( desc.length() > 0 )
              && (    ( desc[0] == ' ' )
                   || ( desc[0] == '\t' )
                   || ( desc[0] == '\n' ) ) ) {
-          desc.replace(0,1,"");
+          desc.erase(0,1);
         }
         preLength = 13;
       }

@@ -57,6 +57,7 @@ namespace acommon {
       if (size_ != UINT_MAX) return size_;
       else return size_ = strlen(str_);
     }
+    bool have_size() {return size_ != UINT_MAX;}
     operator const char * () const {
       return str_;
     }
@@ -67,13 +68,14 @@ namespace acommon {
     const char * str_;
     mutable unsigned int size_;
   };
-
+#ifndef __SUNPRO_CC
   static inline bool operator== (ParmString s1, ParmString s2)
   {
     if (s1.str() == 0 || s2.str() == 0)
       return s1.str() == s2.str();
     return strcmp(s1,s2) == 0;
   }
+#endif
   static inline bool operator== (const char * s1, ParmString s2)
   {
     if (s1 == 0 || s2.str() == 0)
