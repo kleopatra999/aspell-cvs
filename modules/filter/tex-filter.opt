@@ -7,6 +7,8 @@ ASPELL >=0.51
 DESCRIPTION Filter for recognizing TeX/LaTeX commands
 
 STATIC filter
+STATIC encoder
+STATIC decoder
 
 OPTION check-comments
 TYPE bool
@@ -81,4 +83,21 @@ DEFAULT selectlanguage p
 DEFAULT includegraphics op
 DEFAULT bibitem op
 DEFAULT geometry p
+ENDOPTION
+
+OPTION multi-byte
+TYPE list
+DESCRIPTION characters represented by multible chars (<char>:<defrep>[:<rep>[...]])
+DEFAULT Ä:\\"A:"A
+DEFAULT ä:\\"a:"a
+DEFAULT Ö:\\"O:"O
+DEFAULT ö:\\"o:"o
+DEFAULT Ü:\\"U:"U
+DEFAULT ü:\\"u:"u
+DEFAULT ß:\\"s:"s
+ENDOPTION
+
+OPTION hyphen
+TYPE list
+DESCRIPTION characters used to encode hyphenation locations
 ENDOPTION
