@@ -147,7 +147,7 @@ namespace aspeller {
   
     SoundslikeWord() : soundslike(0) {}
     SoundslikeWord(const char * w, const void * p) 
-      : soundslike(w), word_list_pointer(p) {}
+      : soundslike(w == 0 || w[0] == 0 ? 0 : w), word_list_pointer(p) {}
   };
 
   static const unsigned int MaxCompoundLength = 8;
