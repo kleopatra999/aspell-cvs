@@ -14,6 +14,8 @@
 #include "vector.hpp"
 #include "errors.hpp"
 #include "loadable-filter-API.hpp"
+#include <stdio.h>
+#include <cstdio>
 
 namespace acommon {
 
@@ -301,6 +303,7 @@ namespace acommon {
   void TexFilter::process(FilterChar * & str, FilterChar * & stop)
   {
     FilterChar * cur = str;
+
     while (cur != stop) {
       if (process_char(*cur))
 	*cur = ' ';
