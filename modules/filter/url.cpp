@@ -37,7 +37,7 @@ namespace acommon {
       blank_out = false;
       point_chars = 0;
       do {
-	if (cur + 1 == end ||
+	if (cur + 1 == end || cur[1] == '"' ||
 	    cur[1] == ' ' || cur[1] == '\n' || cur[1] == '\t')
 	  word_pos = wend;
 	if (word_pos == wmiddle) {
@@ -47,7 +47,8 @@ namespace acommon {
 	    prev_char = who_cares;
 	    break;
 	  case '.':
-	    ++point_chars;
+            if (cur[1] != '.')
+              ++point_chars;
 	    prev_char = who_cares;
 	    break;
 	  case '/':
