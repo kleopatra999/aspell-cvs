@@ -1,3 +1,4 @@
+export SED=@SED@
 
 include_HEADERS = aspell.h 
 

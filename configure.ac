@@ -72,6 +72,14 @@ dnl DL stuff
 
 AC_CHECK_HEADERS(dlfcn.h)
 AC_CHECK_LIB(dl, dlopen)
+AC_CHECK_PROG(SED,sed,sed)
+AC_CHECK_PROGS(TEXT_DUMP,w3m lynx)
+DUMP_WIDTH="cols"
+if test "$TEXT_DUMP" == "lynx" ;then 
+  DUMP_WIDTH="width"
+fi
+AC_SUBST( DUMP_WIDTH )
+  
 
 dnl GETTEXT
 

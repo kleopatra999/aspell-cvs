@@ -1,3 +1,4 @@
+export SED=@SED@
 
 AUTOMAKE_OPTIONS = foreign
 
