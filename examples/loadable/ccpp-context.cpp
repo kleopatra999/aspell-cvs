@@ -143,7 +143,6 @@ FDEBUGOPEN;
         countmasking++;
         continue;
       }
-fprintf(controllout,"%c",*current);
       if (state == visible) {
         if ((countmasking % 2 == 0) && (correspond < 0)) {
           for (countdelimit=0;
@@ -178,7 +177,6 @@ fprintf(controllout,"%c",*current);
           if ((matchdelim == (signed) closing[correspond].length()) &&
               closing[correspond].length()) {
             beginblind=current;
-fprintf(controllout,"§");
             endblind=localstop;
             state=hidden;
             correspond=-1;
@@ -205,7 +203,6 @@ fprintf(controllout,"§");
             opening[countdelimit].length()) {
           endblind=current+opening[countdelimit].length();
           state=visible;
-fprintf(controllout,"^");
           hidecode(beginblind,endblind);
           current=endblind-1;
           beginblind=endblind=localstop;
@@ -217,14 +214,12 @@ fprintf(controllout,"^");
     if ((state == visible) &&
         (correspond >= 0) && (correspond < (signed)closing.size()) &&
         (closing[correspond] == "") && (countmasking % 2 == 0)) {
-fprintf(controllout,"§");
       state=hidden;
       correspond=-1;
     } 
     if (beginblind < endblind) {
       hidecode(beginblind,endblind);
     }
-fprintf(controllout,"\n");
   }
   
   PosibErr<bool> ContextFilter::hidecode(FilterChar * begin,FilterChar * end) {
