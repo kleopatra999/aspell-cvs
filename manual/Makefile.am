@@ -9,6 +9,9 @@ noinst_DATA = manual-html manual-text devel-html devel-text
 MAINTAINERCLEANFILES = manual.*  manual-html manual-text\
                        devel.*  devel-html devel-text
 
+export TEXT_DUMP=@TEXT_DUMP@
+export DUMP_WIDTH=@DUMP_WIDTH@
+
 fake-manual:
 	touch \
 	manual.dvi manual.tex manual.aux manual2.tex manual-html manual-text\
@@ -101,12 +104,12 @@ devel-html: @MAINTAINER_MODE_TRUE@ devel.dvi
 	touch devel-html
 
 devel-text: @MAINTAINER_MODE_TRUE@ devel-html html2txt.pl
-	if test -d dev-html;then\
-	  cd dev-html;\
+	if test -d dev-text;then\
+	  cd dev-text;\
 	  rm -f *.txt;\
 	  cd ..;\
 	else \
-	  mkdir dev-html;\
+	  mkdir dev-text;\
 	fi;
 	perl html2txt.pl dev
 	touch devel-text
