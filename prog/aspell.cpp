@@ -629,7 +629,7 @@ void pipe()
 	  COUT << "\n";
 	} else {
 	  COUT << "# " << word << " " 
-	       << token.offset
+	       << token.offset + ignore
 	       << "\n";
 	}
 	if (do_time)
