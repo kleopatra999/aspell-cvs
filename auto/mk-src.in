@@ -543,6 +543,8 @@ errors:
 		/
 		unknown mode
 			mesg => ignoring unknown mode: "%mode"
+		mode extend expand
+			mesg => "%mode" error while extend Aspell modes. (out of memory?)
 	filter mode magic
 		mesg = "%mode": bad magic "%magic"
 		parms => mode, magic
