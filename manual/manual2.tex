@@ -726,6 +726,14 @@ global file. Options specified at either the command line or via an
 environmental variable override those specified by either configuration
 file.
 
+\paragraph{Note:}
+\small{}%
+Filters and corresponding options allso may be assembled inside a special meta
+filter file named ``<metafilter>.flt''.
+A filter has to be loaded via adding a \verb#add-filter <filtername># line to the meta filter file before it's options may be specified.
+
+On commandline than \verb#add<metafilter># is specified instead of the filters and options assembling it.
+\normalsize  
 
 \subsubsection{Boolean}
 
@@ -839,6 +847,7 @@ These options modify the behavior of Aspell filter interface in general (see sec
 \item [add|rem-filter]\textit{(list)} add or removes a filter
 \item [add|rem-filter-path]\textit{(list)}
 add or removes a path where Aspell should look for filter objects being loadable during runtime. If the object library of a filter can not be found, Aspell will refuse to load the filter.
+This path is also searched when trying to load a meta filter.
 \item [add|rem-option-path]\textit{(list)}add or removes a path where the files containing the description of a filter (recognized options, version of Aspell the filter is designed for, ...) is located. If this information can not be found or is corrupt Aspell will refuse to load the entire filter.
 \item [mode]\textit{(string)} sets the filter mode. Mode is one if none,
 url, email, sgml, or tex. (The short cut options '-e' may be used
@@ -879,14 +888,14 @@ The different contexts may not be dependent upon each other except for initial c
 \item[context-visible-first]\textit{(boolean)}
 Switches the context which should be visible to Aspell.
 Per default the initial context is assumed to be invisible as one would expect when spell checking source files of programs where relevant parts are contained in string constants and comments but not in the remaining code.
-If set to true the initial context is visible while the delimited ones are hidden.
+If set to true the initial context is visible while the delimited ones are hidden. 
 \item[add|rem-context-delimiters]\textit{(list)}
 Add or remove pairs of delimiters.
-This allows which characters contained in a text will be used to switch contexts and which will be assumed normal characters.
-The two delimiting chars belonging to one pair have to be separated by a space character.
+This allows to specify the characters\footnote{\label{fn:delimiting_chars}this may also be sequences of chars} which should be used to switch contexts and and therefore have to be escaped by \\ if they should appear literally.
+The two delimiting chars\textsuperscript{\ref{fn:delimiting_chars}} belonging to one pair have to be separated by a space character.
 If multiple pairs are specified by one add|rem-context-delimiters call the different pairs have to be separated by a literal comma.
 Per default the delimiters are set to \texttt{C/C++} comment and string constant delimiters.
-If the end of line delimits a context than this has to be indicated by \verb#\0#.
+If the end of line delimits a context than this has to be indicated by the literal ``\verb#\0#'' string.
 \end{description}
 \end{description}
 
@@ -949,9 +958,9 @@ print out the value of <\,{}<option>\,{}>
 to stdout and nothing else.
 
 The default configuration of a particular filter may be quested by passing the name of the filter or a corresponding regular expression to the config command.
-This is done by passing +e <\,{}expr\,{}> to config command of Aspell.
-If +e is the only argument to config Aspell assumes +e all which lists the configuration of all installed and reachable filters.
-In any other case or in case of questing the configuration of a specific option +e allways has to be followed by <\,{}filtername\,{}>, <\,{}regex\,{}> or a literal all.
+This is done by passing +e <\,{}expr\,{}> to dump config command of Aspell.
+If +e is the only argument to dump config Aspell assumes ``+e all'' which lists the configuration of all installed and reachable filters.
+In any other case or in case of questing the configuration of a specific option +e allways has to be followed by ``<\,{}filtername\,{}>'', ``<\,{}regex\,{}>'' or a literal ``all''.
 The parameter +e and its argument always must be specified immediately after config command and before specifying name of option in order to be recognized by Aspell.
    
 \section{Printing Help screen}
@@ -970,7 +979,7 @@ If Aspell help command is called with keyword \verb#all#, all installed and avai
 
 Aspell now has rudimentary filter support. You can either select from
 individual filters or chose a filter mode. To select a filter mode
-use the \textbf{mode} option. You may chose from \textbf{none}, \textbf{url},
+use the \textbf{mode} option\footnote{this may be removed in future as right now it is possible to define meta filters}. You may chose from \textbf{none}, \textbf{url},
 \textbf{email}, \textbf{sgml}, and \textbf{tex}. The default mode
 is \textbf{url}. Individual filters can be added with the option \textbf{add-filter}
 and remove with the \textbf{rem-filter} option. The currently available
