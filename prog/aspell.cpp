@@ -491,6 +491,8 @@ void pipe()
     buf.clear();
     while (c = getchar(), c != '\n' && c != EOF)
       buf.push_back(static_cast<char>(c));
+    if (c == '\n')
+      buf.push_back(static_cast<char>(c));
     buf.push_back('\0');
     line = buf.data();
     ignore = 0;
