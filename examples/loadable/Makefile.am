@@ -1,9 +1,8 @@
-CCLD=$(CXX)
 filterdir = "$(libdir)/aspell"
 
 INCLUDES = -I${top_srcdir}/interfaces/cc/ -I${top_srcdir}/common
 FILTERVERSION = "0:0:1"
-CXXFLAGS+=-DVERSION="\"${FILTERVERSION}\""
+CXXFLAGS= @CXXFLAGS@ -DVERSION="\"${FILTERVERSION}\""
 SUFFIXES = .opt
 
 filter_PROGRAMS = libcontext-filter.la
