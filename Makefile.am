@@ -284,8 +284,7 @@ pspell_include_HEADERS = interfaces/cc/pspell.h
 
 pkgdata_DATA = ${top_srcdir}/data/*.dat ${top_srcdir}/data/*.kbd
 
-EXTRA_DIST += config.rpath  README filter-readme.txt ${pkgdata_DATA} \
-              m4/*.m4
+EXTRA_DIST += config.rpath  README ${pkgdata_DATA} m4/*.m4
 
 README: manual/man-text/2_Getting.txt
 	cp manual/man-text/2_Getting.txt README
